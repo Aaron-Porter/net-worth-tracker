@@ -347,9 +347,9 @@ function AuthenticatedApp() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
       {/* Tab Navigation */}
-      <div className="sticky top-0 z-20 bg-slate-900/80 backdrop-blur border-b border-slate-700">
+      <div className="sticky top-0 z-20 bg-slate-900/80 backdrop-blur border-b border-slate-700 overflow-x-hidden">
         <div className="container mx-auto px-4">
-          <div className="flex gap-1 items-center">
+          <div className="flex gap-1 items-center min-w-0">
             <button
               onClick={() => setActiveTab('dashboard')}
               className={`px-6 py-4 font-medium transition-colors relative ${
@@ -392,7 +392,7 @@ function AuthenticatedApp() {
             <div className="flex-1" />
             <button
               onClick={() => signOut()}
-              className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+              className="px-3 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors shrink-0"
             >
               Sign Out
             </button>
