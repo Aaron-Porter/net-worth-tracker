@@ -632,10 +632,24 @@ function AuthenticatedApp() {
               {/* Controls */}
               <div className="flex flex-wrap items-end gap-4 mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
                 <div className="text-sm text-slate-400">
-                  Base: <span className="text-emerald-400 font-mono">{formatCurrency(latestEntry.amount)}</span> at{' '}
-                  <span className="text-emerald-400">{rateNum}%</span> annual return
+                  Base: <span className="text-emerald-400 font-mono">{formatCurrency(latestEntry.amount)}</span>
                 </div>
                 <div className="flex-1" />
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    Rate of Return %
+                  </label>
+                  <input
+                    type="number"
+                    value={rateOfReturn}
+                    onChange={(e) => setRateOfReturn(e.target.value)}
+                    placeholder="7"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    className="w-20 bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">
                     SWR %
