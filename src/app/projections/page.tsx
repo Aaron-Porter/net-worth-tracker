@@ -38,14 +38,17 @@ function AuthenticatedProjections() {
   const [settingsLoaded, setSettingsLoaded] = useState(false)
 
   // Load settings when they come in from Convex
+  // settings is undefined while loading, null if no settings exist, or an object with values
   useEffect(() => {
-    if (settings && !settingsLoaded) {
+    if (settings === undefined || settingsLoaded) return
+    
+    if (settings !== null) {
       setSwr(settings.swr.toString())
       setYearlyContribution(settings.yearlyContribution.toString())
       setBirthDate(settings.birthDate)
       setMonthlySpend(settings.monthlySpend.toString())
-      setSettingsLoaded(true)
     }
+    setSettingsLoaded(true)
   }, [settings, settingsLoaded])
 
   // Save settings to Convex when they change (debounced)
