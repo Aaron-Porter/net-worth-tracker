@@ -75,15 +75,20 @@ function AuthenticatedApp() {
 
   // Load settings when they come in from Convex
   useEffect(() => {
-    if (settings && !settingsLoaded) {
+    // settings is undefined while loading, null if no settings exist, or an object with values
+    if (settings === undefined || settingsLoaded) return
+
+    if (settings !== null) {
       setRateOfReturn(settings.currentRate.toString())
       setSwr(settings.swr.toString())
       setYearlyContribution(settings.yearlyContribution.toString())
       setBirthDate(settings.birthDate)
       setMonthlySpend(settings.monthlySpend.toString())
       setInflationRate(settings.inflationRate.toString())
-      setSettingsLoaded(true)
     }
+
+    // Mark loaded even when settings is null so new users can persist changes.
+    setSettingsLoaded(true)
   }, [settings, settingsLoaded])
 
   // Save settings to Convex when they change (debounced)
