@@ -1,6 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useQuery, useMutation, useConvexAuth } from 'convex/react'
+import { Authenticated, Unauthenticated, AuthLoading } from 'convex/react'
+import { useAuthActions } from '@convex-dev/auth/react'
+import { api } from '../../convex/_generated/api'
+import { Id } from '../../convex/_generated/dataModel'
+import { SignIn } from './components/SignIn'
 import {
   LineChart,
   Line,
@@ -15,30 +21,43 @@ import {
   ReferenceLine,
 } from 'recharts'
 
-interface NetWorthEntry {
-  id: string
-  amount: number
-  timestamp: number
-  rateOfReturn: number
-}
-
-interface StoredData {
-  entries: NetWorthEntry[]
-  currentRate: number
-  swr: number
-  yearlyContribution: number
-  birthDate: string
-  monthlySpend: number
-  inflationRate: number
-}
-
-const STORAGE_KEY = 'net-worth-tracker-data'
-
 type Tab = 'dashboard' | 'entries' | 'projections'
 
 export default function Home() {
+  const { isAuthenticated, isLoading } = useConvexAuth()
+  
+  // Debug logging
+  useEffect(() => {
+    console.log("Auth state:", { isAuthenticated, isLoading })
+  }, [isAuthenticated, isLoading])
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-center">
+        <div className="text-slate-400">Loading...</div>
+      </main>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <SignIn />
+  }
+
+  return <AuthenticatedApp />
+}
+
+function AuthenticatedApp() {
+  const { signOut } = useAuthActions()
+
+  // Convex data
+  const settings = useQuery(api.settings.get)
+  const entries = useQuery(api.entries.list) ?? []
+  const saveSettings = useMutation(api.settings.save)
+  const addEntry = useMutation(api.entries.add)
+  const removeEntry = useMutation(api.entries.remove)
+
+  // Local state for form inputs
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
-  const [entries, setEntries] = useState<NetWorthEntry[]>([])
   const [rateOfReturn, setRateOfReturn] = useState<string>('7')
   const [swr, setSwr] = useState<string>('4')
   const [yearlyContribution, setYearlyContribution] = useState<string>('0')
@@ -50,43 +69,38 @@ export default function Home() {
   const [newAmount, setNewAmount] = useState<string>('')
   const [currentTotal, setCurrentTotal] = useState<number>(0)
   const [currentAppreciation, setCurrentAppreciation] = useState<number>(0)
-  const [isLoaded, setIsLoaded] = useState(false)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
 
-  // Load data from localStorage on mount
+  // Load settings when they come in from Convex
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        const data: StoredData = JSON.parse(stored)
-        setEntries(data.entries)
-        setRateOfReturn(data.currentRate.toString())
-        if (data.swr !== undefined) setSwr(data.swr.toString())
-        if (data.yearlyContribution !== undefined) setYearlyContribution(data.yearlyContribution.toString())
-        if (data.birthDate !== undefined) setBirthDate(data.birthDate)
-        if (data.monthlySpend !== undefined) setMonthlySpend(data.monthlySpend.toString())
-        if (data.inflationRate !== undefined) setInflationRate(data.inflationRate.toString())
-      } catch (e) {
-        console.error('Failed to parse stored data:', e)
-      }
+    if (settings && !settingsLoaded) {
+      setRateOfReturn(settings.currentRate.toString())
+      setSwr(settings.swr.toString())
+      setYearlyContribution(settings.yearlyContribution.toString())
+      setBirthDate(settings.birthDate)
+      setMonthlySpend(settings.monthlySpend.toString())
+      setInflationRate(settings.inflationRate.toString())
+      setSettingsLoaded(true)
     }
-    setIsLoaded(true)
-  }, [])
+  }, [settings, settingsLoaded])
 
-  // Save data to localStorage whenever it changes
+  // Save settings to Convex when they change (debounced)
   useEffect(() => {
-    if (isLoaded) {
-      const data: StoredData = {
-        entries,
+    if (!settingsLoaded) return
+
+    const timeout = setTimeout(() => {
+      saveSettings({
         currentRate: parseFloat(rateOfReturn) || 7,
         swr: parseFloat(swr) || 4,
         yearlyContribution: parseFloat(yearlyContribution) || 0,
         birthDate,
         monthlySpend: parseFloat(monthlySpend) || 0,
         inflationRate: parseFloat(inflationRate) || 3,
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-    }
-  }, [entries, rateOfReturn, swr, yearlyContribution, birthDate, monthlySpend, inflationRate, isLoaded])
+      })
+    }, 500)
+
+    return () => clearTimeout(timeout)
+  }, [rateOfReturn, swr, yearlyContribution, birthDate, monthlySpend, inflationRate, settingsLoaded, saveSettings])
 
   const latestEntry = entries[0] || null
   const rateNum = parseFloat(rateOfReturn) || 0
@@ -102,7 +116,7 @@ export default function Home() {
     const calculateAppreciation = () => {
       const now = Date.now()
       const elapsed = now - latestEntry.timestamp
-      const yearlyRate = latestEntry.rateOfReturn / 100
+      const yearlyRate = rateNum / 100
       const msRate = yearlyRate / (365.25 * 24 * 60 * 60 * 1000)
       const appreciation = latestEntry.amount * msRate * elapsed
       setCurrentAppreciation(appreciation)
@@ -112,25 +126,21 @@ export default function Home() {
     calculateAppreciation()
     const interval = setInterval(calculateAppreciation, 50)
     return () => clearInterval(interval)
-  }, [latestEntry])
+  }, [latestEntry, rateNum])
 
-  const addEntry = () => {
+  const handleAddEntry = async () => {
     const amount = parseFloat(newAmount.replace(/,/g, ''))
-    if (isNaN(amount) || amount <= 0 || rateNum <= 0) return
+    if (isNaN(amount) || amount <= 0) return
 
-    const entry: NetWorthEntry = {
-      id: Date.now().toString(),
+    await addEntry({
       amount,
       timestamp: Date.now(),
-      rateOfReturn: rateNum,
-    }
-
-    setEntries([entry, ...entries])
+    })
     setNewAmount('')
   }
 
-  const deleteEntry = (id: string) => {
-    setEntries(entries.filter((e) => e.id !== id))
+  const handleDeleteEntry = async (id: Id<"netWorthEntries">) => {
+    await removeEntry({ id })
   }
 
   const formatCurrency = (value: number, decimals: number = 2) => {
@@ -171,7 +181,7 @@ export default function Home() {
   }
 
   // Stats based on latest entry
-  const yearlyAppreciation = latestEntry ? latestEntry.amount * (latestEntry.rateOfReturn / 100) : 0
+  const yearlyAppreciation = latestEntry ? latestEntry.amount * (rateNum / 100) : 0
   const perSecond = yearlyAppreciation / (365.25 * 24 * 60 * 60)
   const perMinute = perSecond * 60
   const perHour = perMinute * 60
@@ -183,7 +193,7 @@ export default function Home() {
 
     const baseSpend = parseFloat(monthlySpend) || 0
     const swrNum = parseFloat(swr) || 0
-    const r = latestEntry.rateOfReturn / 100
+    const r = rateNum / 100
     const inflation = inflationEnabled ? (parseFloat(inflationRate) || 0) / 100 : 0
     const currentYear = new Date().getFullYear()
     const contribution = parseFloat(yearlyContribution) || 0
@@ -310,26 +320,18 @@ export default function Home() {
     }
 
     return data
-  }, [latestEntry, monthlySpend, swr, inflationEnabled, inflationRate, yearlyContribution, birthDate, currentTotal, currentAppreciation])
+  }, [latestEntry, monthlySpend, swr, inflationEnabled, inflationRate, yearlyContribution, birthDate, currentTotal, currentAppreciation, rateNum])
 
   // Find key milestones for chart
   const fiYear = projectionData.find(d => d.isFiYear)?.year
   const crossoverYear = projectionData.find(d => d.isCrossover)?.year
-
-  if (!isLoaded) {
-    return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-center">
-        <div className="text-slate-400">Loading...</div>
-      </main>
-    )
-  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
       {/* Tab Navigation */}
       <div className="sticky top-0 z-20 bg-slate-900/80 backdrop-blur border-b border-slate-700">
         <div className="container mx-auto px-4">
-          <div className="flex gap-1">
+          <div className="flex gap-1 items-center">
             <button
               onClick={() => setActiveTab('dashboard')}
               className={`px-6 py-4 font-medium transition-colors relative ${
@@ -369,6 +371,13 @@ export default function Home() {
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
               )}
             </button>
+            <div className="flex-1" />
+            <button
+              onClick={() => signOut()}
+              className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              Sign Out
+            </button>
           </div>
         </div>
       </div>
@@ -405,7 +414,7 @@ export default function Home() {
                 </div>
               </div>
               <p className="text-slate-500 text-center mt-4 text-xs">
-                Last updated {timeSinceLastEntry()} at {latestEntry.rateOfReturn}% annual return
+                Last updated {timeSinceLastEntry()} at {rateNum}% annual return
               </p>
             </div>
           ) : (
@@ -510,7 +519,7 @@ export default function Home() {
                     onChange={(e) => setNewAmount(formatNetWorthInput(e.target.value))}
                     placeholder="100,000"
                     className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-8 pr-4 text-xl font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    onKeyDown={(e) => e.key === 'Enter' && addEntry()}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddEntry()}
                   />
                 </div>
               </div>
@@ -537,8 +546,8 @@ export default function Home() {
               </div>
 
               <button
-                onClick={addEntry}
-                disabled={!newAmount || parseFloat(newAmount) <= 0 || rateNum <= 0}
+                onClick={handleAddEntry}
+                disabled={!newAmount || parseFloat(newAmount) <= 0}
                 className="w-full py-4 rounded-lg font-semibold text-lg transition-all bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {entries.length === 0 ? 'Start Tracking' : 'Add Entry'}
@@ -555,7 +564,7 @@ export default function Home() {
               <div className="space-y-3">
                 {entries.map((entry, index) => (
                   <div
-                    key={entry.id}
+                    key={entry._id}
                     className={`flex items-center justify-between p-4 rounded-lg ${
                       index === 0
                         ? 'bg-emerald-900/30 border border-emerald-500/30'
@@ -567,7 +576,7 @@ export default function Home() {
                         {formatCurrency(entry.amount)}
                       </p>
                       <p className="text-slate-400 text-sm">
-                        {formatDate(entry.timestamp)} · {entry.rateOfReturn}% rate
+                        {formatDate(entry.timestamp)}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -577,7 +586,7 @@ export default function Home() {
                         </span>
                       )}
                       <button
-                        onClick={() => deleteEntry(entry.id)}
+                        onClick={() => handleDeleteEntry(entry._id)}
                         className="text-slate-500 hover:text-red-400 transition-colors p-1"
                         title="Delete entry"
                       >
@@ -624,7 +633,7 @@ export default function Home() {
               <div className="flex flex-wrap items-end gap-4 mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
                 <div className="text-sm text-slate-400">
                   Base: <span className="text-emerald-400 font-mono">{formatCurrency(latestEntry.amount)}</span> at{' '}
-                  <span className="text-emerald-400">{latestEntry.rateOfReturn}%</span> annual return
+                  <span className="text-emerald-400">{rateNum}%</span> annual return
                 </div>
                 <div className="flex-1" />
                 <div>
@@ -766,7 +775,7 @@ export default function Home() {
                       </tr>
                     </thead>
                     <tbody>
-                      {projectionData.map((row, index) => {
+                      {projectionData.map((row) => {
                         const baseSpend = parseFloat(monthlySpend) || 0
                         const currentYear = new Date().getFullYear()
                         const isNow = row.year === 'Now'
