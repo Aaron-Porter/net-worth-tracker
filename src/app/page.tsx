@@ -69,6 +69,8 @@ function AuthenticatedApp() {
   const [newAmount, setNewAmount] = useState<string>('')
   const [currentTotal, setCurrentTotal] = useState<number>(0)
   const [currentAppreciation, setCurrentAppreciation] = useState<number>(0)
+  const [currentContributions, setCurrentContributions] = useState<number>(0)
+  const [includeContributions, setIncludeContributions] = useState<boolean>(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
 
   // Load settings when they come in from Convex
@@ -105,11 +107,12 @@ function AuthenticatedApp() {
   const latestEntry = entries[0] || null
   const rateNum = parseFloat(rateOfReturn) || 0
 
-  // Calculate current appreciation in real-time
+  // Calculate current appreciation in real-time (optionally with contributions)
   useEffect(() => {
     if (!latestEntry) {
       setCurrentTotal(0)
       setCurrentAppreciation(0)
+      setCurrentContributions(0)
       return
     }
 
@@ -120,13 +123,26 @@ function AuthenticatedApp() {
       const msRate = yearlyRate / (365.25 * 24 * 60 * 60 * 1000)
       const appreciation = latestEntry.amount * msRate * elapsed
       setCurrentAppreciation(appreciation)
-      setCurrentTotal(latestEntry.amount + appreciation)
+
+      if (includeContributions) {
+        const yearlyContrib = parseFloat(yearlyContribution) || 0
+        const yearsElapsed = elapsed / (365.25 * 24 * 60 * 60 * 1000)
+        // Contributions made continuously, with compound growth
+        // For small time periods, use linear approximation: contributions + appreciation on contributions
+        const contributions = yearlyContrib * yearsElapsed
+        const contributionAppreciation = contributions * msRate * (elapsed / 2) // Average appreciation on contributions
+        setCurrentContributions(contributions + contributionAppreciation)
+        setCurrentTotal(latestEntry.amount + appreciation + contributions + contributionAppreciation)
+      } else {
+        setCurrentContributions(0)
+        setCurrentTotal(latestEntry.amount + appreciation)
+      }
     }
 
     calculateAppreciation()
     const interval = setInterval(calculateAppreciation, 50)
     return () => clearInterval(interval)
-  }, [latestEntry, rateNum])
+  }, [latestEntry, rateNum, includeContributions, yearlyContribution])
 
   const handleAddEntry = async () => {
     const amount = parseFloat(newAmount.replace(/,/g, ''))
@@ -180,12 +196,14 @@ function AuthenticatedApp() {
     return `${seconds}s ago`
   }
 
-  // Stats based on latest entry
-  const yearlyAppreciation = latestEntry ? latestEntry.amount * (rateNum / 100) : 0
-  const perSecond = yearlyAppreciation / (365.25 * 24 * 60 * 60)
+  // Stats based on latest entry (optionally with contributions)
+  const yearlyContrib = parseFloat(yearlyContribution) || 0
+  const yearlyAppreciation = latestEntry ? currentTotal * (rateNum / 100) : 0
+  const yearlyGrowth = includeContributions ? yearlyAppreciation + yearlyContrib : yearlyAppreciation
+  const perSecond = yearlyGrowth / (365.25 * 24 * 60 * 60)
   const perMinute = perSecond * 60
   const perHour = perMinute * 60
-  const perDay = yearlyAppreciation / 365.25
+  const perDay = yearlyGrowth / 365.25
 
   // Projection data for both table and chart views
   const projectionData = useMemo(() => {
@@ -395,15 +413,41 @@ function AuthenticatedApp() {
           {/* Current Total Display */}
           {latestEntry ? (
             <div className="mb-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-emerald-500/30">
+              {/* Toggle for including contributions */}
+              <div className="flex justify-center mb-4">
+                <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
+                  <button
+                    onClick={() => setIncludeContributions(false)}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${
+                      !includeContributions
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Appreciation Only
+                  </button>
+                  <button
+                    onClick={() => setIncludeContributions(true)}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${
+                      includeContributions
+                        ? 'bg-sky-500/20 text-sky-400'
+                        : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    + Contributions
+                  </button>
+                </div>
+              </div>
+
               <h2 className="text-sm font-medium text-slate-400 text-center mb-1">
-                Current Net Worth
+                {includeContributions ? 'Projected Net Worth' : 'Current Net Worth'}
               </h2>
               <div className="text-center">
                 <span className="text-4xl md:text-5xl font-bold font-mono bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
                   {formatCurrency(currentTotal, 6)}
                 </span>
               </div>
-              <div className="mt-4 flex justify-center gap-8 text-sm">
+              <div className={`mt-4 flex justify-center ${includeContributions ? 'gap-4' : 'gap-8'} text-sm`}>
                 <div className="text-center">
                   <p className="text-slate-500">Base Amount</p>
                   <p className="text-slate-300 font-mono">{formatCurrency(latestEntry.amount)}</p>
@@ -412,10 +456,24 @@ function AuthenticatedApp() {
                   <p className="text-slate-500">Appreciation</p>
                   <p className="text-emerald-400 font-mono">+{formatCurrency(currentAppreciation, 4)}</p>
                 </div>
+                {includeContributions && (
+                  <div className="text-center">
+                    <p className="text-slate-500">Saved</p>
+                    <p className="text-sky-400 font-mono">+{formatCurrency(currentContributions, 4)}</p>
+                  </div>
+                )}
               </div>
               <p className="text-slate-500 text-center mt-4 text-xs">
                 Last updated {timeSinceLastEntry()} at {rateNum}% annual return
+                {includeContributions && yearlyContrib > 0 && (
+                  <span> + {formatCurrency(yearlyContrib)}/yr contributions</span>
+                )}
               </p>
+              {includeContributions && yearlyContrib === 0 && (
+                <p className="text-amber-400/70 text-center mt-2 text-xs">
+                  Set your yearly contribution in the Projections tab to see savings growth
+                </p>
+              )}
             </div>
           ) : (
             <div className="mb-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700 text-center">
@@ -436,29 +494,39 @@ function AuthenticatedApp() {
                 Metrics
               </h2>
               
-              {/* Appreciation Rates */}
+              {/* Growth/Appreciation Rates */}
               <div className="mb-6">
-                <h3 className="text-sm font-medium text-slate-400 mb-3">Appreciation Rate</h3>
+                <h3 className="text-sm font-medium text-slate-400 mb-3">
+                  {includeContributions ? 'Growth Rate' : 'Appreciation Rate'}
+                  {includeContributions && (
+                    <span className="ml-2 text-xs text-sky-400">(includes contributions)</span>
+                  )}
+                </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <div className="bg-slate-900/50 rounded-lg p-3">
                     <p className="text-slate-500 text-xs">Per Second</p>
-                    <p className="text-emerald-400 font-mono">{formatCurrency(perSecond, 6)}</p>
+                    <p className={`${includeContributions ? 'text-sky-400' : 'text-emerald-400'} font-mono`}>{formatCurrency(perSecond, 6)}</p>
                   </div>
                   <div className="bg-slate-900/50 rounded-lg p-3">
                     <p className="text-slate-500 text-xs">Per Minute</p>
-                    <p className="text-emerald-400 font-mono">{formatCurrency(perMinute, 4)}</p>
+                    <p className={`${includeContributions ? 'text-sky-400' : 'text-emerald-400'} font-mono`}>{formatCurrency(perMinute, 4)}</p>
                   </div>
                   <div className="bg-slate-900/50 rounded-lg p-3">
                     <p className="text-slate-500 text-xs">Per Hour</p>
-                    <p className="text-emerald-400 font-mono">{formatCurrency(perHour)}</p>
+                    <p className={`${includeContributions ? 'text-sky-400' : 'text-emerald-400'} font-mono`}>{formatCurrency(perHour)}</p>
                   </div>
                   <div className="bg-slate-900/50 rounded-lg p-3">
                     <p className="text-slate-500 text-xs">Per Day</p>
-                    <p className="text-emerald-400 font-mono">{formatCurrency(perDay)}</p>
+                    <p className={`${includeContributions ? 'text-sky-400' : 'text-emerald-400'} font-mono`}>{formatCurrency(perDay)}</p>
                   </div>
                   <div className="bg-slate-900/50 rounded-lg p-3 col-span-2 sm:col-span-2">
                     <p className="text-slate-500 text-xs">Per Year</p>
-                    <p className="text-emerald-400 font-mono text-lg">{formatCurrency(yearlyAppreciation)}</p>
+                    <p className={`${includeContributions ? 'text-sky-400' : 'text-emerald-400'} font-mono text-lg`}>{formatCurrency(yearlyGrowth)}</p>
+                    {includeContributions && yearlyContrib > 0 && (
+                      <p className="text-slate-500 text-xs mt-1">
+                        {formatCurrency(yearlyAppreciation)} appreciation + {formatCurrency(yearlyContrib)} saved
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
