@@ -2,69 +2,69 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-
-interface NetWorthEntry {
-  id: string
-  amount: number
-  timestamp: number
-  rateOfReturn: number
-}
-
-interface StoredData {
-  entries: NetWorthEntry[]
-  currentRate: number
-  swr: number
-  yearlyContribution: number
-  birthDate: string
-  monthlySpend: number
-}
-
-const STORAGE_KEY = 'net-worth-tracker-data'
+import { useQuery, useMutation, useConvexAuth } from 'convex/react'
+import { api } from '../../../convex/_generated/api'
+import { SignIn } from '../components/SignIn'
 
 export default function Projections() {
-  const [entries, setEntries] = useState<NetWorthEntry[]>([])
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
+
+  if (authLoading) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-center">
+        <div className="text-slate-400">Loading...</div>
+      </main>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <SignIn />
+  }
+
+  return <AuthenticatedProjections />
+}
+
+function AuthenticatedProjections() {
+  // Convex data
+  const settings = useQuery(api.settings.get)
+  const entries = useQuery(api.entries.list) ?? []
+  const saveSettings = useMutation(api.settings.save)
+
+  // Local state for form inputs
   const [swr, setSwr] = useState<string>('4')
   const [yearlyContribution, setYearlyContribution] = useState<string>('0')
   const [birthDate, setBirthDate] = useState<string>('')
   const [monthlySpend, setMonthlySpend] = useState<string>('0')
-  const [isLoaded, setIsLoaded] = useState(false)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
 
-  // Load data from localStorage on mount
+  // Load settings when they come in from Convex
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        const data: StoredData = JSON.parse(stored)
-        setEntries(data.entries)
-        if (data.swr !== undefined) setSwr(data.swr.toString())
-        if (data.yearlyContribution !== undefined) setYearlyContribution(data.yearlyContribution.toString())
-        if (data.birthDate !== undefined) setBirthDate(data.birthDate)
-        if (data.monthlySpend !== undefined) setMonthlySpend(data.monthlySpend.toString())
-      } catch (e) {
-        console.error('Failed to parse stored data:', e)
-      }
+    if (settings && !settingsLoaded) {
+      setSwr(settings.swr.toString())
+      setYearlyContribution(settings.yearlyContribution.toString())
+      setBirthDate(settings.birthDate)
+      setMonthlySpend(settings.monthlySpend.toString())
+      setSettingsLoaded(true)
     }
-    setIsLoaded(true)
-  }, [])
+  }, [settings, settingsLoaded])
 
-  // Save projection settings to localStorage whenever they change
+  // Save settings to Convex when they change (debounced)
   useEffect(() => {
-    if (isLoaded) {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        try {
-          const data: StoredData = JSON.parse(stored)
-          data.swr = parseFloat(swr) || 4
-          data.yearlyContribution = parseFloat(yearlyContribution) || 0
-          data.birthDate = birthDate
-          data.monthlySpend = parseFloat(monthlySpend) || 0
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-        } catch (e) {
-          console.error('Failed to save data:', e)
-        }
-      }
-    }
-  }, [swr, yearlyContribution, birthDate, monthlySpend, isLoaded])
+    if (!settingsLoaded) return
+
+    const timeout = setTimeout(() => {
+      saveSettings({
+        currentRate: settings?.currentRate ?? 7,
+        swr: parseFloat(swr) || 4,
+        yearlyContribution: parseFloat(yearlyContribution) || 0,
+        birthDate,
+        monthlySpend: parseFloat(monthlySpend) || 0,
+        inflationRate: settings?.inflationRate ?? 3,
+      })
+    }, 500)
+
+    return () => clearTimeout(timeout)
+  }, [swr, yearlyContribution, birthDate, monthlySpend, settingsLoaded, saveSettings, settings?.currentRate, settings?.inflationRate])
 
   const latestEntry = entries[0] || null
 
@@ -77,7 +77,8 @@ export default function Projections() {
     }).format(value)
   }
 
-  if (!isLoaded) {
+  // Show loading while settings are being fetched
+  if (settings === undefined) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-center">
         <div className="text-slate-400">Loading...</div>
@@ -98,6 +99,9 @@ export default function Projections() {
     )
   }
 
+  // Use rate of return from settings or default
+  const rateOfReturn = settings?.currentRate ?? 7
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
       <div className="h-screen flex flex-col p-4">
@@ -115,7 +119,7 @@ export default function Projections() {
             </h1>
           </div>
           <div className="text-sm text-slate-400">
-            Base: {formatCurrency(latestEntry.amount)} at {latestEntry.rateOfReturn}% annual return
+            Base: {formatCurrency(latestEntry.amount)} at {rateOfReturn}% annual return
           </div>
         </div>
 
@@ -214,7 +218,7 @@ export default function Projections() {
                   const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999).getTime()
                   const yearsFromEntry = (endOfYear - latestEntry.timestamp) / (365.25 * 24 * 60 * 60 * 1000)
                   const fullYears = Math.floor(yearsFromEntry)
-                  const r = latestEntry.rateOfReturn / 100
+                  const r = rateOfReturn / 100
                   const contribution = parseFloat(yearlyContribution) || 0
 
                   // Calculate age at end of year
