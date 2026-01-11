@@ -1,6 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Area,
+  AreaChart,
+  ReferenceLine,
+} from 'recharts'
 
 interface NetWorthEntry {
   id: string
@@ -33,6 +46,7 @@ export default function Home() {
   const [monthlySpend, setMonthlySpend] = useState<string>('0')
   const [inflationRate, setInflationRate] = useState<string>('3')
   const [inflationEnabled, setInflationEnabled] = useState<boolean>(false)
+  const [projectionsView, setProjectionsView] = useState<'table' | 'chart'>('table')
   const [newAmount, setNewAmount] = useState<string>('')
   const [currentTotal, setCurrentTotal] = useState<number>(0)
   const [currentAppreciation, setCurrentAppreciation] = useState<number>(0)
@@ -162,6 +176,145 @@ export default function Home() {
   const perMinute = perSecond * 60
   const perHour = perMinute * 60
   const perDay = yearlyAppreciation / 365.25
+
+  // Projection data for both table and chart views
+  const projectionData = useMemo(() => {
+    if (!latestEntry) return []
+
+    const baseSpend = parseFloat(monthlySpend) || 0
+    const swrNum = parseFloat(swr) || 0
+    const r = latestEntry.rateOfReturn / 100
+    const inflation = inflationEnabled ? (parseFloat(inflationRate) || 0) / 100 : 0
+    const currentYear = new Date().getFullYear()
+    const contribution = parseFloat(yearlyContribution) || 0
+    const birthYear = birthDate ? new Date(birthDate).getFullYear() : null
+
+    const getInflatedSpend = (yearsFromNow: number) => baseSpend * Math.pow(1 + inflation, yearsFromNow)
+    const getFiTarget = (monthlySpend: number) => monthlySpend > 0 && swrNum > 0 ? (monthlySpend * 12) / (swrNum / 100) : 0
+
+    const findCoastFiYear = (startingValue: number, startYear: number, startYearsFromNow: number): number | null => {
+      if (baseSpend <= 0 || swrNum <= 0 || r <= 0) return null
+      for (let y = 0; y <= 100; y++) {
+        const futureValue = startingValue * Math.pow(1 + r, y)
+        const futureSpend = getInflatedSpend(startYearsFromNow + y)
+        const futureTarget = getFiTarget(futureSpend)
+        if (futureValue >= futureTarget) return startYear + y
+      }
+      return null
+    }
+
+    let fiYearFound = false
+    let crossoverFound = false
+
+    // Current row
+    const currentSpend = baseSpend
+    const currentTargetNetWorth = getFiTarget(currentSpend)
+    const currentAnnualSwr = currentTotal * swrNum / 100
+    const currentMonthlySwr = currentAnnualSwr / 12
+    const currentSwrCoversSpend = baseSpend > 0 && currentMonthlySwr >= currentSpend
+    const currentCoastFiYear = findCoastFiYear(currentTotal, currentYear, 0)
+    const currentFiProgress = currentTargetNetWorth > 0 ? (currentTotal / currentTargetNetWorth) * 100 : 0
+
+    if (currentSwrCoversSpend) fiYearFound = true
+
+    const data: Array<{
+      year: number | string
+      age: number | null
+      yearsFromEntry: number
+      netWorth: number
+      interest: number
+      contributed: number
+      monthlySwr: number
+      monthlySpend: number
+      fiProgress: number
+      coastFiYear: number | null
+      coastFiAge: number | null
+      isFiYear: boolean
+      isCrossover: boolean
+      swrCoversSpend: boolean
+      fiTarget: number
+    }> = []
+
+    // Add "Now" row
+    data.push({
+      year: 'Now',
+      age: birthYear ? currentYear - birthYear : null,
+      yearsFromEntry: 0,
+      netWorth: currentTotal,
+      interest: currentAppreciation,
+      contributed: 0,
+      monthlySwr: currentMonthlySwr,
+      monthlySpend: currentSpend,
+      fiProgress: currentFiProgress,
+      coastFiYear: currentCoastFiYear,
+      coastFiAge: currentCoastFiYear && birthYear ? currentCoastFiYear - birthYear : null,
+      isFiYear: false,
+      isCrossover: false,
+      swrCoversSpend: currentSwrCoversSpend,
+      fiTarget: currentTargetNetWorth,
+    })
+
+    // Add projection rows
+    for (let i = 0; i < 61; i++) {
+      const year = currentYear + i
+      const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999).getTime()
+      const yearsFromEntry = (endOfYear - latestEntry.timestamp) / (365.25 * 24 * 60 * 60 * 1000)
+      const fullYears = Math.floor(yearsFromEntry)
+      const age = birthYear ? year - birthYear : null
+
+      const compoundedInitial = latestEntry.amount * Math.pow(1 + r, yearsFromEntry)
+      const partialYearFraction = yearsFromEntry - fullYears
+      const partialContribution = partialYearFraction * contribution
+      const partialContributionGrowth = partialContribution * Math.pow(1 + r, fullYears)
+      const fullYearContributionGrowth = r > 0 && fullYears > 0
+        ? contribution * ((Math.pow(1 + r, fullYears) - 1) / r)
+        : contribution * fullYears
+
+      const contributionGrowth = partialContributionGrowth + fullYearContributionGrowth
+      const totalContributed = partialContribution + (contribution * fullYears)
+      const projectedValue = compoundedInitial + contributionGrowth
+      const totalInterest = projectedValue - latestEntry.amount - totalContributed
+
+      const yearSpend = getInflatedSpend(i)
+      const yearTargetNetWorth = getFiTarget(yearSpend)
+      const fiProgress = yearTargetNetWorth > 0 ? (projectedValue / yearTargetNetWorth) * 100 : 0
+
+      const annualSwr = projectedValue * swrNum / 100
+      const monthlySwr = annualSwr / 12
+      const swrCoversSpend = baseSpend > 0 && monthlySwr >= yearSpend
+      const isFiYear = swrCoversSpend && !fiYearFound
+      if (isFiYear) fiYearFound = true
+
+      const isCrossover = totalInterest > totalContributed && !crossoverFound && totalContributed > 0
+      if (isCrossover) crossoverFound = true
+
+      const coastFiYear = findCoastFiYear(projectedValue, year, i)
+
+      data.push({
+        year,
+        age,
+        yearsFromEntry,
+        netWorth: projectedValue,
+        interest: totalInterest,
+        contributed: totalContributed,
+        monthlySwr,
+        monthlySpend: yearSpend,
+        fiProgress,
+        coastFiYear,
+        coastFiAge: coastFiYear && birthYear ? coastFiYear - birthYear : null,
+        isFiYear,
+        isCrossover,
+        swrCoversSpend,
+        fiTarget: yearTargetNetWorth,
+      })
+    }
+
+    return data
+  }, [latestEntry, monthlySpend, swr, inflationEnabled, inflationRate, yearlyContribution, birthDate, currentTotal, currentAppreciation])
+
+  // Find key milestones for chart
+  const fiYear = projectionData.find(d => d.isFiYear)?.year
+  const crossoverYear = projectionData.find(d => d.isCrossover)?.year
 
   if (!isLoaded) {
     return (
@@ -563,231 +716,109 @@ export default function Home() {
                   )}
                   {inflationEnabled && <span className="text-slate-500 text-sm">%</span>}
                 </div>
+                <div className="flex items-end">
+                  <div className="flex rounded-lg border border-slate-600 overflow-hidden">
+                    <button
+                      onClick={() => setProjectionsView('table')}
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                        projectionsView === 'table'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Table
+                    </button>
+                    <button
+                      onClick={() => setProjectionsView('chart')}
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                        projectionsView === 'chart'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Chart
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              {/* Full-screen Table */}
-              <div className="flex-1 overflow-auto bg-slate-800/30 rounded-xl border border-slate-700">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-slate-800 z-10">
-                    <tr className="border-b border-slate-700">
-                      <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Year</th>
-                      {birthDate && <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Age</th>}
-                      <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Elapsed</th>
-                      <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Net Worth</th>
-                      <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Interest</th>
-                      <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Contributed</th>
-                      <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Monthly SWR</th>
-                      {(parseFloat(monthlySpend) > 0) && (
-                        <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">FI %</th>
-                      )}
-                      {(parseFloat(monthlySpend) > 0) && (
-                        <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700">
-                          Coast FI {birthDate ? 'Age' : 'Year'}
-                        </th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const baseSpend = parseFloat(monthlySpend) || 0
-                      const swrNum = parseFloat(swr) || 0
-                      const r = latestEntry.rateOfReturn / 100
-                      const inflation = inflationEnabled ? (parseFloat(inflationRate) || 0) / 100 : 0
-                      let fiYearFound = false
-                      const currentYear = new Date().getFullYear()
-
-                      // Function to get inflated spend for a given number of years from now
-                      const getInflatedSpend = (yearsFromNow: number) => {
-                        return baseSpend * Math.pow(1 + inflation, yearsFromNow)
-                      }
-
-                      // Function to get FI target for a given spend
-                      const getFiTarget = (monthlySpend: number) => {
-                        return monthlySpend > 0 && swrNum > 0 ? (monthlySpend * 12) / (swrNum / 100) : 0
-                      }
-
-                      // Function to find Coast FI year from a given starting value
-                      // With inflation, the target moves, so we need to solve iteratively
-                      const findCoastFiYear = (startingValue: number, startYear: number, startYearsFromNow: number): number | null => {
-                        if (baseSpend <= 0 || swrNum <= 0 || r <= 0) return null
+              {/* Projections Content */}
+              {projectionsView === 'table' ? (
+                <div className="flex-1 overflow-auto bg-slate-800/30 rounded-xl border border-slate-700">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-slate-800 z-10">
+                      <tr className="border-b border-slate-700">
+                        <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Year</th>
+                        {birthDate && <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Age</th>}
+                        <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Elapsed</th>
+                        <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Net Worth</th>
+                        <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Interest</th>
+                        <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Contributed</th>
+                        <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Monthly SWR</th>
+                        {(parseFloat(monthlySpend) > 0) && (
+                          <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">FI %</th>
+                        )}
+                        {(parseFloat(monthlySpend) > 0) && (
+                          <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700">
+                            Coast FI {birthDate ? 'Age' : 'Year'}
+                          </th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {projectionData.map((row, index) => {
+                        const baseSpend = parseFloat(monthlySpend) || 0
+                        const currentYear = new Date().getFullYear()
+                        const isNow = row.year === 'Now'
                         
-                        // Check each year until we find when coast growth meets inflated target
-                        for (let y = 0; y <= 100; y++) {
-                          const futureValue = startingValue * Math.pow(1 + r, y)
-                          const futureSpend = getInflatedSpend(startYearsFromNow + y)
-                          const futureTarget = getFiTarget(futureSpend)
-                          if (futureValue >= futureTarget) {
-                            return startYear + y
-                          }
-                        }
-                        return null
-                      }
-
-                      // Current row calculations (now = 0 years from now)
-                      const currentSpend = baseSpend // No inflation for "now"
-                      const currentTargetNetWorth = getFiTarget(currentSpend)
-                      const birthYear = birthDate ? new Date(birthDate).getFullYear() : null
-                      const currentAge = birthYear ? currentYear - birthYear : null
-                      const currentAnnualSwr = currentTotal * swrNum / 100
-                      const currentMonthlySwr = currentAnnualSwr / 12
-                      const currentSwrCoversSpend = baseSpend > 0 && currentMonthlySwr >= currentSpend
-                      const currentCoastFiYear = findCoastFiYear(currentTotal, currentYear, 0)
-                      const currentCoastFiAge = currentCoastFiYear && birthYear ? currentCoastFiYear - birthYear : null
-                      const currentFiProgress = currentTargetNetWorth > 0 ? (currentTotal / currentTargetNetWorth) * 100 : 0
-
-                      if (currentSwrCoversSpend) fiYearFound = true
-
-                      // Track crossover point (when cumulative interest exceeds cumulative contributions)
-                      let crossoverFound = false
-
-                      const rows = []
-
-                      // Add current row
-                      rows.push(
-                        <tr
-                          key="current"
-                          className={`border-b-2 border-slate-600 bg-slate-700/30 ${
-                            currentSwrCoversSpend ? 'bg-emerald-900/30' : ''
-                          }`}
-                        >
-                          <td className="py-2 px-3 text-slate-200 font-semibold">
-                            Now
-                            {currentSwrCoversSpend && <span className="ml-2 text-xs text-emerald-400 font-semibold">FI</span>}
-                          </td>
-                          {birthDate && <td className="py-2 px-3 text-slate-300 font-medium">{currentAge}</td>}
-                          <td className="py-2 px-3 text-slate-400">-</td>
-                          <td className="py-2 px-3 text-right font-mono text-emerald-400 font-semibold">{formatCurrency(currentTotal)}</td>
-                          <td className="py-2 px-3 text-right font-mono text-emerald-400/70">+{formatCurrency(currentAppreciation)}</td>
-                          <td className="py-2 px-3 text-right font-mono text-sky-400/70">-</td>
-                          <td className={`py-2 px-3 text-right font-mono ${currentSwrCoversSpend ? 'text-emerald-400' : 'text-amber-400/80'}`}>
-                            {formatCurrency(currentMonthlySwr)}
-                          </td>
-                          {baseSpend > 0 && (
-                            <td className={`py-2 px-3 text-right font-mono ${currentFiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}>
-                              {currentFiProgress.toFixed(1)}%
-                            </td>
-                          )}
-                          {baseSpend > 0 && (
-                            <td className="py-2 px-3 text-right font-mono border-l border-slate-700">
-                              {currentCoastFiYear ? (
-                                <span className={currentSwrCoversSpend ? 'text-emerald-400' : 'text-violet-400'}>
-                                  {currentSwrCoversSpend ? (
-                                    'Now'
-                                  ) : (
-                                    <>
-                                      {currentCoastFiYear - currentYear}y
-                                      <span className="text-slate-500 text-xs ml-1">
-                                        ({birthDate ? `age ${currentCoastFiAge}` : currentCoastFiYear})
-                                      </span>
-                                    </>
-                                  )}
-                                </span>
-                              ) : (
-                                <span className="text-slate-600">-</span>
-                              )}
-                            </td>
-                          )}
-                        </tr>
-                      )
-
-                      // Add projection rows
-                      rows.push(...Array.from({ length: 61 }, (_, i) => {
-                        const year = new Date().getFullYear() + i
-                        const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999).getTime()
-                        const yearsFromEntry = (endOfYear - latestEntry.timestamp) / (365.25 * 24 * 60 * 60 * 1000)
-                        const fullYears = Math.floor(yearsFromEntry)
-                        const contribution = parseFloat(yearlyContribution) || 0
-
-                        // Calculate age at end of year
-                        const birthYear = birthDate ? new Date(birthDate).getFullYear() : null
-                        const age = birthYear ? year - birthYear : null
-
-                        // Compound growth on initial amount
-                        const compoundedInitial = latestEntry.amount * Math.pow(1 + r, yearsFromEntry)
-
-                        // Pro-rated contribution for the partial first year
-                        // e.g., if entry was made in March, 9 months remain = 0.75 of yearly contribution
-                        const partialYearFraction = yearsFromEntry - fullYears
-                        const partialContribution = partialYearFraction * contribution
-                        // This partial contribution compounds for the remaining full years
-                        const partialContributionGrowth = partialContribution * Math.pow(1 + r, fullYears)
-
-                        // Future value of yearly contributions (annuity) for full years
-                        // Contributions made at end of each full year, compounded
-                        const fullYearContributionGrowth = r > 0 && fullYears > 0
-                          ? contribution * ((Math.pow(1 + r, fullYears) - 1) / r)
-                          : contribution * fullYears
-
-                        const contributionGrowth = partialContributionGrowth + fullYearContributionGrowth
-                        const totalContributed = partialContribution + (contribution * fullYears)
-                        const projectedValue = compoundedInitial + contributionGrowth
-                        
-                        // Interest = Total growth - contributions (just the compound interest portion)
-                        const totalInterest = projectedValue - latestEntry.amount - totalContributed
-                        
-                        // Inflated monthly spend for this year
-                        const yearSpend = getInflatedSpend(i)
-                        const yearTargetNetWorth = getFiTarget(yearSpend)
-                        
-                        // FI Progress (against potentially inflated target)
-                        const fiProgress = yearTargetNetWorth > 0 ? (projectedValue / yearTargetNetWorth) * 100 : 0
-                        
-                        const annualSwr = projectedValue * swrNum / 100
-                        const monthlySwr = annualSwr / 12
-
-                        // Check if SWR covers monthly spend (potentially inflated)
-                        const swrCoversSpend = baseSpend > 0 && monthlySwr >= yearSpend
-                        const isFirstFiYear = swrCoversSpend && !fiYearFound
-                        if (isFirstFiYear) fiYearFound = true
-
-                        // Check for crossover point (interest > contributions)
-                        const isInterestCrossover = totalInterest > totalContributed && !crossoverFound && totalContributed > 0
-                        if (isInterestCrossover) crossoverFound = true
-
-                        // Calculate Coast FI: if you stopped contributing at this year, when could you retire?
-                        const coastFiYear = findCoastFiYear(projectedValue, year, i)
-                        const coastFiAge = coastFiYear && birthYear ? coastFiYear - birthYear : null
-
                         return (
                           <tr
-                            key={year}
+                            key={row.year}
                             className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${
-                              isFirstFiYear ? 'bg-emerald-900/30 border-emerald-500/50' : ''
-                            } ${swrCoversSpend && !isFirstFiYear ? 'bg-emerald-900/10' : ''} ${
-                              isInterestCrossover ? 'bg-sky-900/30 border-sky-500/50' : ''
-                            }`}
+                              isNow ? 'border-b-2 border-slate-600 bg-slate-700/30' : ''
+                            } ${row.isFiYear ? 'bg-emerald-900/30 border-emerald-500/50' : ''
+                            } ${row.swrCoversSpend && !row.isFiYear && !isNow ? 'bg-emerald-900/10' : ''
+                            } ${row.isCrossover ? 'bg-sky-900/30 border-sky-500/50' : ''
+                            } ${isNow && row.swrCoversSpend ? 'bg-emerald-900/30' : ''}`}
                           >
-                            <td className="py-2 px-3 text-slate-300 font-medium">
-                              {year}
-                              {isFirstFiYear && <span className="ml-2 text-xs text-emerald-400 font-semibold">FI</span>}
-                              {isInterestCrossover && <span className="ml-2 text-xs text-sky-400 font-semibold">✨</span>}
+                            <td className={`py-2 px-3 font-medium ${isNow ? 'text-slate-200 font-semibold' : 'text-slate-300'}`}>
+                              {row.year}
+                              {row.isFiYear && <span className="ml-2 text-xs text-emerald-400 font-semibold">FI</span>}
+                              {isNow && row.swrCoversSpend && <span className="ml-2 text-xs text-emerald-400 font-semibold">FI</span>}
+                              {row.isCrossover && <span className="ml-2 text-xs text-sky-400 font-semibold">✨</span>}
                             </td>
-                            {birthDate && <td className="py-2 px-3 text-slate-400">{age}</td>}
-                            <td className="py-2 px-3 text-slate-500">+{yearsFromEntry.toFixed(1)}y</td>
-                            <td className="py-2 px-3 text-right font-mono text-emerald-400">{formatCurrency(projectedValue)}</td>
-                            <td className={`py-2 px-3 text-right font-mono ${totalInterest > totalContributed ? 'text-emerald-400' : 'text-emerald-400/70'}`}>
-                              +{formatCurrency(totalInterest)}
+                            {birthDate && <td className={`py-2 px-3 ${isNow ? 'text-slate-300 font-medium' : 'text-slate-400'}`}>{row.age}</td>}
+                            <td className={`py-2 px-3 ${isNow ? 'text-slate-400' : 'text-slate-500'}`}>
+                              {isNow ? '-' : `+${row.yearsFromEntry.toFixed(1)}y`}
                             </td>
-                            <td className="py-2 px-3 text-right font-mono text-sky-400/70">{formatCurrency(totalContributed)}</td>
-                            <td className={`py-2 px-3 text-right font-mono ${swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/80'}`}>
-                              {formatCurrency(monthlySwr)}
+                            <td className={`py-2 px-3 text-right font-mono text-emerald-400 ${isNow ? 'font-semibold' : ''}`}>
+                              {formatCurrency(row.netWorth)}
+                            </td>
+                            <td className={`py-2 px-3 text-right font-mono ${row.interest > row.contributed ? 'text-emerald-400' : 'text-emerald-400/70'}`}>
+                              +{formatCurrency(row.interest)}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-sky-400/70">
+                              {isNow ? '-' : formatCurrency(row.contributed)}
+                            </td>
+                            <td className={`py-2 px-3 text-right font-mono ${row.swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/80'}`}>
+                              {formatCurrency(row.monthlySwr)}
                             </td>
                             {baseSpend > 0 && (
-                              <td className={`py-2 px-3 text-right font-mono ${fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}>
-                                {fiProgress.toFixed(1)}%
+                              <td className={`py-2 px-3 text-right font-mono ${row.fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}>
+                                {row.fiProgress.toFixed(1)}%
                               </td>
                             )}
                             {baseSpend > 0 && (
                               <td className="py-2 px-3 text-right font-mono border-l border-slate-700">
-                                {coastFiYear ? (
-                                  <span className={swrCoversSpend ? 'text-emerald-400' : 'text-violet-400'}>
-                                    {swrCoversSpend ? (
+                                {row.coastFiYear ? (
+                                  <span className={row.swrCoversSpend ? 'text-emerald-400' : 'text-violet-400'}>
+                                    {row.swrCoversSpend ? (
                                       'Now'
                                     ) : (
                                       <>
-                                        {coastFiYear - year}y
+                                        {row.coastFiYear - (typeof row.year === 'number' ? row.year : currentYear)}y
                                         <span className="text-slate-500 text-xs ml-1">
-                                          ({birthDate ? `age ${coastFiAge}` : coastFiYear})
+                                          ({birthDate ? `age ${row.coastFiAge}` : row.coastFiYear})
                                         </span>
                                       </>
                                     )}
@@ -799,13 +830,178 @@ export default function Home() {
                             )}
                           </tr>
                         )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="flex-1 bg-slate-800/30 rounded-xl border border-slate-700 p-6 overflow-auto">
+                  {(() => {
+                    // Limit chart data to 25 years for readability
+                    const chartData = projectionData
+                      .filter((d): d is typeof d & { year: number } => typeof d.year === 'number')
+                      .slice(0, 25)
+                      .map(d => ({
+                        year: d.year,
+                        netWorth: Math.round(d.netWorth),
+                        fiTarget: Math.round(d.fiTarget),
+                        interest: Math.round(d.interest),
+                        contributed: Math.round(d.contributed),
+                        fiProgress: Math.round(d.fiProgress * 10) / 10,
+                        initialAmount: Math.round(latestEntry?.amount || 0),
                       }))
+                    
+                    const baseSpend = parseFloat(monthlySpend) || 0
+                    
+                    if (chartData.length === 0) {
+                      return <div className="text-slate-400">No projection data available</div>
+                    }
+                    
+                    return (
+                      <div className="space-y-8">
+                        {/* Chart 1: Race to FI - Net Worth vs Target */}
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-lg font-medium text-slate-200">Net Worth Over Time</h3>
+                            {fiYear && typeof fiYear === 'number' && (
+                              <span className="text-sm text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full">
+                                🎯 FI in {fiYear - new Date().getFullYear()} years ({fiYear})
+                              </span>
+                            )}
+                          </div>
+                          <div className="w-full h-[350px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={chartData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                <XAxis dataKey="year" stroke="#94a3b8" />
+                                <YAxis 
+                                  stroke="#94a3b8"
+                                  tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`}
+                                />
+                                <Tooltip 
+                                  formatter={(value) => formatCurrency(value as number)}
+                                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
+                                />
+                                <Legend />
+                                <Line 
+                                  type="monotone" 
+                                  dataKey="netWorth" 
+                                  name="Net Worth"
+                                  stroke="#10b981" 
+                                  strokeWidth={3}
+                                  dot={true}
+                                  isAnimationActive={false}
+                                  connectNulls
+                                />
+                                {baseSpend > 0 && (
+                                  <Line 
+                                    type="monotone" 
+                                    dataKey="fiTarget" 
+                                    name="FI Target"
+                                    stroke="#8b5cf6" 
+                                    strokeWidth={2}
+                                    strokeDasharray="5 5"
+                                    dot={true}
+                                    isAnimationActive={false}
+                                    connectNulls
+                                  />
+                                )}
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
 
-                      return rows
-                    })()}
-                  </tbody>
-                </table>
-              </div>
+                        {/* Chart 2: Wealth Composition */}
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-lg font-medium text-slate-200">Interest vs Contributions</h3>
+                            {crossoverYear && typeof crossoverYear === 'number' && (
+                              <span className="text-sm text-sky-400 bg-sky-400/10 px-3 py-1 rounded-full">
+                                ✨ Crossover in {crossoverYear - new Date().getFullYear()} years
+                              </span>
+                            )}
+                          </div>
+                          <div className="w-full h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={chartData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                <XAxis dataKey="year" stroke="#94a3b8" />
+                                <YAxis 
+                                  stroke="#94a3b8"
+                                  tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`}
+                                />
+                                <Tooltip 
+                                  formatter={(value) => formatCurrency(value as number)}
+                                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
+                                />
+                                <Legend />
+                                <Area 
+                                  type="monotone" 
+                                  dataKey="contributed" 
+                                  name="Contributions"
+                                  stackId="1"
+                                  stroke="#0ea5e9" 
+                                  fill="#0ea5e9"
+                                  isAnimationActive={false}
+                                />
+                                <Area 
+                                  type="monotone" 
+                                  dataKey="interest" 
+                                  name="Interest Earned"
+                                  stackId="1"
+                                  stroke="#10b981" 
+                                  fill="#10b981"
+                                  isAnimationActive={false}
+                                />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+
+                        {/* Chart 3: FI Progress */}
+                        {baseSpend > 0 && (
+                          <div>
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="text-lg font-medium text-slate-200">FI Progress</h3>
+                              <span className="text-sm text-violet-400 bg-violet-400/10 px-3 py-1 rounded-full">
+                                Currently {chartData[0]?.fiProgress.toFixed(0)}% to FI
+                              </span>
+                            </div>
+                          <div className="w-full h-[250px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={chartData.map(d => ({ ...d, fiProgressCapped: Math.min(d.fiProgress, 150) }))}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                  <XAxis dataKey="year" stroke="#94a3b8" />
+                                  <YAxis 
+                                    stroke="#94a3b8"
+                                    domain={[0, 150]}
+                                    tickFormatter={(v) => `${v}%`}
+                                  />
+                                  <Tooltip 
+                                    formatter={(value) => `${(value as number).toFixed(1)}%`}
+                                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
+                                  />
+                                  <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" />
+                                  <Line 
+                                    type="monotone" 
+                                    dataKey="fiProgressCapped" 
+                                    name="FI Progress"
+                                    stroke="#8b5cf6" 
+                                    strokeWidth={3}
+                                    dot={true}
+                                    isAnimationActive={false}
+                                    connectNulls
+                                  />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
             </>
           )}
         </div>
