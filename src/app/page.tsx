@@ -23,26 +23,59 @@ import {
 
 type Tab = 'dashboard' | 'entries' | 'projections' | 'levels'
 
-// Levels configuration - net worth thresholds and spending bonuses
-// The spending bonus at each level is designed to be ~2.4% annual SWR equivalent of the threshold
-// This is less than typical 4% SWR, ensuring you always make progress toward FI
-const LEVELS = [
-  { level: 1, name: 'Starter', threshold: 0, monthlyBonus: 0, color: 'slate' },
-  { level: 2, name: 'Saver', threshold: 10000, monthlyBonus: 20, color: 'zinc' },
-  { level: 3, name: 'Builder', threshold: 25000, monthlyBonus: 50, color: 'stone' },
-  { level: 4, name: 'Momentum', threshold: 50000, monthlyBonus: 100, color: 'amber' },
-  { level: 5, name: 'Foundation', threshold: 100000, monthlyBonus: 200, color: 'orange' },
-  { level: 6, name: 'Accelerator', threshold: 175000, monthlyBonus: 350, color: 'yellow' },
-  { level: 7, name: 'Milestone', threshold: 250000, monthlyBonus: 500, color: 'lime' },
-  { level: 8, name: 'Breakthrough', threshold: 400000, monthlyBonus: 800, color: 'green' },
-  { level: 9, name: 'Cruising', threshold: 500000, monthlyBonus: 1000, color: 'emerald' },
-  { level: 10, name: 'Wealthy', threshold: 750000, monthlyBonus: 1500, color: 'teal' },
-  { level: 11, name: 'Millionaire', threshold: 1000000, monthlyBonus: 2000, color: 'cyan' },
-  { level: 12, name: 'Abundant', threshold: 1500000, monthlyBonus: 3000, color: 'sky' },
-  { level: 13, name: 'Flourishing', threshold: 2000000, monthlyBonus: 4000, color: 'blue' },
-  { level: 14, name: 'Prosperous', threshold: 3000000, monthlyBonus: 6000, color: 'indigo' },
-  { level: 15, name: 'Elite', threshold: 5000000, monthlyBonus: 10000, color: 'violet' },
-  { level: 16, name: 'Legacy', threshold: 10000000, monthlyBonus: 20000, color: 'purple' },
+// Level thresholds - more granular progression
+// Monthly bonus is calculated dynamically based on user's spending growth rate setting
+const LEVEL_THRESHOLDS = [
+  { level: 1, name: 'Starter', threshold: 0 },
+  { level: 2, name: 'Saver', threshold: 10000 },
+  { level: 3, name: 'Builder', threshold: 25000 },
+  { level: 4, name: 'Momentum', threshold: 50000 },
+  { level: 5, name: 'Foundation', threshold: 75000 },
+  { level: 6, name: 'Traction', threshold: 100000 },
+  { level: 7, name: 'Accelerator', threshold: 150000 },
+  { level: 8, name: 'Velocity', threshold: 200000 },
+  { level: 9, name: 'Milestone', threshold: 250000 },
+  { level: 10, name: 'Cruising', threshold: 300000 },
+  { level: 11, name: 'Advancing', threshold: 350000 },
+  { level: 12, name: 'Thriving', threshold: 400000 },
+  { level: 13, name: 'Flourishing', threshold: 450000 },
+  { level: 14, name: 'Half Million', threshold: 500000 },
+  { level: 15, name: 'Expanding', threshold: 550000 },
+  { level: 16, name: 'Growing', threshold: 600000 },
+  { level: 17, name: 'Ascending', threshold: 650000 },
+  { level: 18, name: 'Rising', threshold: 700000 },
+  { level: 19, name: 'Surging', threshold: 750000 },
+  { level: 20, name: 'Climbing', threshold: 800000 },
+  { level: 21, name: 'Soaring', threshold: 850000 },
+  { level: 22, name: 'Elevating', threshold: 900000 },
+  { level: 23, name: 'Approaching', threshold: 950000 },
+  { level: 24, name: 'Millionaire', threshold: 1000000 },
+  { level: 25, name: 'Established', threshold: 1100000 },
+  { level: 26, name: 'Prospering', threshold: 1200000 },
+  { level: 27, name: 'Abundant', threshold: 1300000 },
+  { level: 28, name: 'Wealthy', threshold: 1400000 },
+  { level: 29, name: 'Accomplished', threshold: 1500000 },
+  { level: 30, name: 'Distinguished', threshold: 1750000 },
+  { level: 31, name: 'Double Million', threshold: 2000000 },
+  { level: 32, name: 'Exceptional', threshold: 2250000 },
+  { level: 33, name: 'Remarkable', threshold: 2500000 },
+  { level: 34, name: 'Outstanding', threshold: 2750000 },
+  { level: 35, name: 'Triple Million', threshold: 3000000 },
+  { level: 36, name: 'Elite', threshold: 3500000 },
+  { level: 37, name: 'Premier', threshold: 4000000 },
+  { level: 38, name: 'Pinnacle', threshold: 4500000 },
+  { level: 39, name: 'Five Million', threshold: 5000000 },
+  { level: 40, name: 'Apex', threshold: 6000000 },
+  { level: 41, name: 'Summit', threshold: 7000000 },
+  { level: 42, name: 'Zenith', threshold: 8000000 },
+  { level: 43, name: 'Crown', threshold: 9000000 },
+  { level: 44, name: 'Decamillionaire', threshold: 10000000 },
+  { level: 45, name: 'Titan', threshold: 15000000 },
+  { level: 46, name: 'Magnate', threshold: 20000000 },
+  { level: 47, name: 'Mogul', threshold: 30000000 },
+  { level: 48, name: 'Tycoon', threshold: 50000000 },
+  { level: 49, name: 'Dynasty', threshold: 75000000 },
+  { level: 50, name: 'Legacy', threshold: 100000000 },
 ] as const
 
 export default function Home() {
@@ -94,6 +127,9 @@ function AuthenticatedApp() {
   const [currentContributions, setCurrentContributions] = useState<number>(0)
   const [includeContributions, setIncludeContributions] = useState<boolean>(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  // Levels system settings
+  const [baseMonthlyBudget, setBaseMonthlyBudget] = useState<string>('3000') // Floor spending
+  const [spendingGrowthRate, setSpendingGrowthRate] = useState<string>('2') // % of net worth per year
 
   // Load settings when they come in from Convex
   useEffect(() => {
@@ -107,6 +143,13 @@ function AuthenticatedApp() {
       setBirthDate(settings.birthDate)
       setMonthlySpend(settings.monthlySpend.toString())
       setInflationRate(settings.inflationRate.toString())
+      // Load levels settings
+      if (settings.baseMonthlyBudget !== undefined) {
+        setBaseMonthlyBudget(settings.baseMonthlyBudget.toString())
+      }
+      if (settings.spendingGrowthRate !== undefined) {
+        setSpendingGrowthRate(settings.spendingGrowthRate.toString())
+      }
     }
 
     // Mark loaded even when settings is null so new users can persist changes.
@@ -125,11 +168,13 @@ function AuthenticatedApp() {
         birthDate,
         monthlySpend: parseFloat(monthlySpend) || 0,
         inflationRate: parseFloat(inflationRate) || 3,
+        baseMonthlyBudget: parseFloat(baseMonthlyBudget) || 3000,
+        spendingGrowthRate: parseFloat(spendingGrowthRate) || 2,
       })
     }, 500)
 
     return () => clearTimeout(timeout)
-  }, [rateOfReturn, swr, yearlyContribution, birthDate, monthlySpend, inflationRate, settingsLoaded, saveSettings])
+  }, [rateOfReturn, swr, yearlyContribution, birthDate, monthlySpend, inflationRate, baseMonthlyBudget, spendingGrowthRate, settingsLoaded, saveSettings])
 
   const latestEntry = entries[0] || null
   const rateNum = parseFloat(rateOfReturn) || 0
@@ -374,18 +419,26 @@ function AuthenticatedApp() {
   // Calculate level information based on current net worth
   const levelInfo = useMemo(() => {
     const netWorth = currentTotal
+    const baseBudget = parseFloat(baseMonthlyBudget) || 3000
+    const growthRate = (parseFloat(spendingGrowthRate) || 2) / 100 // Convert to decimal
+
+    // Calculate unlocked spending at a given net worth threshold
+    // Formula: base + (threshold × growthRate / 12)
+    const calculateUnlockedSpending = (threshold: number) => {
+      return baseBudget + (threshold * growthRate / 12)
+    }
 
     // Find current level (highest threshold we've passed)
     let currentLevelIndex = 0
-    for (let i = LEVELS.length - 1; i >= 0; i--) {
-      if (netWorth >= LEVELS[i].threshold) {
+    for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+      if (netWorth >= LEVEL_THRESHOLDS[i].threshold) {
         currentLevelIndex = i
         break
       }
     }
 
-    const currentLevel = LEVELS[currentLevelIndex]
-    const nextLevel = LEVELS[currentLevelIndex + 1] || null
+    const currentLevel = LEVEL_THRESHOLDS[currentLevelIndex]
+    const nextLevel = LEVEL_THRESHOLDS[currentLevelIndex + 1] || null
 
     // Calculate progress to next level
     let progressToNext = 100
@@ -399,47 +452,54 @@ function AuthenticatedApp() {
       amountToNext = nextThreshold - netWorth
     }
 
-    // Calculate total unlocked monthly spending bonus
-    // Sum up all bonuses from levels we've achieved
-    let totalMonthlyBonus = 0
-    for (let i = 0; i <= currentLevelIndex; i++) {
-      totalMonthlyBonus += LEVELS[i].monthlyBonus
-    }
-
-    // Calculate what base spending is (user's set monthly spend is the total they want)
-    // So base = monthlySpend - totalMonthlyBonus (but not less than 0)
-    const baseSpend = parseFloat(monthlySpend) || 0
-    const unlockedSpend = totalMonthlyBonus
+    // Calculate unlocked spending based on current level's threshold
+    // This is the "official" unlocked amount at your level
+    const unlockedAtLevel = calculateUnlockedSpending(currentLevel.threshold)
+    
+    // Also calculate what you'd unlock at your exact net worth (for display)
+    const unlockedAtNetWorth = calculateUnlockedSpending(netWorth)
+    
+    // User's current spending setting
+    const currentSpend = parseFloat(monthlySpend) || 0
     
     // Show how the user's spending compares to what's unlocked
-    const spendingStatus = baseSpend <= unlockedSpend 
+    const spendingStatus = currentSpend <= unlockedAtLevel 
       ? 'within_budget' 
-      : baseSpend <= unlockedSpend * 1.2 
+      : currentSpend <= unlockedAtLevel * 1.1 
         ? 'slightly_over' 
         : 'over_budget'
 
-    // Calculate all levels with their unlock status
-    const levelsWithStatus = LEVELS.map((level, index) => ({
+    // Calculate all levels with their unlock status and calculated spending
+    const levelsWithStatus = LEVEL_THRESHOLDS.map((level, index) => ({
       ...level,
+      monthlyBudget: calculateUnlockedSpending(level.threshold),
       isUnlocked: index <= currentLevelIndex,
       isCurrent: index === currentLevelIndex,
       isNext: index === currentLevelIndex + 1,
     }))
 
+    // Calculate spending increase from reaching next level
+    const nextLevelSpendingIncrease = nextLevel 
+      ? calculateUnlockedSpending(nextLevel.threshold) - unlockedAtLevel
+      : 0
+
     return {
-      currentLevel,
+      currentLevel: { ...currentLevel, monthlyBudget: unlockedAtLevel },
       currentLevelIndex,
-      nextLevel,
+      nextLevel: nextLevel ? { ...nextLevel, monthlyBudget: calculateUnlockedSpending(nextLevel.threshold) } : null,
       progressToNext,
       amountToNext,
-      totalMonthlyBonus,
-      unlockedSpend,
-      baseSpend,
+      unlockedAtLevel,
+      unlockedAtNetWorth,
+      nextLevelSpendingIncrease,
+      currentSpend,
       spendingStatus,
       levelsWithStatus,
       netWorth,
+      baseBudget,
+      growthRate,
     }
-  }, [currentTotal, monthlySpend])
+  }, [currentTotal, monthlySpend, baseMonthlyBudget, spendingGrowthRate])
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -1230,6 +1290,74 @@ function AuthenticatedApp() {
             </div>
           ) : (
             <>
+              {/* Settings Controls */}
+              <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
+                <h3 className="text-lg font-semibold text-slate-200 mb-4">Configure Your Levels</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Base Monthly Budget
+                    </label>
+                    <p className="text-xs text-slate-500 mb-2">
+                      Your floor spending regardless of net worth - what you need to cover essentials
+                    </p>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                      <input
+                        type="number"
+                        value={baseMonthlyBudget}
+                        onChange={(e) => setBaseMonthlyBudget(e.target.value)}
+                        placeholder="3000"
+                        min="0"
+                        step="100"
+                        className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Spending Growth Rate
+                    </label>
+                    <p className="text-xs text-slate-500 mb-2">
+                      % of net worth per year added to budget. Keep below your return rate ({rateOfReturn}%) to ensure progress!
+                    </p>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={spendingGrowthRate}
+                        onChange={(e) => setSpendingGrowthRate(e.target.value)}
+                        placeholder="2"
+                        min="0"
+                        max="10"
+                        step="0.1"
+                        className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Formula explanation */}
+                <div className="mt-4 p-3 bg-slate-900/50 rounded-lg">
+                  <p className="text-xs text-slate-400">
+                    <span className="text-violet-400 font-medium">Formula:</span> Unlocked Budget = ${formatCurrency(parseFloat(baseMonthlyBudget) || 3000, 0)} base + (Net Worth × {spendingGrowthRate || 2}% ÷ 12)
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    At your current net worth: {formatCurrency(levelInfo.baseBudget, 0)} + ({formatCurrency(levelInfo.netWorth, 0)} × {(levelInfo.growthRate * 100).toFixed(1)}% ÷ 12) = <span className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
+                  </p>
+                </div>
+
+                {/* Warning if growth rate >= return rate */}
+                {parseFloat(spendingGrowthRate) >= parseFloat(rateOfReturn) && (
+                  <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                    <p className="text-sm text-red-400">
+                      ⚠️ Your spending growth rate ({spendingGrowthRate}%) is ≥ your return rate ({rateOfReturn}%). 
+                      You won't make progress toward FI this way!
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Current Level Hero Card */}
               <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur rounded-2xl p-8 shadow-xl border border-violet-500/30 mb-8">
                 <div className="flex items-center justify-between mb-6">
@@ -1249,7 +1377,7 @@ function AuthenticatedApp() {
                 {levelInfo.nextLevel ? (
                   <div className="mb-6">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-slate-400 text-sm">Progress to Level {levelInfo.nextLevel.level}</span>
+                      <span className="text-slate-400 text-sm">Progress to Level {levelInfo.nextLevel.level}: {levelInfo.nextLevel.name}</span>
                       <span className="text-slate-300 text-sm font-mono">
                         {formatCurrency(levelInfo.amountToNext)} to go
                       </span>
@@ -1276,19 +1404,19 @@ function AuthenticatedApp() {
                 {/* Unlocked Spending Summary */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-slate-900/50 rounded-xl p-4">
-                    <p className="text-slate-500 text-xs mb-1">Unlocked Monthly Budget</p>
-                    <p className="text-2xl font-mono text-violet-400">{formatCurrency(levelInfo.unlockedSpend)}</p>
+                    <p className="text-slate-500 text-xs mb-1">Unlocked at This Level</p>
+                    <p className="text-2xl font-mono text-violet-400">{formatCurrency(levelInfo.unlockedAtLevel)}</p>
                     <p className="text-slate-500 text-xs mt-1">
-                      {formatCurrency(levelInfo.unlockedSpend * 12)}/year
+                      {formatCurrency(levelInfo.unlockedAtLevel * 12)}/year
                     </p>
                   </div>
                   <div className="bg-slate-900/50 rounded-xl p-4">
-                    <p className="text-slate-500 text-xs mb-1">Your Monthly Spend</p>
+                    <p className="text-slate-500 text-xs mb-1">Your Monthly Spend Setting</p>
                     <p className={`text-2xl font-mono ${
                       levelInfo.spendingStatus === 'within_budget' ? 'text-emerald-400' :
                       levelInfo.spendingStatus === 'slightly_over' ? 'text-amber-400' : 'text-red-400'
                     }`}>
-                      {formatCurrency(levelInfo.baseSpend)}
+                      {formatCurrency(levelInfo.currentSpend)}
                     </p>
                     <p className="text-slate-500 text-xs mt-1">
                       Set in Projections tab
@@ -1300,21 +1428,21 @@ function AuthenticatedApp() {
                       <>
                         <p className="text-lg font-medium text-emerald-400">✓ Within Budget</p>
                         <p className="text-slate-500 text-xs mt-1">
-                          {formatCurrency(levelInfo.unlockedSpend - levelInfo.baseSpend)} buffer
+                          {formatCurrency(levelInfo.unlockedAtLevel - levelInfo.currentSpend)} buffer
                         </p>
                       </>
                     ) : levelInfo.spendingStatus === 'slightly_over' ? (
                       <>
                         <p className="text-lg font-medium text-amber-400">⚠ Slightly Over</p>
                         <p className="text-slate-500 text-xs mt-1">
-                          {formatCurrency(levelInfo.baseSpend - levelInfo.unlockedSpend)} over budget
+                          {formatCurrency(levelInfo.currentSpend - levelInfo.unlockedAtLevel)} over budget
                         </p>
                       </>
                     ) : (
                       <>
                         <p className="text-lg font-medium text-red-400">✗ Over Budget</p>
                         <p className="text-slate-500 text-xs mt-1">
-                          {formatCurrency(levelInfo.baseSpend - levelInfo.unlockedSpend)} over budget
+                          {formatCurrency(levelInfo.currentSpend - levelInfo.unlockedAtLevel)} over budget
                         </p>
                       </>
                     )}
@@ -1325,9 +1453,9 @@ function AuthenticatedApp() {
                 {levelInfo.nextLevel && (
                   <div className="mt-6 p-4 bg-violet-500/10 border border-violet-500/30 rounded-xl">
                     <p className="text-violet-300 text-sm">
-                      <span className="font-medium">Next unlock:</span> Level {levelInfo.nextLevel.level} ({levelInfo.nextLevel.name}) adds{' '}
-                      <span className="font-mono text-violet-400">+{formatCurrency(levelInfo.nextLevel.monthlyBonus)}/mo</span>{' '}
-                      to your budget at {formatCurrency(levelInfo.nextLevel.threshold)} net worth
+                      <span className="font-medium">Next unlock:</span> Level {levelInfo.nextLevel.level} ({levelInfo.nextLevel.name}) unlocks{' '}
+                      <span className="font-mono text-violet-400">{formatCurrency(levelInfo.nextLevel.monthlyBudget)}/mo</span>{' '}
+                      (+{formatCurrency(levelInfo.nextLevelSpendingIncrease)}) at {formatCurrency(levelInfo.nextLevel.threshold)} net worth
                     </p>
                   </div>
                 )}
@@ -1342,124 +1470,94 @@ function AuthenticatedApp() {
                   always make progress toward financial independence.
                 </p>
                 <p className="text-slate-400 text-sm">
-                  Each level's spending bonus is roughly <span className="text-violet-400">2.4% annual SWR equivalent</span> of 
-                  the threshold—well below the typical 4% SWR rate. This means even as you enjoy lifestyle upgrades, 
-                  your wealth continues to compound.
+                  Your spending growth rate of <span className="text-violet-400">{spendingGrowthRate}%</span> is{' '}
+                  {parseFloat(spendingGrowthRate) < parseFloat(rateOfReturn) ? (
+                    <span className="text-emerald-400">{(parseFloat(rateOfReturn) - parseFloat(spendingGrowthRate)).toFixed(1)}% below</span>
+                  ) : (
+                    <span className="text-red-400">{(parseFloat(spendingGrowthRate) - parseFloat(rateOfReturn)).toFixed(1)}% above</span>
+                  )}{' '}
+                  your expected return rate of {rateOfReturn}%. This means{' '}
+                  {parseFloat(spendingGrowthRate) < parseFloat(rateOfReturn) ? (
+                    <span className="text-emerald-400">your wealth will continue to compound even as you enjoy lifestyle upgrades.</span>
+                  ) : (
+                    <span className="text-red-400">you may not make progress toward FI - consider lowering your spending growth rate.</span>
+                  )}
                 </p>
               </div>
 
-              {/* All Levels Grid */}
+              {/* All Levels Table */}
               <h3 className="text-xl font-semibold text-slate-200 mb-4">All Levels</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {levelInfo.levelsWithStatus.map((level) => (
-                  <div
-                    key={level.level}
-                    className={`relative rounded-xl p-4 border transition-all ${
-                      level.isCurrent
-                        ? 'bg-violet-500/20 border-violet-500/50 shadow-lg shadow-violet-500/10'
-                        : level.isUnlocked
-                          ? 'bg-slate-800/50 border-emerald-500/30'
-                          : level.isNext
-                            ? 'bg-slate-800/30 border-violet-500/20 border-dashed'
-                            : 'bg-slate-900/30 border-slate-700/50 opacity-60'
-                    }`}
-                  >
-                    {/* Level Badge */}
-                    <div className="flex items-start justify-between mb-2">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        level.isCurrent
-                          ? 'bg-violet-500/30 text-violet-300'
-                          : level.isUnlocked
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : 'bg-slate-700/50 text-slate-500'
-                      }`}>
-                        Level {level.level}
-                      </span>
-                      {level.isUnlocked && (
-                        <span className="text-emerald-400 text-xs">✓</span>
-                      )}
-                      {level.isNext && (
-                        <span className="text-violet-400 text-xs">Next</span>
-                      )}
-                    </div>
-
-                    {/* Level Name */}
-                    <h4 className={`font-semibold mb-1 ${
-                      level.isCurrent ? 'text-white' : level.isUnlocked ? 'text-slate-200' : 'text-slate-400'
-                    }`}>
-                      {level.name}
-                    </h4>
-
-                    {/* Threshold */}
-                    <p className="text-xs text-slate-500 mb-2">
-                      {level.threshold === 0 ? 'Starting level' : `At ${formatCurrency(level.threshold, 0)}`}
-                    </p>
-
-                    {/* Monthly Bonus */}
-                    <p className={`text-sm font-mono ${
-                      level.isCurrent
-                        ? 'text-violet-400'
-                        : level.isUnlocked
-                          ? 'text-emerald-400/80'
-                          : 'text-slate-500'
-                    }`}>
-                      {level.monthlyBonus === 0 ? 'Base' : `+${formatCurrency(level.monthlyBonus, 0)}/mo`}
-                    </p>
-
-                    {/* Current indicator */}
-                    {level.isCurrent && (
-                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-violet-400 rounded-full animate-pulse" />
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Cumulative Spending Table */}
-              <div className="mt-8 bg-slate-800/30 rounded-xl border border-slate-700 overflow-hidden">
+              <div className="bg-slate-800/30 rounded-xl border border-slate-700 overflow-hidden max-h-[500px] overflow-y-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-800">
+                  <thead className="bg-slate-800 sticky top-0 z-10">
                     <tr className="border-b border-slate-700">
                       <th className="text-left text-slate-400 font-medium py-3 px-4">Level</th>
                       <th className="text-right text-slate-400 font-medium py-3 px-4">Net Worth Required</th>
-                      <th className="text-right text-slate-400 font-medium py-3 px-4">Level Bonus</th>
-                      <th className="text-right text-slate-400 font-medium py-3 px-4">Total Unlocked</th>
+                      <th className="text-right text-slate-400 font-medium py-3 px-4">Monthly Budget</th>
+                      <th className="text-right text-slate-400 font-medium py-3 px-4">Annual Budget</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(() => {
-                      let cumulative = 0
-                      return levelInfo.levelsWithStatus.map((level) => {
-                        cumulative += level.monthlyBonus
-                        return (
-                          <tr 
-                            key={level.level}
-                            className={`border-b border-slate-700/50 ${
-                              level.isCurrent ? 'bg-violet-500/10' : level.isUnlocked ? 'bg-emerald-500/5' : ''
-                            }`}
-                          >
-                            <td className="py-2 px-4">
-                              <span className={`font-medium ${level.isUnlocked ? 'text-slate-200' : 'text-slate-500'}`}>
-                                {level.level}. {level.name}
-                              </span>
-                              {level.isCurrent && <span className="ml-2 text-xs text-violet-400">← You are here</span>}
-                            </td>
-                            <td className="py-2 px-4 text-right font-mono text-slate-400">
-                              {level.threshold === 0 ? '-' : formatCurrency(level.threshold, 0)}
-                            </td>
-                            <td className="py-2 px-4 text-right font-mono text-slate-400">
-                              {level.monthlyBonus === 0 ? '-' : `+${formatCurrency(level.monthlyBonus, 0)}`}
-                            </td>
-                            <td className={`py-2 px-4 text-right font-mono ${
-                              level.isUnlocked ? 'text-emerald-400' : 'text-slate-500'
+                    {levelInfo.levelsWithStatus.map((level) => (
+                      <tr 
+                        key={level.level}
+                        className={`border-b border-slate-700/50 ${
+                          level.isCurrent ? 'bg-violet-500/10' : level.isUnlocked ? 'bg-emerald-500/5' : ''
+                        } ${level.isNext ? 'bg-violet-500/5' : ''}`}
+                      >
+                        <td className="py-2 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              level.isCurrent
+                                ? 'bg-violet-500/30 text-violet-300'
+                                : level.isUnlocked
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : level.isNext
+                                    ? 'bg-violet-500/10 text-violet-400'
+                                    : 'bg-slate-700/50 text-slate-500'
                             }`}>
-                              {formatCurrency(cumulative, 0)}/mo
-                            </td>
-                          </tr>
-                        )
-                      })
-                    })()}
+                              {level.level}
+                            </span>
+                            <span className={`font-medium ${level.isUnlocked ? 'text-slate-200' : 'text-slate-500'}`}>
+                              {level.name}
+                            </span>
+                            {level.isCurrent && <span className="text-xs text-violet-400">← Current</span>}
+                            {level.isNext && <span className="text-xs text-violet-400/70">← Next</span>}
+                          </div>
+                        </td>
+                        <td className="py-2 px-4 text-right font-mono text-slate-400">
+                          {level.threshold === 0 ? '-' : formatCurrency(level.threshold, 0)}
+                        </td>
+                        <td className={`py-2 px-4 text-right font-mono ${
+                          level.isCurrent ? 'text-violet-400 font-semibold' : level.isUnlocked ? 'text-emerald-400' : 'text-slate-500'
+                        }`}>
+                          {formatCurrency(level.monthlyBudget, 0)}
+                        </td>
+                        <td className={`py-2 px-4 text-right font-mono ${
+                          level.isCurrent ? 'text-violet-400/80' : level.isUnlocked ? 'text-emerald-400/80' : 'text-slate-600'
+                        }`}>
+                          {formatCurrency(level.monthlyBudget * 12, 0)}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Quick Reference Cards */}
+              <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: 'At $100K', value: levelInfo.baseBudget + (100000 * levelInfo.growthRate / 12) },
+                  { label: 'At $500K', value: levelInfo.baseBudget + (500000 * levelInfo.growthRate / 12) },
+                  { label: 'At $1M', value: levelInfo.baseBudget + (1000000 * levelInfo.growthRate / 12) },
+                  { label: 'At $2M', value: levelInfo.baseBudget + (2000000 * levelInfo.growthRate / 12) },
+                ].map((item) => (
+                  <div key={item.label} className="bg-slate-800/30 rounded-lg p-3 border border-slate-700">
+                    <p className="text-xs text-slate-500">{item.label}</p>
+                    <p className="text-lg font-mono text-violet-400">{formatCurrency(item.value, 0)}/mo</p>
+                    <p className="text-xs text-slate-600">{formatCurrency(item.value * 12, 0)}/yr</p>
+                  </div>
+                ))}
               </div>
             </>
           )}

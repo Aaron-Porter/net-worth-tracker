@@ -13,6 +13,9 @@ export default defineSchema({
     birthDate: v.string(),
     monthlySpend: v.number(),
     inflationRate: v.number(),
+    // Levels system settings
+    baseMonthlyBudget: v.optional(v.number()), // Floor spending regardless of net worth
+    spendingGrowthRate: v.optional(v.number()), // % of net worth per year allowed as additional spending
   }).index("by_user", ["userId"]),
 
   netWorthEntries: defineTable({
