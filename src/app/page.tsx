@@ -21,7 +21,7 @@ import {
   ReferenceLine,
 } from 'recharts'
 
-type Tab = 'dashboard' | 'entries' | 'projections' | 'levels'
+type Tab = 'dashboard' | 'entries' | 'projections' | 'levels' | 'settings'
 
 // Level thresholds - more granular progression
 // Monthly bonus is calculated dynamically based on user's spending growth rate setting
@@ -579,6 +579,19 @@ function AuthenticatedApp() {
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
               )}
             </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-6 py-4 font-medium transition-colors relative ${
+                activeTab === 'settings'
+                  ? 'text-emerald-400'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Settings
+              {activeTab === 'settings' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
+              )}
+            </button>
             <div className="flex-1" />
             <button
               onClick={() => signOut()}
@@ -782,27 +795,6 @@ function AuthenticatedApp() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Expected Annual Rate of Return
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={rateOfReturn}
-                    onChange={(e) => setRateOfReturn(e.target.value)}
-                    placeholder="7"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 pr-10 text-xl font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
-                    %
-                  </span>
-                </div>
-              </div>
-
               <button
                 onClick={handleAddEntry}
                 disabled={!newAmount || parseFloat(newAmount) <= 0}
@@ -887,139 +879,44 @@ function AuthenticatedApp() {
             </div>
           ) : (
             <>
-              {/* Controls */}
-              <div className="flex flex-wrap items-end gap-4 mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                <div className="text-sm text-slate-400">
-                  Base: <span className="text-emerald-400 font-mono">{formatCurrency(latestEntry.amount)}</span>
+              {/* Summary Bar */}
+              <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+                  <span>Base: <span className="text-emerald-400 font-mono">{formatCurrency(latestEntry.amount)}</span></span>
+                  <span>Return: <span className="text-emerald-400 font-mono">{rateOfReturn}%</span></span>
+                  <span>SWR: <span className="text-amber-400 font-mono">{swr}%</span></span>
+                  <span>Contribution: <span className="text-sky-400 font-mono">{formatCurrency(parseFloat(yearlyContribution) || 0)}/yr</span></span>
+                  <span>Spend: <span className="text-violet-400 font-mono">{formatCurrency(parseFloat(monthlySpend) || 0)}/mo</span></span>
+                  {inflationEnabled && <span>Inflation: <span className="text-amber-400 font-mono">{inflationRate}%</span></span>}
                 </div>
                 <div className="flex-1" />
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Rate of Return %
-                  </label>
-                  <input
-                    type="number"
-                    value={rateOfReturn}
-                    onChange={(e) => setRateOfReturn(e.target.value)}
-                    placeholder="7"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    className="w-20 bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    SWR %
-                  </label>
-                  <input
-                    type="number"
-                    value={swr}
-                    onChange={(e) => setSwr(e.target.value)}
-                    placeholder="4"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    className="w-20 bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Yearly Contribution
-                  </label>
-                  <div className="relative w-36">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                      $
-                    </span>
-                    <input
-                      type="number"
-                      value={yearlyContribution}
-                      onChange={(e) => setYearlyContribution(e.target.value)}
-                      placeholder="0"
-                      min="0"
-                      step="1000"
-                      className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-3 pl-7 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Birth Date
-                  </label>
-                  <input
-                    type="date"
-                    value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                    className="bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Monthly Spend
-                  </label>
-                  <div className="relative w-36">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                      $
-                    </span>
-                    <input
-                      type="number"
-                      value={monthlySpend}
-                      onChange={(e) => setMonthlySpend(e.target.value)}
-                      placeholder="0"
-                      min="0"
-                      step="100"
-                      className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-3 pl-7 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-                <div className="flex items-end gap-2">
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className="text-xs text-slate-400 hover:text-slate-200 underline"
+                >
+                  Edit Settings
+                </button>
+                <div className="flex rounded-lg border border-slate-600 overflow-hidden">
                   <button
-                    onClick={() => setInflationEnabled(!inflationEnabled)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      inflationEnabled
-                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
-                        : 'bg-slate-700/50 text-slate-400 border border-slate-600'
+                    onClick={() => setProjectionsView('table')}
+                    className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                      projectionsView === 'table'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    Inflation {inflationEnabled ? 'ON' : 'OFF'}
+                    Table
                   </button>
-                  {inflationEnabled && (
-                    <input
-                      type="number"
-                      value={inflationRate}
-                      onChange={(e) => setInflationRate(e.target.value)}
-                      placeholder="3"
-                      min="0"
-                      max="20"
-                      step="0.1"
-                      className="w-16 bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    />
-                  )}
-                  {inflationEnabled && <span className="text-slate-500 text-sm">%</span>}
-                </div>
-                <div className="flex items-end">
-                  <div className="flex rounded-lg border border-slate-600 overflow-hidden">
-                    <button
-                      onClick={() => setProjectionsView('table')}
-                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                        projectionsView === 'table'
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Table
-                    </button>
-                    <button
-                      onClick={() => setProjectionsView('chart')}
-                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                        projectionsView === 'chart'
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Chart
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => setProjectionsView('chart')}
+                    className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                      projectionsView === 'chart'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Chart
+                  </button>
                 </div>
               </div>
 
@@ -1310,110 +1207,37 @@ function AuthenticatedApp() {
             </div>
           ) : (
             <>
-              {/* Settings Controls */}
-              <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
-                <h3 className="text-lg font-semibold text-slate-200 mb-4">Configure Your Budget</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Base Monthly Budget
-                    </label>
-                    <p className="text-xs text-slate-500 mb-2">
-                      Floor spending for essentials (in today's dollars)
+              {/* Budget Summary */}
+              <div className="bg-slate-800/50 rounded-xl p-4 mb-6 border border-slate-700">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-2">
+                    <p className="text-sm text-slate-300 font-medium">
+                      Budget Formula: <span className="text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)} base</span> + <span className="text-emerald-400">{formatCurrency(levelInfo.netWorthPortion)} from net worth</span> = <span className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
                     </p>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
-                      <input
-                        type="number"
-                        value={baseMonthlyBudget}
-                        onChange={(e) => setBaseMonthlyBudget(e.target.value)}
-                        placeholder="3000"
-                        min="0"
-                        step="100"
-                        className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      />
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                      <span>Base: <span className="text-amber-400">{formatCurrency(levelInfo.baseBudgetOriginal, 0)}</span></span>
+                      <span>Spending Rate: <span className="text-emerald-400">{(levelInfo.spendingRate * 100).toFixed(1)}%</span></span>
+                      <span>Inflation: <span className="text-amber-400">{(levelInfo.inflation * 100).toFixed(1)}%</span></span>
+                      <span>Return Rate: <span className="text-emerald-400">{rateOfReturn}%</span></span>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Net Worth Spending Rate
-                    </label>
-                    <p className="text-xs text-slate-500 mb-2">
-                      % of your net worth to add to budget annually
-                    </p>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={spendingGrowthRate}
-                        onChange={(e) => setSpendingGrowthRate(e.target.value)}
-                        placeholder="2"
-                        min="0"
-                        max="10"
-                        step="0.1"
-                        className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Inflation Rate
-                    </label>
-                    <p className="text-xs text-slate-500 mb-2">
-                      Annual adjustment to base budget
-                    </p>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={inflationRate}
-                        onChange={(e) => setInflationRate(e.target.value)}
-                        placeholder="3"
-                        min="0"
-                        max="20"
-                        step="0.1"
-                        className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Formula explanation */}
-                <div className="mt-4 p-4 bg-slate-900/50 rounded-lg space-y-3">
-                  <p className="text-sm text-slate-300 font-medium">
-                    How your budget is calculated:
-                  </p>
-                  <div className="text-xs text-slate-400 space-y-1">
-                    <p>
-                      <span className="text-amber-400">Base (inflation-adjusted)</span> = {formatCurrency(levelInfo.baseBudgetOriginal, 0)} × (1 + {(levelInfo.inflation * 100).toFixed(1)}%)^{levelInfo.yearsElapsed.toFixed(2)} years = <span className="font-mono text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)}</span>
-                    </p>
-                    <p>
-                      <span className="text-emerald-400">Net Worth Portion</span> = {formatCurrency(levelInfo.netWorth, 0)} × {(levelInfo.spendingRate * 100).toFixed(1)}% ÷ 12 = <span className="font-mono text-emerald-400">{formatCurrency(levelInfo.netWorthPortion)}</span>
-                    </p>
-                    <p className="pt-2 border-t border-slate-700">
-                      <span className="text-violet-400 font-medium">Total Unlocked</span> = {formatCurrency(levelInfo.baseBudgetInflationAdjusted)} + {formatCurrency(levelInfo.netWorthPortion)} = <span className="font-mono text-violet-400 text-sm">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
-                    </p>
-                  </div>
+                  <button
+                    onClick={() => setActiveTab('settings')}
+                    className="text-xs text-slate-400 hover:text-slate-200 underline"
+                  >
+                    Edit Settings
+                  </button>
                 </div>
 
                 {/* Warning if spending rate >= return rate */}
                 {parseFloat(spendingGrowthRate) >= parseFloat(rateOfReturn) && (
-                  <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
                     <p className="text-sm text-red-400">
                       ⚠️ Your net worth spending rate ({spendingGrowthRate}%) is ≥ your return rate ({rateOfReturn}%). 
                       You won't make progress toward FI this way!
                     </p>
                   </div>
                 )}
-
-                {/* Helpful tip */}
-                <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                  <p className="text-xs text-emerald-400">
-                    <span className="font-medium">Progress guarantee:</span> With {rateOfReturn}% returns and {spendingGrowthRate}% spending rate, 
-                    you keep {(parseFloat(rateOfReturn) - parseFloat(spendingGrowthRate)).toFixed(1)}% of your net worth growth toward FI. 
-                    Your base budget adjusts for {inflationRate}% inflation automatically.
-                  </p>
-                </div>
               </div>
 
               {/* Current Level Hero Card */}
@@ -1639,6 +1463,328 @@ function AuthenticatedApp() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* Settings Tab */}
+      {activeTab === 'settings' && (
+        <div className="container mx-auto px-4 py-8 max-w-3xl">
+          <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-slate-400 to-slate-300 bg-clip-text text-transparent">
+            Settings
+          </h1>
+          <p className="text-slate-400 text-center mb-8">
+            Configure your assumptions and preferences
+          </p>
+
+          {/* Investment Assumptions */}
+          <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
+              Investment Assumptions
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Expected Rate of Return
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Annual return rate for your investments (e.g., 7% for stock market average)
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={rateOfReturn}
+                    onChange={(e) => setRateOfReturn(e.target.value)}
+                    placeholder="7"
+                    min="0"
+                    max="30"
+                    step="0.1"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Inflation Rate
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Expected annual inflation for adjusting future values
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={inflationRate}
+                    onChange={(e) => setInflationRate(e.target.value)}
+                    placeholder="3"
+                    min="0"
+                    max="20"
+                    step="0.1"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Safe Withdrawal Rate (SWR)
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Percentage you can safely withdraw annually in retirement (typically 3-4%)
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={swr}
+                    onChange={(e) => setSwr(e.target.value)}
+                    placeholder="4"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Yearly Contribution
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  How much you add to investments annually
+                </p>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                  <input
+                    type="number"
+                    value={yearlyContribution}
+                    onChange={(e) => setYearlyContribution(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    step="1000"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Spending & FI Target */}
+          <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-violet-400 rounded-full"></span>
+              Spending & FI Target
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Monthly Spending
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Your current monthly expenses (used to calculate FI target)
+                </p>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                  <input
+                    type="number"
+                    value={monthlySpend}
+                    onChange={(e) => setMonthlySpend(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    step="100"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div className="flex items-end">
+                <div className="w-full">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Apply Inflation to Projections
+                  </label>
+                  <p className="text-xs text-slate-500 mb-2">
+                    Increase spending target each year for inflation
+                  </p>
+                  <button
+                    onClick={() => setInflationEnabled(!inflationEnabled)}
+                    className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      inflationEnabled
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
+                        : 'bg-slate-700/50 text-slate-400 border border-slate-600'
+                    }`}
+                  >
+                    {inflationEnabled ? '✓ Inflation Enabled' : 'Inflation Disabled'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Calculated FI Target */}
+            {parseFloat(monthlySpend) > 0 && parseFloat(swr) > 0 && (
+              <div className="mt-4 p-4 bg-slate-900/50 rounded-lg">
+                <p className="text-sm text-slate-400">
+                  <span className="text-slate-300 font-medium">Your FI Target:</span>{' '}
+                  <span className="font-mono text-violet-400">
+                    {formatCurrency((parseFloat(monthlySpend) * 12) / (parseFloat(swr) / 100))}
+                  </span>
+                  <span className="text-slate-500 ml-2">
+                    ({formatCurrency(parseFloat(monthlySpend))}/mo × 12 ÷ {swr}%)
+                  </span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Levels System */}
+          <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
+              Levels System
+            </h3>
+            <p className="text-sm text-slate-400 mb-4">
+              Configure how your spending budget grows with your net worth
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Base Monthly Budget
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Floor spending for essentials (in today's dollars, adjusts for inflation)
+                </p>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                  <input
+                    type="number"
+                    value={baseMonthlyBudget}
+                    onChange={(e) => setBaseMonthlyBudget(e.target.value)}
+                    placeholder="3000"
+                    min="0"
+                    step="100"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Net Worth Spending Rate
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  % of current net worth added to monthly budget (keep below return rate!)
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={spendingGrowthRate}
+                    onChange={(e) => setSpendingGrowthRate(e.target.value)}
+                    placeholder="2"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Formula Preview */}
+            <div className="mt-4 p-4 bg-slate-900/50 rounded-lg space-y-2">
+              <p className="text-sm text-slate-300 font-medium">Budget Formula:</p>
+              <p className="text-xs text-slate-400">
+                Unlocked Budget = <span className="text-amber-400">Base (inflation-adjusted)</span> + <span className="text-emerald-400">(Net Worth × {spendingGrowthRate}% ÷ 12)</span>
+              </p>
+              {latestEntry && (
+                <p className="text-xs text-slate-500 pt-2 border-t border-slate-700">
+                  Current: <span className="text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)}</span> + <span className="text-emerald-400">{formatCurrency(levelInfo.netWorthPortion)}</span> = <span className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
+                </p>
+              )}
+            </div>
+
+            {/* Warning if spending rate >= return rate */}
+            {parseFloat(spendingGrowthRate) >= parseFloat(rateOfReturn) && (
+              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <p className="text-sm text-red-400">
+                  ⚠️ Your spending rate ({spendingGrowthRate}%) should be less than your return rate ({rateOfReturn}%) to make progress toward FI.
+                </p>
+              </div>
+            )}
+
+            {/* Progress info */}
+            {parseFloat(spendingGrowthRate) < parseFloat(rateOfReturn) && (
+              <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                <p className="text-xs text-emerald-400">
+                  <span className="font-medium">✓ On track:</span> With {rateOfReturn}% returns and {spendingGrowthRate}% spending rate, 
+                  you keep {(parseFloat(rateOfReturn) - parseFloat(spendingGrowthRate)).toFixed(1)}% of net worth growth toward FI each year.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Personal Info */}
+          <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-sky-400 rounded-full"></span>
+              Personal Info
+            </h3>
+            <div className="max-w-xs">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Birth Date
+              </label>
+              <p className="text-xs text-slate-500 mb-2">
+                Used to show your age in projections
+              </p>
+              <input
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* Settings Summary */}
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-xl p-6 border border-slate-600">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4">Current Configuration</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-slate-500 text-xs">Return Rate</p>
+                <p className="text-emerald-400 font-mono">{rateOfReturn}%</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">SWR</p>
+                <p className="text-amber-400 font-mono">{swr}%</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Inflation</p>
+                <p className="text-amber-400 font-mono">{inflationRate}%</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Yearly Contribution</p>
+                <p className="text-sky-400 font-mono">{formatCurrency(parseFloat(yearlyContribution) || 0)}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Monthly Spend</p>
+                <p className="text-violet-400 font-mono">{formatCurrency(parseFloat(monthlySpend) || 0)}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Base Budget</p>
+                <p className="text-amber-400 font-mono">{formatCurrency(parseFloat(baseMonthlyBudget) || 0)}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Spending Rate</p>
+                <p className="text-emerald-400 font-mono">{spendingGrowthRate}%</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Inflation in Projections</p>
+                <p className={`font-mono ${inflationEnabled ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  {inflationEnabled ? 'Enabled' : 'Disabled'}
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mt-4">
+              Settings are saved automatically as you type.
+            </p>
+          </div>
         </div>
       )}
     </main>
