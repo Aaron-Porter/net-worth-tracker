@@ -419,13 +419,27 @@ function AuthenticatedApp() {
   // Calculate level information based on current net worth
   const levelInfo = useMemo(() => {
     const netWorth = currentTotal
-    const baseBudget = parseFloat(baseMonthlyBudget) || 3000
-    const growthRate = (parseFloat(spendingGrowthRate) || 2) / 100 // Convert to decimal
+    const baseBudgetOriginal = parseFloat(baseMonthlyBudget) || 3000
+    const spendingRate = (parseFloat(spendingGrowthRate) || 2) / 100 // % of net worth per year
+    const inflation = (parseFloat(inflationRate) || 3) / 100
 
-    // Calculate unlocked spending at a given net worth threshold
-    // Formula: base + (threshold × growthRate / 12)
-    const calculateUnlockedSpending = (threshold: number) => {
-      return baseBudget + (threshold * growthRate / 12)
+    // Calculate years elapsed since first entry (for inflation adjustment)
+    const oldestEntry = entries.length > 0 
+      ? entries.reduce((oldest, e) => e.timestamp < oldest.timestamp ? e : oldest, entries[0])
+      : null
+    const yearsElapsed = oldestEntry 
+      ? (Date.now() - oldestEntry.timestamp) / (365.25 * 24 * 60 * 60 * 1000)
+      : 0
+
+    // Adjust base budget for inflation
+    const baseBudgetInflationAdjusted = baseBudgetOriginal * Math.pow(1 + inflation, yearsElapsed)
+
+    // Calculate unlocked spending at a given net worth
+    // Formula: (base adjusted for inflation) + (net worth × spending rate / 12)
+    // The spending rate portion is simply a % of current net worth - NOT compounding
+    const calculateUnlockedSpending = (threshold: number, yearsFromNow: number = 0) => {
+      const inflatedBase = baseBudgetOriginal * Math.pow(1 + inflation, yearsElapsed + yearsFromNow)
+      return inflatedBase + (threshold * spendingRate / 12)
     }
 
     // Find current level (highest threshold we've passed)
@@ -452,12 +466,14 @@ function AuthenticatedApp() {
       amountToNext = nextThreshold - netWorth
     }
 
-    // Calculate unlocked spending based on current level's threshold
-    // This is the "official" unlocked amount at your level
-    const unlockedAtLevel = calculateUnlockedSpending(currentLevel.threshold)
+    // Calculate unlocked spending based on current level's threshold (today)
+    const unlockedAtLevel = calculateUnlockedSpending(currentLevel.threshold, 0)
     
-    // Also calculate what you'd unlock at your exact net worth (for display)
-    const unlockedAtNetWorth = calculateUnlockedSpending(netWorth)
+    // Calculate what you'd unlock at your exact net worth (for display)
+    const unlockedAtNetWorth = calculateUnlockedSpending(netWorth, 0)
+
+    // Calculate the net worth-derived portion only (for display)
+    const netWorthPortion = netWorth * spendingRate / 12
     
     // User's current spending setting
     const currentSpend = parseFloat(monthlySpend) || 0
@@ -472,7 +488,7 @@ function AuthenticatedApp() {
     // Calculate all levels with their unlock status and calculated spending
     const levelsWithStatus = LEVEL_THRESHOLDS.map((level, index) => ({
       ...level,
-      monthlyBudget: calculateUnlockedSpending(level.threshold),
+      monthlyBudget: calculateUnlockedSpending(level.threshold, 0),
       isUnlocked: index <= currentLevelIndex,
       isCurrent: index === currentLevelIndex,
       isNext: index === currentLevelIndex + 1,
@@ -480,13 +496,13 @@ function AuthenticatedApp() {
 
     // Calculate spending increase from reaching next level
     const nextLevelSpendingIncrease = nextLevel 
-      ? calculateUnlockedSpending(nextLevel.threshold) - unlockedAtLevel
+      ? calculateUnlockedSpending(nextLevel.threshold, 0) - unlockedAtLevel
       : 0
 
     return {
       currentLevel: { ...currentLevel, monthlyBudget: unlockedAtLevel },
       currentLevelIndex,
-      nextLevel: nextLevel ? { ...nextLevel, monthlyBudget: calculateUnlockedSpending(nextLevel.threshold) } : null,
+      nextLevel: nextLevel ? { ...nextLevel, monthlyBudget: calculateUnlockedSpending(nextLevel.threshold, 0) } : null,
       progressToNext,
       amountToNext,
       unlockedAtLevel,
@@ -496,10 +512,14 @@ function AuthenticatedApp() {
       spendingStatus,
       levelsWithStatus,
       netWorth,
-      baseBudget,
-      growthRate,
+      baseBudgetOriginal,
+      baseBudgetInflationAdjusted,
+      spendingRate,
+      netWorthPortion,
+      yearsElapsed,
+      inflation,
     }
-  }, [currentTotal, monthlySpend, baseMonthlyBudget, spendingGrowthRate])
+  }, [currentTotal, monthlySpend, baseMonthlyBudget, spendingGrowthRate, inflationRate, entries])
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -1292,14 +1312,14 @@ function AuthenticatedApp() {
             <>
               {/* Settings Controls */}
               <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
-                <h3 className="text-lg font-semibold text-slate-200 mb-4">Configure Your Levels</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <h3 className="text-lg font-semibold text-slate-200 mb-4">Configure Your Budget</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">
                       Base Monthly Budget
                     </label>
                     <p className="text-xs text-slate-500 mb-2">
-                      Your floor spending regardless of net worth - what you need to cover essentials
+                      Floor spending for essentials (in today's dollars)
                     </p>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -1316,10 +1336,10 @@ function AuthenticatedApp() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Spending Growth Rate
+                      Net Worth Spending Rate
                     </label>
                     <p className="text-xs text-slate-500 mb-2">
-                      % of net worth per year added to budget. Keep below your return rate ({rateOfReturn}%) to ensure progress!
+                      % of your net worth to add to budget annually
                     </p>
                     <div className="relative">
                       <input
@@ -1335,27 +1355,65 @@ function AuthenticatedApp() {
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                     </div>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Inflation Rate
+                    </label>
+                    <p className="text-xs text-slate-500 mb-2">
+                      Annual adjustment to base budget
+                    </p>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={inflationRate}
+                        onChange={(e) => setInflationRate(e.target.value)}
+                        placeholder="3"
+                        min="0"
+                        max="20"
+                        step="0.1"
+                        className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+                    </div>
+                  </div>
                 </div>
                 
                 {/* Formula explanation */}
-                <div className="mt-4 p-3 bg-slate-900/50 rounded-lg">
-                  <p className="text-xs text-slate-400">
-                    <span className="text-violet-400 font-medium">Formula:</span> Unlocked Budget = ${formatCurrency(parseFloat(baseMonthlyBudget) || 3000, 0)} base + (Net Worth × {spendingGrowthRate || 2}% ÷ 12)
+                <div className="mt-4 p-4 bg-slate-900/50 rounded-lg space-y-3">
+                  <p className="text-sm text-slate-300 font-medium">
+                    How your budget is calculated:
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    At your current net worth: {formatCurrency(levelInfo.baseBudget, 0)} + ({formatCurrency(levelInfo.netWorth, 0)} × {(levelInfo.growthRate * 100).toFixed(1)}% ÷ 12) = <span className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
-                  </p>
+                  <div className="text-xs text-slate-400 space-y-1">
+                    <p>
+                      <span className="text-amber-400">Base (inflation-adjusted)</span> = {formatCurrency(levelInfo.baseBudgetOriginal, 0)} × (1 + {(levelInfo.inflation * 100).toFixed(1)}%)^{levelInfo.yearsElapsed.toFixed(2)} years = <span className="font-mono text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)}</span>
+                    </p>
+                    <p>
+                      <span className="text-emerald-400">Net Worth Portion</span> = {formatCurrency(levelInfo.netWorth, 0)} × {(levelInfo.spendingRate * 100).toFixed(1)}% ÷ 12 = <span className="font-mono text-emerald-400">{formatCurrency(levelInfo.netWorthPortion)}</span>
+                    </p>
+                    <p className="pt-2 border-t border-slate-700">
+                      <span className="text-violet-400 font-medium">Total Unlocked</span> = {formatCurrency(levelInfo.baseBudgetInflationAdjusted)} + {formatCurrency(levelInfo.netWorthPortion)} = <span className="font-mono text-violet-400 text-sm">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
+                    </p>
+                  </div>
                 </div>
 
-                {/* Warning if growth rate >= return rate */}
+                {/* Warning if spending rate >= return rate */}
                 {parseFloat(spendingGrowthRate) >= parseFloat(rateOfReturn) && (
                   <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
                     <p className="text-sm text-red-400">
-                      ⚠️ Your spending growth rate ({spendingGrowthRate}%) is ≥ your return rate ({rateOfReturn}%). 
+                      ⚠️ Your net worth spending rate ({spendingGrowthRate}%) is ≥ your return rate ({rateOfReturn}%). 
                       You won't make progress toward FI this way!
                     </p>
                   </div>
                 )}
+
+                {/* Helpful tip */}
+                <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                  <p className="text-xs text-emerald-400">
+                    <span className="font-medium">Progress guarantee:</span> With {rateOfReturn}% returns and {spendingGrowthRate}% spending rate, 
+                    you keep {(parseFloat(rateOfReturn) - parseFloat(spendingGrowthRate)).toFixed(1)}% of your net worth growth toward FI. 
+                    Your base budget adjusts for {inflationRate}% inflation automatically.
+                  </p>
+                </div>
               </div>
 
               {/* Current Level Hero Card */}
@@ -1402,50 +1460,59 @@ function AuthenticatedApp() {
                 )}
 
                 {/* Unlocked Spending Summary */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div className="bg-slate-900/50 rounded-xl p-4">
-                    <p className="text-slate-500 text-xs mb-1">Unlocked at This Level</p>
-                    <p className="text-2xl font-mono text-violet-400">{formatCurrency(levelInfo.unlockedAtLevel)}</p>
-                    <p className="text-slate-500 text-xs mt-1">
-                      {formatCurrency(levelInfo.unlockedAtLevel * 12)}/year
+                    <p className="text-slate-500 text-xs mb-1">Your Unlocked Monthly Budget</p>
+                    <p className="text-3xl font-mono text-violet-400">{formatCurrency(levelInfo.unlockedAtNetWorth)}</p>
+                    <div className="mt-2 text-xs space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-amber-400">Base (inflation-adjusted):</span>
+                        <span className="font-mono text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-emerald-400">From net worth ({(levelInfo.spendingRate * 100).toFixed(1)}%):</span>
+                        <span className="font-mono text-emerald-400">+{formatCurrency(levelInfo.netWorthPortion)}</span>
+                      </div>
+                    </div>
+                    <p className="text-slate-600 text-xs mt-2">
+                      = {formatCurrency(levelInfo.unlockedAtNetWorth * 12)}/year
                     </p>
                   </div>
                   <div className="bg-slate-900/50 rounded-xl p-4">
                     <p className="text-slate-500 text-xs mb-1">Your Monthly Spend Setting</p>
-                    <p className={`text-2xl font-mono ${
+                    <p className={`text-3xl font-mono ${
                       levelInfo.spendingStatus === 'within_budget' ? 'text-emerald-400' :
                       levelInfo.spendingStatus === 'slightly_over' ? 'text-amber-400' : 'text-red-400'
                     }`}>
                       {formatCurrency(levelInfo.currentSpend)}
                     </p>
-                    <p className="text-slate-500 text-xs mt-1">
+                    <div className="mt-2">
+                      {levelInfo.spendingStatus === 'within_budget' ? (
+                        <>
+                          <p className="text-sm font-medium text-emerald-400">✓ Within Budget</p>
+                          <p className="text-slate-500 text-xs mt-1">
+                            {formatCurrency(levelInfo.unlockedAtNetWorth - levelInfo.currentSpend)} buffer remaining
+                          </p>
+                        </>
+                      ) : levelInfo.spendingStatus === 'slightly_over' ? (
+                        <>
+                          <p className="text-sm font-medium text-amber-400">⚠ Slightly Over</p>
+                          <p className="text-slate-500 text-xs mt-1">
+                            {formatCurrency(levelInfo.currentSpend - levelInfo.unlockedAtNetWorth)} over budget
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium text-red-400">✗ Over Budget</p>
+                          <p className="text-slate-500 text-xs mt-1">
+                            {formatCurrency(levelInfo.currentSpend - levelInfo.unlockedAtNetWorth)} over budget
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-slate-600 text-xs mt-2">
                       Set in Projections tab
                     </p>
-                  </div>
-                  <div className="bg-slate-900/50 rounded-xl p-4">
-                    <p className="text-slate-500 text-xs mb-1">Budget Status</p>
-                    {levelInfo.spendingStatus === 'within_budget' ? (
-                      <>
-                        <p className="text-lg font-medium text-emerald-400">✓ Within Budget</p>
-                        <p className="text-slate-500 text-xs mt-1">
-                          {formatCurrency(levelInfo.unlockedAtLevel - levelInfo.currentSpend)} buffer
-                        </p>
-                      </>
-                    ) : levelInfo.spendingStatus === 'slightly_over' ? (
-                      <>
-                        <p className="text-lg font-medium text-amber-400">⚠ Slightly Over</p>
-                        <p className="text-slate-500 text-xs mt-1">
-                          {formatCurrency(levelInfo.currentSpend - levelInfo.unlockedAtLevel)} over budget
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-lg font-medium text-red-400">✗ Over Budget</p>
-                        <p className="text-slate-500 text-xs mt-1">
-                          {formatCurrency(levelInfo.currentSpend - levelInfo.unlockedAtLevel)} over budget
-                        </p>
-                      </>
-                    )}
                   </div>
                 </div>
 
@@ -1465,12 +1532,12 @@ function AuthenticatedApp() {
               <div className="bg-slate-800/50 rounded-xl p-6 mb-8 border border-slate-700">
                 <h3 className="text-lg font-semibold text-slate-200 mb-3">How Levels Work</h3>
                 <p className="text-slate-400 text-sm mb-3">
-                  As your net worth grows, you unlock higher spending levels. The spending increases are designed 
-                  to be <span className="text-emerald-400">less than your investment returns</span>, so you'll 
-                  always make progress toward financial independence.
+                  Your budget has two components: a <span className="text-amber-400">base amount</span> that adjusts for inflation each year, 
+                  plus a <span className="text-emerald-400">percentage of your current net worth</span>. As your wealth grows, 
+                  so does your budget - but always at a rate below your returns.
                 </p>
                 <p className="text-slate-400 text-sm">
-                  Your spending growth rate of <span className="text-violet-400">{spendingGrowthRate}%</span> is{' '}
+                  Your net worth spending rate of <span className="text-violet-400">{spendingGrowthRate}%</span> is{' '}
                   {parseFloat(spendingGrowthRate) < parseFloat(rateOfReturn) ? (
                     <span className="text-emerald-400">{(parseFloat(rateOfReturn) - parseFloat(spendingGrowthRate)).toFixed(1)}% below</span>
                   ) : (
@@ -1480,7 +1547,7 @@ function AuthenticatedApp() {
                   {parseFloat(spendingGrowthRate) < parseFloat(rateOfReturn) ? (
                     <span className="text-emerald-400">your wealth will continue to compound even as you enjoy lifestyle upgrades.</span>
                   ) : (
-                    <span className="text-red-400">you may not make progress toward FI - consider lowering your spending growth rate.</span>
+                    <span className="text-red-400">you may not make progress toward FI - consider lowering your spending rate.</span>
                   )}
                 </p>
               </div>
@@ -1545,19 +1612,30 @@ function AuthenticatedApp() {
               </div>
 
               {/* Quick Reference Cards */}
-              <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  { label: 'At $100K', value: levelInfo.baseBudget + (100000 * levelInfo.growthRate / 12) },
-                  { label: 'At $500K', value: levelInfo.baseBudget + (500000 * levelInfo.growthRate / 12) },
-                  { label: 'At $1M', value: levelInfo.baseBudget + (1000000 * levelInfo.growthRate / 12) },
-                  { label: 'At $2M', value: levelInfo.baseBudget + (2000000 * levelInfo.growthRate / 12) },
-                ].map((item) => (
-                  <div key={item.label} className="bg-slate-800/30 rounded-lg p-3 border border-slate-700">
-                    <p className="text-xs text-slate-500">{item.label}</p>
-                    <p className="text-lg font-mono text-violet-400">{formatCurrency(item.value, 0)}/mo</p>
-                    <p className="text-xs text-slate-600">{formatCurrency(item.value * 12, 0)}/yr</p>
-                  </div>
-                ))}
+              <div className="mt-8">
+                <h4 className="text-sm font-medium text-slate-400 mb-3">Quick Reference (at today's inflation-adjusted base of {formatCurrency(levelInfo.baseBudgetInflationAdjusted, 0)})</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'At $100K', nw: 100000 },
+                    { label: 'At $500K', nw: 500000 },
+                    { label: 'At $1M', nw: 1000000 },
+                    { label: 'At $2M', nw: 2000000 },
+                  ].map((item) => {
+                    const value = levelInfo.baseBudgetInflationAdjusted + (item.nw * levelInfo.spendingRate / 12)
+                    const nwPortion = item.nw * levelInfo.spendingRate / 12
+                    return (
+                      <div key={item.label} className="bg-slate-800/30 rounded-lg p-3 border border-slate-700">
+                        <p className="text-xs text-slate-500">{item.label}</p>
+                        <p className="text-lg font-mono text-violet-400">{formatCurrency(value, 0)}/mo</p>
+                        <p className="text-xs text-slate-600">
+                          <span className="text-amber-400/60">{formatCurrency(levelInfo.baseBudgetInflationAdjusted, 0)}</span>
+                          {' + '}
+                          <span className="text-emerald-400/60">{formatCurrency(nwPortion, 0)}</span>
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </>
           )}
