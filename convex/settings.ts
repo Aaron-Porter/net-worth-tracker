@@ -25,6 +25,8 @@ export const save = mutation({
     birthDate: v.string(),
     monthlySpend: v.number(),
     inflationRate: v.number(),
+    baseMonthlyBudget: v.optional(v.number()),
+    spendingGrowthRate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);

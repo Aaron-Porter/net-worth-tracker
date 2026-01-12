@@ -21,7 +21,62 @@ import {
   ReferenceLine,
 } from 'recharts'
 
-type Tab = 'dashboard' | 'entries' | 'projections'
+type Tab = 'dashboard' | 'entries' | 'projections' | 'levels' | 'settings'
+
+// Level thresholds - more granular progression
+// Monthly bonus is calculated dynamically based on user's spending growth rate setting
+const LEVEL_THRESHOLDS = [
+  { level: 1, name: 'Starter', threshold: 0 },
+  { level: 2, name: 'Saver', threshold: 10000 },
+  { level: 3, name: 'Builder', threshold: 25000 },
+  { level: 4, name: 'Momentum', threshold: 50000 },
+  { level: 5, name: 'Foundation', threshold: 75000 },
+  { level: 6, name: 'Traction', threshold: 100000 },
+  { level: 7, name: 'Accelerator', threshold: 150000 },
+  { level: 8, name: 'Velocity', threshold: 200000 },
+  { level: 9, name: 'Milestone', threshold: 250000 },
+  { level: 10, name: 'Cruising', threshold: 300000 },
+  { level: 11, name: 'Advancing', threshold: 350000 },
+  { level: 12, name: 'Thriving', threshold: 400000 },
+  { level: 13, name: 'Flourishing', threshold: 450000 },
+  { level: 14, name: 'Half Million', threshold: 500000 },
+  { level: 15, name: 'Expanding', threshold: 550000 },
+  { level: 16, name: 'Growing', threshold: 600000 },
+  { level: 17, name: 'Ascending', threshold: 650000 },
+  { level: 18, name: 'Rising', threshold: 700000 },
+  { level: 19, name: 'Surging', threshold: 750000 },
+  { level: 20, name: 'Climbing', threshold: 800000 },
+  { level: 21, name: 'Soaring', threshold: 850000 },
+  { level: 22, name: 'Elevating', threshold: 900000 },
+  { level: 23, name: 'Approaching', threshold: 950000 },
+  { level: 24, name: 'Millionaire', threshold: 1000000 },
+  { level: 25, name: 'Established', threshold: 1100000 },
+  { level: 26, name: 'Prospering', threshold: 1200000 },
+  { level: 27, name: 'Abundant', threshold: 1300000 },
+  { level: 28, name: 'Wealthy', threshold: 1400000 },
+  { level: 29, name: 'Accomplished', threshold: 1500000 },
+  { level: 30, name: 'Distinguished', threshold: 1750000 },
+  { level: 31, name: 'Double Million', threshold: 2000000 },
+  { level: 32, name: 'Exceptional', threshold: 2250000 },
+  { level: 33, name: 'Remarkable', threshold: 2500000 },
+  { level: 34, name: 'Outstanding', threshold: 2750000 },
+  { level: 35, name: 'Triple Million', threshold: 3000000 },
+  { level: 36, name: 'Elite', threshold: 3500000 },
+  { level: 37, name: 'Premier', threshold: 4000000 },
+  { level: 38, name: 'Pinnacle', threshold: 4500000 },
+  { level: 39, name: 'Five Million', threshold: 5000000 },
+  { level: 40, name: 'Apex', threshold: 6000000 },
+  { level: 41, name: 'Summit', threshold: 7000000 },
+  { level: 42, name: 'Zenith', threshold: 8000000 },
+  { level: 43, name: 'Crown', threshold: 9000000 },
+  { level: 44, name: 'Decamillionaire', threshold: 10000000 },
+  { level: 45, name: 'Titan', threshold: 15000000 },
+  { level: 46, name: 'Magnate', threshold: 20000000 },
+  { level: 47, name: 'Mogul', threshold: 30000000 },
+  { level: 48, name: 'Tycoon', threshold: 50000000 },
+  { level: 49, name: 'Dynasty', threshold: 75000000 },
+  { level: 50, name: 'Legacy', threshold: 100000000 },
+] as const
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useConvexAuth()
@@ -72,6 +127,9 @@ function AuthenticatedApp() {
   const [currentContributions, setCurrentContributions] = useState<number>(0)
   const [includeContributions, setIncludeContributions] = useState<boolean>(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  // Levels system settings
+  const [baseMonthlyBudget, setBaseMonthlyBudget] = useState<string>('3000') // Floor spending
+  const [spendingGrowthRate, setSpendingGrowthRate] = useState<string>('2') // % of net worth per year
 
   // Load settings when they come in from Convex
   useEffect(() => {
@@ -85,6 +143,13 @@ function AuthenticatedApp() {
       setBirthDate(settings.birthDate)
       setMonthlySpend(settings.monthlySpend.toString())
       setInflationRate(settings.inflationRate.toString())
+      // Load levels settings
+      if (settings.baseMonthlyBudget !== undefined) {
+        setBaseMonthlyBudget(settings.baseMonthlyBudget.toString())
+      }
+      if (settings.spendingGrowthRate !== undefined) {
+        setSpendingGrowthRate(settings.spendingGrowthRate.toString())
+      }
     }
 
     // Mark loaded even when settings is null so new users can persist changes.
@@ -103,11 +168,13 @@ function AuthenticatedApp() {
         birthDate,
         monthlySpend: parseFloat(monthlySpend) || 0,
         inflationRate: parseFloat(inflationRate) || 3,
+        baseMonthlyBudget: parseFloat(baseMonthlyBudget) || 3000,
+        spendingGrowthRate: parseFloat(spendingGrowthRate) || 2,
       })
     }, 500)
 
     return () => clearTimeout(timeout)
-  }, [rateOfReturn, swr, yearlyContribution, birthDate, monthlySpend, inflationRate, settingsLoaded, saveSettings])
+  }, [rateOfReturn, swr, yearlyContribution, birthDate, monthlySpend, inflationRate, baseMonthlyBudget, spendingGrowthRate, settingsLoaded, saveSettings])
 
   const latestEntry = entries[0] || null
   const rateNum = parseFloat(rateOfReturn) || 0
@@ -349,6 +416,111 @@ function AuthenticatedApp() {
   const fiYear = projectionData.find(d => d.isFiYear)?.year
   const crossoverYear = projectionData.find(d => d.isCrossover)?.year
 
+  // Calculate level information based on current net worth
+  const levelInfo = useMemo(() => {
+    const netWorth = currentTotal
+    const baseBudgetOriginal = parseFloat(baseMonthlyBudget) || 3000
+    const spendingRate = (parseFloat(spendingGrowthRate) || 2) / 100 // % of net worth per year
+    const inflation = (parseFloat(inflationRate) || 3) / 100
+
+    // Calculate years elapsed since first entry (for inflation adjustment)
+    const oldestEntry = entries.length > 0 
+      ? entries.reduce((oldest, e) => e.timestamp < oldest.timestamp ? e : oldest, entries[0])
+      : null
+    const yearsElapsed = oldestEntry 
+      ? (Date.now() - oldestEntry.timestamp) / (365.25 * 24 * 60 * 60 * 1000)
+      : 0
+
+    // Adjust base budget for inflation
+    const baseBudgetInflationAdjusted = baseBudgetOriginal * Math.pow(1 + inflation, yearsElapsed)
+
+    // Calculate unlocked spending at a given net worth
+    // Formula: (base adjusted for inflation) + (net worth × spending rate / 12)
+    // The spending rate portion is simply a % of current net worth - NOT compounding
+    const calculateUnlockedSpending = (threshold: number, yearsFromNow: number = 0) => {
+      const inflatedBase = baseBudgetOriginal * Math.pow(1 + inflation, yearsElapsed + yearsFromNow)
+      return inflatedBase + (threshold * spendingRate / 12)
+    }
+
+    // Find current level (highest threshold we've passed)
+    let currentLevelIndex = 0
+    for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+      if (netWorth >= LEVEL_THRESHOLDS[i].threshold) {
+        currentLevelIndex = i
+        break
+      }
+    }
+
+    const currentLevel = LEVEL_THRESHOLDS[currentLevelIndex]
+    const nextLevel = LEVEL_THRESHOLDS[currentLevelIndex + 1] || null
+
+    // Calculate progress to next level
+    let progressToNext = 100
+    let amountToNext = 0
+    if (nextLevel) {
+      const currentThreshold = currentLevel.threshold
+      const nextThreshold = nextLevel.threshold
+      const range = nextThreshold - currentThreshold
+      const progress = netWorth - currentThreshold
+      progressToNext = Math.min((progress / range) * 100, 100)
+      amountToNext = nextThreshold - netWorth
+    }
+
+    // Calculate unlocked spending based on current level's threshold (today)
+    const unlockedAtLevel = calculateUnlockedSpending(currentLevel.threshold, 0)
+    
+    // Calculate what you'd unlock at your exact net worth (for display)
+    const unlockedAtNetWorth = calculateUnlockedSpending(netWorth, 0)
+
+    // Calculate the net worth-derived portion only (for display)
+    const netWorthPortion = netWorth * spendingRate / 12
+    
+    // User's current spending setting
+    const currentSpend = parseFloat(monthlySpend) || 0
+    
+    // Show how the user's spending compares to what's unlocked
+    const spendingStatus = currentSpend <= unlockedAtLevel 
+      ? 'within_budget' 
+      : currentSpend <= unlockedAtLevel * 1.1 
+        ? 'slightly_over' 
+        : 'over_budget'
+
+    // Calculate all levels with their unlock status and calculated spending
+    const levelsWithStatus = LEVEL_THRESHOLDS.map((level, index) => ({
+      ...level,
+      monthlyBudget: calculateUnlockedSpending(level.threshold, 0),
+      isUnlocked: index <= currentLevelIndex,
+      isCurrent: index === currentLevelIndex,
+      isNext: index === currentLevelIndex + 1,
+    }))
+
+    // Calculate spending increase from reaching next level
+    const nextLevelSpendingIncrease = nextLevel 
+      ? calculateUnlockedSpending(nextLevel.threshold, 0) - unlockedAtLevel
+      : 0
+
+    return {
+      currentLevel: { ...currentLevel, monthlyBudget: unlockedAtLevel },
+      currentLevelIndex,
+      nextLevel: nextLevel ? { ...nextLevel, monthlyBudget: calculateUnlockedSpending(nextLevel.threshold, 0) } : null,
+      progressToNext,
+      amountToNext,
+      unlockedAtLevel,
+      unlockedAtNetWorth,
+      nextLevelSpendingIncrease,
+      currentSpend,
+      spendingStatus,
+      levelsWithStatus,
+      netWorth,
+      baseBudgetOriginal,
+      baseBudgetInflationAdjusted,
+      spendingRate,
+      netWorthPortion,
+      yearsElapsed,
+      inflation,
+    }
+  }, [currentTotal, monthlySpend, baseMonthlyBudget, spendingGrowthRate, inflationRate, entries])
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
       {/* Tab Navigation */}
@@ -391,6 +563,32 @@ function AuthenticatedApp() {
             >
               Projections
               {activeTab === 'projections' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('levels')}
+              className={`px-6 py-4 font-medium transition-colors relative ${
+                activeTab === 'levels'
+                  ? 'text-emerald-400'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Levels
+              {activeTab === 'levels' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-6 py-4 font-medium transition-colors relative ${
+                activeTab === 'settings'
+                  ? 'text-emerald-400'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Settings
+              {activeTab === 'settings' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
               )}
             </button>
@@ -597,27 +795,6 @@ function AuthenticatedApp() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Expected Annual Rate of Return
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={rateOfReturn}
-                    onChange={(e) => setRateOfReturn(e.target.value)}
-                    placeholder="7"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 pr-10 text-xl font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
-                    %
-                  </span>
-                </div>
-              </div>
-
               <button
                 onClick={handleAddEntry}
                 disabled={!newAmount || parseFloat(newAmount) <= 0}
@@ -702,139 +879,44 @@ function AuthenticatedApp() {
             </div>
           ) : (
             <>
-              {/* Controls */}
-              <div className="flex flex-wrap items-end gap-4 mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                <div className="text-sm text-slate-400">
-                  Base: <span className="text-emerald-400 font-mono">{formatCurrency(latestEntry.amount)}</span>
+              {/* Summary Bar */}
+              <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+                  <span>Base: <span className="text-emerald-400 font-mono">{formatCurrency(latestEntry.amount)}</span></span>
+                  <span>Return: <span className="text-emerald-400 font-mono">{rateOfReturn}%</span></span>
+                  <span>SWR: <span className="text-amber-400 font-mono">{swr}%</span></span>
+                  <span>Contribution: <span className="text-sky-400 font-mono">{formatCurrency(parseFloat(yearlyContribution) || 0)}/yr</span></span>
+                  <span>Spend: <span className="text-violet-400 font-mono">{formatCurrency(parseFloat(monthlySpend) || 0)}/mo</span></span>
+                  {inflationEnabled && <span>Inflation: <span className="text-amber-400 font-mono">{inflationRate}%</span></span>}
                 </div>
                 <div className="flex-1" />
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Rate of Return %
-                  </label>
-                  <input
-                    type="number"
-                    value={rateOfReturn}
-                    onChange={(e) => setRateOfReturn(e.target.value)}
-                    placeholder="7"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    className="w-20 bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    SWR %
-                  </label>
-                  <input
-                    type="number"
-                    value={swr}
-                    onChange={(e) => setSwr(e.target.value)}
-                    placeholder="4"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    className="w-20 bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Yearly Contribution
-                  </label>
-                  <div className="relative w-36">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                      $
-                    </span>
-                    <input
-                      type="number"
-                      value={yearlyContribution}
-                      onChange={(e) => setYearlyContribution(e.target.value)}
-                      placeholder="0"
-                      min="0"
-                      step="1000"
-                      className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-3 pl-7 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Birth Date
-                  </label>
-                  <input
-                    type="date"
-                    value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                    className="bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Monthly Spend
-                  </label>
-                  <div className="relative w-36">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                      $
-                    </span>
-                    <input
-                      type="number"
-                      value={monthlySpend}
-                      onChange={(e) => setMonthlySpend(e.target.value)}
-                      placeholder="0"
-                      min="0"
-                      step="100"
-                      className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-3 pl-7 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-                <div className="flex items-end gap-2">
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className="text-xs text-slate-400 hover:text-slate-200 underline"
+                >
+                  Edit Settings
+                </button>
+                <div className="flex rounded-lg border border-slate-600 overflow-hidden">
                   <button
-                    onClick={() => setInflationEnabled(!inflationEnabled)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      inflationEnabled
-                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
-                        : 'bg-slate-700/50 text-slate-400 border border-slate-600'
+                    onClick={() => setProjectionsView('table')}
+                    className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                      projectionsView === 'table'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    Inflation {inflationEnabled ? 'ON' : 'OFF'}
+                    Table
                   </button>
-                  {inflationEnabled && (
-                    <input
-                      type="number"
-                      value={inflationRate}
-                      onChange={(e) => setInflationRate(e.target.value)}
-                      placeholder="3"
-                      min="0"
-                      max="20"
-                      step="0.1"
-                      className="w-16 bg-slate-900/50 border border-slate-600 rounded-lg py-1.5 px-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    />
-                  )}
-                  {inflationEnabled && <span className="text-slate-500 text-sm">%</span>}
-                </div>
-                <div className="flex items-end">
-                  <div className="flex rounded-lg border border-slate-600 overflow-hidden">
-                    <button
-                      onClick={() => setProjectionsView('table')}
-                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                        projectionsView === 'table'
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Table
-                    </button>
-                    <button
-                      onClick={() => setProjectionsView('chart')}
-                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                        projectionsView === 'chart'
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Chart
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => setProjectionsView('chart')}
+                    className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                      projectionsView === 'chart'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Chart
+                  </button>
                 </div>
               </div>
 
@@ -1100,6 +1182,609 @@ function AuthenticatedApp() {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Levels Tab */}
+      {activeTab === 'levels' && (
+        <div className="container mx-auto px-4 py-8 max-w-4xl">
+          <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
+            Spending Levels
+          </h1>
+          <p className="text-slate-400 text-center mb-8">
+            Unlock higher monthly spending as your net worth grows
+          </p>
+
+          {!latestEntry ? (
+            <div className="text-center py-12">
+              <p className="text-slate-400 mb-4">No net worth data found.</p>
+              <button
+                onClick={() => setActiveTab('entries')}
+                className="text-emerald-400 hover:text-emerald-300 underline"
+              >
+                Add your first entry
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Budget Summary */}
+              <div className="bg-slate-800/50 rounded-xl p-4 mb-6 border border-slate-700">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-2">
+                    <p className="text-sm text-slate-300 font-medium">
+                      Budget Formula: <span className="text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)} base</span> + <span className="text-emerald-400">{formatCurrency(levelInfo.netWorthPortion)} from net worth</span> = <span className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
+                    </p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                      <span>Base: <span className="text-amber-400">{formatCurrency(levelInfo.baseBudgetOriginal, 0)}</span></span>
+                      <span>Spending Rate: <span className="text-emerald-400">{(levelInfo.spendingRate * 100).toFixed(1)}%</span></span>
+                      <span>Inflation: <span className="text-amber-400">{(levelInfo.inflation * 100).toFixed(1)}%</span></span>
+                      <span>Return Rate: <span className="text-emerald-400">{rateOfReturn}%</span></span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('settings')}
+                    className="text-xs text-slate-400 hover:text-slate-200 underline"
+                  >
+                    Edit Settings
+                  </button>
+                </div>
+
+                {/* Warning if spending rate >= return rate */}
+                {parseFloat(spendingGrowthRate) >= parseFloat(rateOfReturn) && (
+                  <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                    <p className="text-sm text-red-400">
+                      ⚠️ Your net worth spending rate ({spendingGrowthRate}%) is ≥ your return rate ({rateOfReturn}%). 
+                      You won't make progress toward FI this way!
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Current Level Hero Card */}
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur rounded-2xl p-8 shadow-xl border border-violet-500/30 mb-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <p className="text-slate-400 text-sm mb-1">Current Level</p>
+                    <h2 className="text-3xl font-bold text-white">
+                      Level {levelInfo.currentLevel.level}: {levelInfo.currentLevel.name}
+                    </h2>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-slate-400 text-sm mb-1">Net Worth</p>
+                    <p className="text-2xl font-mono text-emerald-400">{formatCurrency(levelInfo.netWorth)}</p>
+                  </div>
+                </div>
+
+                {/* Progress to Next Level */}
+                {levelInfo.nextLevel ? (
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-slate-400 text-sm">Progress to Level {levelInfo.nextLevel.level}: {levelInfo.nextLevel.name}</span>
+                      <span className="text-slate-300 text-sm font-mono">
+                        {formatCurrency(levelInfo.amountToNext)} to go
+                      </span>
+                    </div>
+                    <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-violet-500 to-purple-500 rounded-full transition-all duration-500"
+                        style={{ width: `${levelInfo.progressToNext}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between mt-2 text-xs text-slate-500">
+                      <span>{formatCurrency(levelInfo.currentLevel.threshold)}</span>
+                      <span className="text-violet-400">{levelInfo.progressToNext.toFixed(1)}%</span>
+                      <span>{formatCurrency(levelInfo.nextLevel.threshold)}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-6 text-center py-4">
+                    <span className="text-2xl">🎉</span>
+                    <p className="text-violet-400 font-medium mt-2">Maximum Level Achieved!</p>
+                  </div>
+                )}
+
+                {/* Unlocked Spending Summary */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div className="bg-slate-900/50 rounded-xl p-4">
+                    <p className="text-slate-500 text-xs mb-1">Your Unlocked Monthly Budget</p>
+                    <p className="text-3xl font-mono text-violet-400">{formatCurrency(levelInfo.unlockedAtNetWorth)}</p>
+                    <div className="mt-2 text-xs space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-amber-400">Base (inflation-adjusted):</span>
+                        <span className="font-mono text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-emerald-400">From net worth ({(levelInfo.spendingRate * 100).toFixed(1)}%):</span>
+                        <span className="font-mono text-emerald-400">+{formatCurrency(levelInfo.netWorthPortion)}</span>
+                      </div>
+                    </div>
+                    <p className="text-slate-600 text-xs mt-2">
+                      = {formatCurrency(levelInfo.unlockedAtNetWorth * 12)}/year
+                    </p>
+                  </div>
+                  <div className="bg-slate-900/50 rounded-xl p-4">
+                    <p className="text-slate-500 text-xs mb-1">Your Monthly Spend Setting</p>
+                    <p className={`text-3xl font-mono ${
+                      levelInfo.spendingStatus === 'within_budget' ? 'text-emerald-400' :
+                      levelInfo.spendingStatus === 'slightly_over' ? 'text-amber-400' : 'text-red-400'
+                    }`}>
+                      {formatCurrency(levelInfo.currentSpend)}
+                    </p>
+                    <div className="mt-2">
+                      {levelInfo.spendingStatus === 'within_budget' ? (
+                        <>
+                          <p className="text-sm font-medium text-emerald-400">✓ Within Budget</p>
+                          <p className="text-slate-500 text-xs mt-1">
+                            {formatCurrency(levelInfo.unlockedAtNetWorth - levelInfo.currentSpend)} buffer remaining
+                          </p>
+                        </>
+                      ) : levelInfo.spendingStatus === 'slightly_over' ? (
+                        <>
+                          <p className="text-sm font-medium text-amber-400">⚠ Slightly Over</p>
+                          <p className="text-slate-500 text-xs mt-1">
+                            {formatCurrency(levelInfo.currentSpend - levelInfo.unlockedAtNetWorth)} over budget
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium text-red-400">✗ Over Budget</p>
+                          <p className="text-slate-500 text-xs mt-1">
+                            {formatCurrency(levelInfo.currentSpend - levelInfo.unlockedAtNetWorth)} over budget
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-slate-600 text-xs mt-2">
+                      Set in Projections tab
+                    </p>
+                  </div>
+                </div>
+
+                {/* Next Level Reward Preview */}
+                {levelInfo.nextLevel && (
+                  <div className="mt-6 p-4 bg-violet-500/10 border border-violet-500/30 rounded-xl">
+                    <p className="text-violet-300 text-sm">
+                      <span className="font-medium">Next unlock:</span> Level {levelInfo.nextLevel.level} ({levelInfo.nextLevel.name}) unlocks{' '}
+                      <span className="font-mono text-violet-400">{formatCurrency(levelInfo.nextLevel.monthlyBudget)}/mo</span>{' '}
+                      (+{formatCurrency(levelInfo.nextLevelSpendingIncrease)}) at {formatCurrency(levelInfo.nextLevel.threshold)} net worth
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* How It Works */}
+              <div className="bg-slate-800/50 rounded-xl p-6 mb-8 border border-slate-700">
+                <h3 className="text-lg font-semibold text-slate-200 mb-3">How Levels Work</h3>
+                <p className="text-slate-400 text-sm mb-3">
+                  Your budget has two components: a <span className="text-amber-400">base amount</span> that adjusts for inflation each year, 
+                  plus a <span className="text-emerald-400">percentage of your current net worth</span>. As your wealth grows, 
+                  so does your budget - but always at a rate below your returns.
+                </p>
+                <p className="text-slate-400 text-sm">
+                  Your net worth spending rate of <span className="text-violet-400">{spendingGrowthRate}%</span> is{' '}
+                  {parseFloat(spendingGrowthRate) < parseFloat(rateOfReturn) ? (
+                    <span className="text-emerald-400">{(parseFloat(rateOfReturn) - parseFloat(spendingGrowthRate)).toFixed(1)}% below</span>
+                  ) : (
+                    <span className="text-red-400">{(parseFloat(spendingGrowthRate) - parseFloat(rateOfReturn)).toFixed(1)}% above</span>
+                  )}{' '}
+                  your expected return rate of {rateOfReturn}%. This means{' '}
+                  {parseFloat(spendingGrowthRate) < parseFloat(rateOfReturn) ? (
+                    <span className="text-emerald-400">your wealth will continue to compound even as you enjoy lifestyle upgrades.</span>
+                  ) : (
+                    <span className="text-red-400">you may not make progress toward FI - consider lowering your spending rate.</span>
+                  )}
+                </p>
+              </div>
+
+              {/* All Levels Table */}
+              <h3 className="text-xl font-semibold text-slate-200 mb-4">All Levels</h3>
+              <div className="bg-slate-800/30 rounded-xl border border-slate-700 overflow-hidden max-h-[500px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-800 sticky top-0 z-10">
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left text-slate-400 font-medium py-3 px-4">Level</th>
+                      <th className="text-right text-slate-400 font-medium py-3 px-4">Net Worth Required</th>
+                      <th className="text-right text-slate-400 font-medium py-3 px-4">Monthly Budget</th>
+                      <th className="text-right text-slate-400 font-medium py-3 px-4">Annual Budget</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {levelInfo.levelsWithStatus.map((level) => (
+                      <tr 
+                        key={level.level}
+                        className={`border-b border-slate-700/50 ${
+                          level.isCurrent ? 'bg-violet-500/10' : level.isUnlocked ? 'bg-emerald-500/5' : ''
+                        } ${level.isNext ? 'bg-violet-500/5' : ''}`}
+                      >
+                        <td className="py-2 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              level.isCurrent
+                                ? 'bg-violet-500/30 text-violet-300'
+                                : level.isUnlocked
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : level.isNext
+                                    ? 'bg-violet-500/10 text-violet-400'
+                                    : 'bg-slate-700/50 text-slate-500'
+                            }`}>
+                              {level.level}
+                            </span>
+                            <span className={`font-medium ${level.isUnlocked ? 'text-slate-200' : 'text-slate-500'}`}>
+                              {level.name}
+                            </span>
+                            {level.isCurrent && <span className="text-xs text-violet-400">← Current</span>}
+                            {level.isNext && <span className="text-xs text-violet-400/70">← Next</span>}
+                          </div>
+                        </td>
+                        <td className="py-2 px-4 text-right font-mono text-slate-400">
+                          {level.threshold === 0 ? '-' : formatCurrency(level.threshold, 0)}
+                        </td>
+                        <td className={`py-2 px-4 text-right font-mono ${
+                          level.isCurrent ? 'text-violet-400 font-semibold' : level.isUnlocked ? 'text-emerald-400' : 'text-slate-500'
+                        }`}>
+                          {formatCurrency(level.monthlyBudget, 0)}
+                        </td>
+                        <td className={`py-2 px-4 text-right font-mono ${
+                          level.isCurrent ? 'text-violet-400/80' : level.isUnlocked ? 'text-emerald-400/80' : 'text-slate-600'
+                        }`}>
+                          {formatCurrency(level.monthlyBudget * 12, 0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Quick Reference Cards */}
+              <div className="mt-8">
+                <h4 className="text-sm font-medium text-slate-400 mb-3">Quick Reference (at today's inflation-adjusted base of {formatCurrency(levelInfo.baseBudgetInflationAdjusted, 0)})</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'At $100K', nw: 100000 },
+                    { label: 'At $500K', nw: 500000 },
+                    { label: 'At $1M', nw: 1000000 },
+                    { label: 'At $2M', nw: 2000000 },
+                  ].map((item) => {
+                    const value = levelInfo.baseBudgetInflationAdjusted + (item.nw * levelInfo.spendingRate / 12)
+                    const nwPortion = item.nw * levelInfo.spendingRate / 12
+                    return (
+                      <div key={item.label} className="bg-slate-800/30 rounded-lg p-3 border border-slate-700">
+                        <p className="text-xs text-slate-500">{item.label}</p>
+                        <p className="text-lg font-mono text-violet-400">{formatCurrency(value, 0)}/mo</p>
+                        <p className="text-xs text-slate-600">
+                          <span className="text-amber-400/60">{formatCurrency(levelInfo.baseBudgetInflationAdjusted, 0)}</span>
+                          {' + '}
+                          <span className="text-emerald-400/60">{formatCurrency(nwPortion, 0)}</span>
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Settings Tab */}
+      {activeTab === 'settings' && (
+        <div className="container mx-auto px-4 py-8 max-w-3xl">
+          <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-slate-400 to-slate-300 bg-clip-text text-transparent">
+            Settings
+          </h1>
+          <p className="text-slate-400 text-center mb-8">
+            Configure your assumptions and preferences
+          </p>
+
+          {/* Investment Assumptions */}
+          <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
+              Investment Assumptions
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Expected Rate of Return
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Annual return rate for your investments (e.g., 7% for stock market average)
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={rateOfReturn}
+                    onChange={(e) => setRateOfReturn(e.target.value)}
+                    placeholder="7"
+                    min="0"
+                    max="30"
+                    step="0.1"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Inflation Rate
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Expected annual inflation for adjusting future values
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={inflationRate}
+                    onChange={(e) => setInflationRate(e.target.value)}
+                    placeholder="3"
+                    min="0"
+                    max="20"
+                    step="0.1"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Safe Withdrawal Rate (SWR)
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Percentage you can safely withdraw annually in retirement (typically 3-4%)
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={swr}
+                    onChange={(e) => setSwr(e.target.value)}
+                    placeholder="4"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Yearly Contribution
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  How much you add to investments annually
+                </p>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                  <input
+                    type="number"
+                    value={yearlyContribution}
+                    onChange={(e) => setYearlyContribution(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    step="1000"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Spending & FI Target */}
+          <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-violet-400 rounded-full"></span>
+              Spending & FI Target
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Monthly Spending
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Your current monthly expenses (used to calculate FI target)
+                </p>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                  <input
+                    type="number"
+                    value={monthlySpend}
+                    onChange={(e) => setMonthlySpend(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    step="100"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div className="flex items-end">
+                <div className="w-full">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Apply Inflation to Projections
+                  </label>
+                  <p className="text-xs text-slate-500 mb-2">
+                    Increase spending target each year for inflation
+                  </p>
+                  <button
+                    onClick={() => setInflationEnabled(!inflationEnabled)}
+                    className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      inflationEnabled
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
+                        : 'bg-slate-700/50 text-slate-400 border border-slate-600'
+                    }`}
+                  >
+                    {inflationEnabled ? '✓ Inflation Enabled' : 'Inflation Disabled'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Calculated FI Target */}
+            {parseFloat(monthlySpend) > 0 && parseFloat(swr) > 0 && (
+              <div className="mt-4 p-4 bg-slate-900/50 rounded-lg">
+                <p className="text-sm text-slate-400">
+                  <span className="text-slate-300 font-medium">Your FI Target:</span>{' '}
+                  <span className="font-mono text-violet-400">
+                    {formatCurrency((parseFloat(monthlySpend) * 12) / (parseFloat(swr) / 100))}
+                  </span>
+                  <span className="text-slate-500 ml-2">
+                    ({formatCurrency(parseFloat(monthlySpend))}/mo × 12 ÷ {swr}%)
+                  </span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Levels System */}
+          <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
+              Levels System
+            </h3>
+            <p className="text-sm text-slate-400 mb-4">
+              Configure how your spending budget grows with your net worth
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Base Monthly Budget
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Floor spending for essentials (in today's dollars, adjusts for inflation)
+                </p>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                  <input
+                    type="number"
+                    value={baseMonthlyBudget}
+                    onChange={(e) => setBaseMonthlyBudget(e.target.value)}
+                    placeholder="3000"
+                    min="0"
+                    step="100"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Net Worth Spending Rate
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  % of current net worth added to monthly budget (keep below return rate!)
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={spendingGrowthRate}
+                    onChange={(e) => setSpendingGrowthRate(e.target.value)}
+                    placeholder="2"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Formula Preview */}
+            <div className="mt-4 p-4 bg-slate-900/50 rounded-lg space-y-2">
+              <p className="text-sm text-slate-300 font-medium">Budget Formula:</p>
+              <p className="text-xs text-slate-400">
+                Unlocked Budget = <span className="text-amber-400">Base (inflation-adjusted)</span> + <span className="text-emerald-400">(Net Worth × {spendingGrowthRate}% ÷ 12)</span>
+              </p>
+              {latestEntry && (
+                <p className="text-xs text-slate-500 pt-2 border-t border-slate-700">
+                  Current: <span className="text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)}</span> + <span className="text-emerald-400">{formatCurrency(levelInfo.netWorthPortion)}</span> = <span className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
+                </p>
+              )}
+            </div>
+
+            {/* Warning if spending rate >= return rate */}
+            {parseFloat(spendingGrowthRate) >= parseFloat(rateOfReturn) && (
+              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <p className="text-sm text-red-400">
+                  ⚠️ Your spending rate ({spendingGrowthRate}%) should be less than your return rate ({rateOfReturn}%) to make progress toward FI.
+                </p>
+              </div>
+            )}
+
+            {/* Progress info */}
+            {parseFloat(spendingGrowthRate) < parseFloat(rateOfReturn) && (
+              <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                <p className="text-xs text-emerald-400">
+                  <span className="font-medium">✓ On track:</span> With {rateOfReturn}% returns and {spendingGrowthRate}% spending rate, 
+                  you keep {(parseFloat(rateOfReturn) - parseFloat(spendingGrowthRate)).toFixed(1)}% of net worth growth toward FI each year.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Personal Info */}
+          <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-sky-400 rounded-full"></span>
+              Personal Info
+            </h3>
+            <div className="max-w-xs">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Birth Date
+              </label>
+              <p className="text-xs text-slate-500 mb-2">
+                Used to show your age in projections
+              </p>
+              <input
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* Settings Summary */}
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-xl p-6 border border-slate-600">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4">Current Configuration</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-slate-500 text-xs">Return Rate</p>
+                <p className="text-emerald-400 font-mono">{rateOfReturn}%</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">SWR</p>
+                <p className="text-amber-400 font-mono">{swr}%</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Inflation</p>
+                <p className="text-amber-400 font-mono">{inflationRate}%</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Yearly Contribution</p>
+                <p className="text-sky-400 font-mono">{formatCurrency(parseFloat(yearlyContribution) || 0)}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Monthly Spend</p>
+                <p className="text-violet-400 font-mono">{formatCurrency(parseFloat(monthlySpend) || 0)}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Base Budget</p>
+                <p className="text-amber-400 font-mono">{formatCurrency(parseFloat(baseMonthlyBudget) || 0)}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Spending Rate</p>
+                <p className="text-emerald-400 font-mono">{spendingGrowthRate}%</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Inflation in Projections</p>
+                <p className={`font-mono ${inflationEnabled ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  {inflationEnabled ? 'Enabled' : 'Disabled'}
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mt-4">
+              Settings are saved automatically as you type.
+            </p>
+          </div>
         </div>
       )}
     </main>
