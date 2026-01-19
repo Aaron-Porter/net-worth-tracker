@@ -222,7 +222,6 @@ function AuthenticatedApp() {
         <LevelsTab
           latestEntry={scenariosHook.latestEntry}
           primaryProjection={primaryProjection}
-          profile={scenariosHook.profile}
           setActiveTab={setActiveTab}
         />
       )}
@@ -1287,14 +1286,12 @@ function ProjectionsChart({
 interface LevelsTabProps {
   latestEntry: ReturnType<typeof useScenarios>['latestEntry'];
   primaryProjection: ScenarioProjection | null;
-  profile: ReturnType<typeof useScenarios>['profile'];
   setActiveTab: (tab: Tab) => void;
 }
 
 function LevelsTab({
   latestEntry,
   primaryProjection,
-  profile,
   setActiveTab,
 }: LevelsTabProps) {
   if (!latestEntry || !primaryProjection) {
@@ -1399,23 +1396,22 @@ function LevelsTab({
           <div className="bg-slate-900/50 rounded-xl p-4">
             <p className="text-slate-500 text-xs mb-1">Your Unlocked Monthly Budget</p>
             <p className="text-3xl font-mono text-violet-400">{formatCurrency(levelInfo.unlockedAtNetWorth)}</p>
-            <p className="text-slate-600 text-xs mt-2">
-              = {formatCurrency(levelInfo.unlockedAtNetWorth * 12)}/year
-            </p>
+            <div className="mt-2 text-xs space-y-1">
+              <div className="flex justify-between text-slate-500">
+                <span>Base (inflation-adjusted):</span>
+                <span className="font-mono text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)}</span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>From net worth ({(levelInfo.spendingRate * 100).toFixed(1)}%):</span>
+                <span className="font-mono text-emerald-400">+{formatCurrency(levelInfo.netWorthPortion)}</span>
+              </div>
+            </div>
           </div>
           <div className="bg-slate-900/50 rounded-xl p-4">
-            <p className="text-slate-500 text-xs mb-1">Your Actual Monthly Spend</p>
-            <p className={`text-3xl font-mono ${
-              levelInfo.spendingStatus === 'within_budget' ? 'text-emerald-400' :
-              levelInfo.spendingStatus === 'slightly_over' ? 'text-amber-400' : 'text-red-400'
-            }`}>
-              {formatCurrency(profile.monthlySpend)}
-            </p>
+            <p className="text-slate-500 text-xs mb-1">Annual Budget</p>
+            <p className="text-3xl font-mono text-violet-400">{formatCurrency(levelInfo.unlockedAtNetWorth * 12)}</p>
             <p className="text-slate-600 text-xs mt-2">
-              {levelInfo.spendingStatus === 'within_budget' 
-                ? `${formatCurrency(levelInfo.unlockedAtNetWorth - profile.monthlySpend)} buffer`
-                : `${formatCurrency(profile.monthlySpend - levelInfo.unlockedAtNetWorth)} over budget`
-              }
+              Based on {scenario.name} scenario settings
             </p>
           </div>
         </div>
@@ -1599,41 +1595,19 @@ function ScenariosTab({
           <span className="w-2 h-2 bg-sky-400 rounded-full"></span>
           Personal Info
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Birth Date
-            </label>
-            <p className="text-xs text-slate-500 mb-2">
-              Used to show your age in projections
-            </p>
-            <input
-              type="date"
-              value={scenariosHook.profile.birthDate}
-              onChange={(e) => scenariosHook.updateProfile({ birthDate: e.target.value })}
-              className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Actual Monthly Spending
-            </label>
-            <p className="text-xs text-slate-500 mb-2">
-              For tracking against your budget in Levels
-            </p>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
-              <input
-                type="number"
-                value={scenariosHook.profile.monthlySpend}
-                onChange={(e) => scenariosHook.updateProfile({ monthlySpend: parseFloat(e.target.value) || 0 })}
-                placeholder="0"
-                min="0"
-                step="100"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-              />
-            </div>
-          </div>
+        <div className="max-w-xs">
+          <label className="block text-sm font-medium text-slate-300 mb-2">
+            Birth Date
+          </label>
+          <p className="text-xs text-slate-500 mb-2">
+            Used to show your age in projections
+          </p>
+          <input
+            type="date"
+            value={scenariosHook.profile.birthDate}
+            onChange={(e) => scenariosHook.updateProfile({ birthDate: e.target.value })}
+            className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+          />
         </div>
       </div>
 

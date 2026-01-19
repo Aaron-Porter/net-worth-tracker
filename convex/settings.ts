@@ -21,7 +21,6 @@ export const getProfile = query({
 export const saveProfile = mutation({
   args: {
     birthDate: v.string(),
-    monthlySpend: v.number(),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -64,8 +63,8 @@ export const get = query({
 
     return {
       birthDate: profile.birthDate,
-      monthlySpend: profile.monthlySpend,
       // These defaults are only for backward compatibility during migration
+      monthlySpend: 0,
       currentRate: 7,
       swr: 4,
       yearlyContribution: 0,
@@ -99,7 +98,6 @@ export const save = mutation({
 
     const profileData = {
       birthDate: args.birthDate,
-      monthlySpend: args.monthlySpend,
     };
 
     if (existing) {

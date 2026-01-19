@@ -9,7 +9,6 @@ export default defineSchema({
   userProfile: defineTable({
     userId: v.id("users"),
     birthDate: v.string(),
-    monthlySpend: v.number(), // Actual current spending (for comparison/tracking)
   }).index("by_user", ["userId"]),
 
   netWorthEntries: defineTable({

@@ -52,7 +52,6 @@ export interface ScenarioProjection {
 
 export interface UserProfile {
   birthDate: string;
-  monthlySpend: number;
 }
 
 export interface UseScenariosReturn {
@@ -114,7 +113,6 @@ interface UpdateScenarioData {
 
 const DEFAULT_PROFILE: UserProfile = {
   birthDate: '',
-  monthlySpend: 0,
 };
 
 export function useScenarios(): UseScenariosReturn {
@@ -145,7 +143,6 @@ export function useScenarios(): UseScenariosReturn {
     if (rawProfile !== null) {
       setLocalProfile({
         birthDate: rawProfile.birthDate,
-        monthlySpend: rawProfile.monthlySpend,
       });
     }
     setProfileLoaded(true);
@@ -194,12 +191,13 @@ export function useScenarios(): UseScenariosReturn {
     
     return selectedScenarios.map(scenario => {
       // Create settings object from scenario
+      // monthlySpend is set to 0 as we use level-based spending from baseMonthlyBudget + spendingGrowthRate
       const scenarioSettings: UserSettings = {
         currentRate: scenario.currentRate,
         swr: scenario.swr,
         yearlyContribution: scenario.yearlyContribution,
         birthDate: localProfile.birthDate,
-        monthlySpend: localProfile.monthlySpend,
+        monthlySpend: 0, // Not used - spending comes from levels system
         inflationRate: scenario.inflationRate,
         baseMonthlyBudget: scenario.baseMonthlyBudget,
         spendingGrowthRate: scenario.spendingGrowthRate,
