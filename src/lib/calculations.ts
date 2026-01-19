@@ -398,20 +398,35 @@ export function findCoastFiYear(
   startYear: number,
   startYearsFromNow: number,
   settings: UserSettings,
-  applyInflation: boolean = false
+  applyInflation: boolean = false,
+  useSpendingLevels: boolean = false
 ): number | null {
   const { monthlySpend, swr, currentRate, inflationRate } = settings;
   
-  if (monthlySpend <= 0 || swr <= 0 || currentRate <= 0) return null;
+  // For spending levels, we need base budget; for fixed spending, we need monthlySpend
+  const hasValidSpending = useSpendingLevels 
+    ? settings.baseMonthlyBudget > 0 
+    : monthlySpend > 0;
+  
+  if (!hasValidSpending || swr <= 0 || currentRate <= 0) return null;
   
   const r = currentRate / 100;
   
   for (let y = 0; y <= 100; y++) {
     const futureValue = startingValue * Math.pow(1 + r, y);
     const yearsFuture = startYearsFromNow + y;
-    const futureSpend = applyInflation 
-      ? adjustForInflation(monthlySpend, yearsFuture, inflationRate)
-      : monthlySpend;
+    
+    // Calculate spending based on mode
+    let futureSpend: number;
+    if (useSpendingLevels) {
+      // Use level-based spending that scales with future net worth
+      futureSpend = calculateLevelBasedSpending(futureValue, settings, yearsFuture);
+    } else if (applyInflation) {
+      futureSpend = adjustForInflation(monthlySpend, yearsFuture, inflationRate);
+    } else {
+      futureSpend = monthlySpend;
+    }
+    
     const futureTarget = calculateFiTarget(futureSpend, swr);
     
     if (futureValue >= futureTarget) {
@@ -574,6 +589,24 @@ export function calculateLevelInfo(
 }
 
 /**
+ * Calculate spending based on the levels system for a given net worth
+ * This accounts for both the base budget (inflation-adjusted) and net worth portion
+ */
+export function calculateLevelBasedSpending(
+  netWorth: number,
+  settings: UserSettings,
+  yearsFromNow: number = 0
+): number {
+  const { baseMonthlyBudget, spendingGrowthRate, inflationRate } = settings;
+  
+  // Adjust base for inflation
+  const inflatedBase = baseMonthlyBudget * Math.pow(1 + inflationRate / 100, yearsFromNow);
+  
+  // Add net worth portion (annual rate / 12 for monthly)
+  return inflatedBase + (netWorth * (spendingGrowthRate / 100) / 12);
+}
+
+/**
  * Generate projection data for the specified number of years
  */
 export function generateProjections(
@@ -581,7 +614,8 @@ export function generateProjections(
   currentNetWorth: number,
   currentAppreciation: number,
   settings: UserSettings,
-  applyInflation: boolean = false
+  applyInflation: boolean = false,
+  useSpendingLevels: boolean = false
 ): ProjectionRow[] {
   if (!latestEntry) return [];
   
@@ -602,18 +636,28 @@ export function generateProjections(
   let fiYearFound = false;
   let crossoverFound = false;
   
-  // Helper function for inflation-adjusted spend
-  const getInflatedSpend = (yearsFromNow: number) =>
-    applyInflation
-      ? adjustForInflation(monthlySpend, yearsFromNow, inflationRate)
-      : monthlySpend;
+  // Helper function to get spending for a given year and net worth
+  const getSpendingForYear = (yearsFromNow: number, netWorthAtYear: number) => {
+    if (useSpendingLevels) {
+      // Use level-based spending that scales with net worth
+      return calculateLevelBasedSpending(netWorthAtYear, settings, yearsFromNow);
+    } else if (applyInflation) {
+      // Use fixed spending with inflation adjustment
+      return adjustForInflation(monthlySpend, yearsFromNow, inflationRate);
+    } else {
+      // Use fixed spending
+      return monthlySpend;
+    }
+  };
   
   // "Now" row
-  const currentSpend = monthlySpend;
+  const currentSpend = useSpendingLevels 
+    ? calculateLevelBasedSpending(currentNetWorth, settings, 0)
+    : monthlySpend;
   const currentFiTarget = calculateFiTarget(currentSpend, swr);
   const currentSwrAmounts = calculateSwrAmounts(currentNetWorth, swr);
-  const currentSwrCoversSpend = monthlySpend > 0 && currentSwrAmounts.monthly >= currentSpend;
-  const currentCoastFiYear = findCoastFiYear(currentNetWorth, currentYear, 0, settings, applyInflation);
+  const currentSwrCoversSpend = currentSpend > 0 && currentSwrAmounts.monthly >= currentSpend;
+  const currentCoastFiYear = findCoastFiYear(currentNetWorth, currentYear, 0, settings, applyInflation, useSpendingLevels);
   const currentFiProgress = currentFiTarget > 0 ? (currentNetWorth / currentFiTarget) * 100 : 0;
   
   if (currentSwrCoversSpend) fiYearFound = true;
@@ -654,14 +698,14 @@ export function generateProjections(
       yearlyContribution
     );
     
-    // Get inflation-adjusted spend for this year
-    const yearSpend = getInflatedSpend(i);
+    // Get spending for this year (may be based on projected net worth)
+    const yearSpend = getSpendingForYear(i, fv.total);
     const yearFiTarget = calculateFiTarget(yearSpend, swr);
     const fiProgress = yearFiTarget > 0 ? (fv.total / yearFiTarget) * 100 : 0;
     
     // Calculate SWR amounts
     const swrAmounts = calculateSwrAmounts(fv.total, swr);
-    const swrCoversSpend = monthlySpend > 0 && swrAmounts.monthly >= yearSpend;
+    const swrCoversSpend = yearSpend > 0 && swrAmounts.monthly >= yearSpend;
     
     // Check milestones
     const isFiYear = swrCoversSpend && !fiYearFound;
@@ -671,7 +715,7 @@ export function generateProjections(
     if (isCrossover) crossoverFound = true;
     
     // Coast FI
-    const coastFiYear = findCoastFiYear(fv.total, year, i, settings, applyInflation);
+    const coastFiYear = findCoastFiYear(fv.total, year, i, settings, applyInflation, useSpendingLevels);
     
     data.push({
       year,
@@ -705,7 +749,8 @@ export function calculateAllFinancials(
   settings: UserSettings,
   entries: NetWorthEntry[],
   includeContributions: boolean = false,
-  applyInflation: boolean = false
+  applyInflation: boolean = false,
+  useSpendingLevels: boolean = false
 ): CalculatedFinancials {
   const latestEntry = entries[0] || null;
   
@@ -721,7 +766,8 @@ export function calculateAllFinancials(
     currentNetWorth.total,
     currentNetWorth.appreciation,
     settings,
-    applyInflation
+    applyInflation,
+    useSpendingLevels
   );
   
   // Level info
@@ -734,8 +780,11 @@ export function calculateAllFinancials(
   // Current SWR
   const currentSwrAmounts = calculateSwrAmounts(currentNetWorth.total, settings.swr);
   
-  // Current FI progress
-  const currentFiTarget = calculateFiTarget(settings.monthlySpend, settings.swr);
+  // Current FI progress - use level-based spending if enabled
+  const currentSpendForFi = useSpendingLevels
+    ? calculateLevelBasedSpending(currentNetWorth.total, settings, 0)
+    : settings.monthlySpend;
+  const currentFiTarget = calculateFiTarget(currentSpendForFi, settings.swr);
   const currentFiProgress = currentFiTarget > 0 
     ? (currentNetWorth.total / currentFiTarget) * 100 
     : 0;

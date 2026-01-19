@@ -18,6 +18,7 @@ import {
   calculateGrowthRates,
   calculateLevelInfo,
   generateProjections,
+  calculateLevelBasedSpending,
   mergeWithDefaults,
   DEFAULT_SETTINGS,
   LEVEL_THRESHOLDS,
@@ -29,6 +30,7 @@ import {
 export interface UseFinancialsOptions {
   includeContributions?: boolean;
   applyInflation?: boolean;
+  useSpendingLevels?: boolean;
   realTimeUpdateInterval?: number; // ms, default 50
 }
 
@@ -61,6 +63,8 @@ export interface UseFinancialsReturn {
   setIncludeContributions: (value: boolean) => void;
   applyInflation: boolean;
   setApplyInflation: (value: boolean) => void;
+  useSpendingLevels: boolean;
+  setUseSpendingLevels: (value: boolean) => void;
   
   // Settings update functions (local state)
   localSettings: {
@@ -85,6 +89,7 @@ export function useFinancials(options: UseFinancialsOptions = {}): UseFinancials
   const {
     includeContributions: defaultIncludeContributions = false,
     applyInflation: defaultApplyInflation = false,
+    useSpendingLevels: defaultUseSpendingLevels = false,
     realTimeUpdateInterval = 50,
   } = options;
   
@@ -109,6 +114,7 @@ export function useFinancials(options: UseFinancialsOptions = {}): UseFinancials
   // Calculation options
   const [includeContributions, setIncludeContributions] = useState(defaultIncludeContributions);
   const [applyInflation, setApplyInflation] = useState(defaultApplyInflation);
+  const [useSpendingLevels, setUseSpendingLevels] = useState(defaultUseSpendingLevels);
   
   // Real-time net worth state
   const [realTimeNetWorth, setRealTimeNetWorth] = useState<RealTimeNetWorth>({
@@ -202,9 +208,10 @@ export function useFinancials(options: UseFinancialsOptions = {}): UseFinancials
       realTimeNetWorth.total,
       realTimeNetWorth.appreciation,
       settings,
-      applyInflation
+      applyInflation,
+      useSpendingLevels
     ),
-    [latestEntry, realTimeNetWorth.total, realTimeNetWorth.appreciation, settings, applyInflation]
+    [latestEntry, realTimeNetWorth.total, realTimeNetWorth.appreciation, settings, applyInflation, useSpendingLevels]
   );
   
   // Calculate level info
@@ -255,6 +262,8 @@ export function useFinancials(options: UseFinancialsOptions = {}): UseFinancials
     setIncludeContributions,
     applyInflation,
     setApplyInflation,
+    useSpendingLevels,
+    setUseSpendingLevels,
     
     // Local settings
     localSettings,
