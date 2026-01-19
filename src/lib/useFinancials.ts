@@ -18,6 +18,7 @@ import {
   calculateGrowthRates,
   calculateLevelInfo,
   generateProjections,
+  calculateLevelBasedSpending,
   mergeWithDefaults,
   DEFAULT_SETTINGS,
   LEVEL_THRESHOLDS,
@@ -28,7 +29,6 @@ import {
 
 export interface UseFinancialsOptions {
   includeContributions?: boolean;
-  applyInflation?: boolean;
   realTimeUpdateInterval?: number; // ms, default 50
 }
 
@@ -59,8 +59,6 @@ export interface UseFinancialsReturn {
   // Settings controls
   includeContributions: boolean;
   setIncludeContributions: (value: boolean) => void;
-  applyInflation: boolean;
-  setApplyInflation: (value: boolean) => void;
   
   // Settings update functions (local state)
   localSettings: {
@@ -84,7 +82,6 @@ export interface UseFinancialsReturn {
 export function useFinancials(options: UseFinancialsOptions = {}): UseFinancialsReturn {
   const {
     includeContributions: defaultIncludeContributions = false,
-    applyInflation: defaultApplyInflation = false,
     realTimeUpdateInterval = 50,
   } = options;
   
@@ -108,7 +105,6 @@ export function useFinancials(options: UseFinancialsOptions = {}): UseFinancials
   
   // Calculation options
   const [includeContributions, setIncludeContributions] = useState(defaultIncludeContributions);
-  const [applyInflation, setApplyInflation] = useState(defaultApplyInflation);
   
   // Real-time net worth state
   const [realTimeNetWorth, setRealTimeNetWorth] = useState<RealTimeNetWorth>({
@@ -195,16 +191,17 @@ export function useFinancials(options: UseFinancialsOptions = {}): UseFinancials
     [realTimeNetWorth.total, settings, includeContributions]
   );
   
-  // Generate projections
+  // Generate projections - always use spending levels (inflation is built into levels)
   const projections = useMemo(
     () => generateProjections(
       latestEntry,
       realTimeNetWorth.total,
       realTimeNetWorth.appreciation,
       settings,
-      applyInflation
+      false, // applyInflation - not needed, inflation is built into level-based spending
+      true   // useSpendingLevels - always use level-based spending
     ),
-    [latestEntry, realTimeNetWorth.total, realTimeNetWorth.appreciation, settings, applyInflation]
+    [latestEntry, realTimeNetWorth.total, realTimeNetWorth.appreciation, settings]
   );
   
   // Calculate level info
@@ -253,8 +250,6 @@ export function useFinancials(options: UseFinancialsOptions = {}): UseFinancials
     // Settings controls
     includeContributions,
     setIncludeContributions,
-    applyInflation,
-    setApplyInflation,
     
     // Local settings
     localSettings,

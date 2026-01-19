@@ -79,8 +79,6 @@ function AuthenticatedApp() {
     currentAnnualSwr,
     includeContributions,
     setIncludeContributions,
-    applyInflation,
-    setApplyInflation,
     localSettings,
     updateLocalSetting,
   } = financials
@@ -230,8 +228,6 @@ function AuthenticatedApp() {
           projections={projections}
           settings={settings}
           localSettings={localSettings}
-          applyInflation={applyInflation}
-          setApplyInflation={setApplyInflation}
           projectionsView={projectionsView}
           setProjectionsView={setProjectionsView}
           fiYear={fiYear}
@@ -257,8 +253,6 @@ function AuthenticatedApp() {
           updateLocalSetting={updateLocalSetting}
           levelInfo={levelInfo}
           latestEntry={latestEntry}
-          applyInflation={applyInflation}
-          setApplyInflation={setApplyInflation}
         />
       )}
     </main>
@@ -592,8 +586,6 @@ interface ProjectionsTabProps {
   projections: ReturnType<typeof useFinancials>['projections'];
   settings: ReturnType<typeof useFinancials>['settings'];
   localSettings: ReturnType<typeof useFinancials>['localSettings'];
-  applyInflation: boolean;
-  setApplyInflation: (value: boolean) => void;
   projectionsView: 'table' | 'chart';
   setProjectionsView: (view: 'table' | 'chart') => void;
   fiYear: number | null;
@@ -606,8 +598,6 @@ function ProjectionsTab({
   projections,
   settings,
   localSettings,
-  applyInflation,
-  setApplyInflation,
   projectionsView,
   setProjectionsView,
   fiYear,
@@ -627,6 +617,8 @@ function ProjectionsTab({
         contributed: Math.round(d.contributed),
         fiProgress: Math.round(d.fiProgress * 10) / 10,
         initialAmount: Math.round(latestEntry?.amount || 0),
+        monthlySpend: Math.round(d.monthlySpend),
+        annualSpend: Math.round(d.monthlySpend * 12),
       }))
   }, [projections, latestEntry])
 
@@ -649,24 +641,15 @@ function ProjectionsTab({
           {/* Summary Bar */}
           <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-              <span>Base: <span className="text-emerald-400 font-mono">{formatCurrency(latestEntry.amount)}</span></span>
+              <span>Net Worth: <span className="text-emerald-400 font-mono">{formatCurrency(latestEntry.amount)}</span></span>
               <span>Return: <span className="text-emerald-400 font-mono">{localSettings.rateOfReturn}%</span></span>
               <span>SWR: <span className="text-amber-400 font-mono">{localSettings.swr}%</span></span>
               <span>Contribution: <span className="text-sky-400 font-mono">{formatCurrency(settings.yearlyContribution)}/yr</span></span>
-              <span>Spend: <span className="text-violet-400 font-mono">{formatCurrency(settings.monthlySpend)}/mo</span></span>
-              {applyInflation && <span>Inflation: <span className="text-amber-400 font-mono">{localSettings.inflationRate}%</span></span>}
+              <span>Base Budget: <span className="text-amber-400 font-mono">{formatCurrency(parseFloat(localSettings.baseMonthlyBudget) || 0)}</span></span>
+              <span>Spend Rate: <span className="text-violet-400 font-mono">{localSettings.spendingGrowthRate}%</span></span>
+              <span>Inflation: <span className="text-amber-400 font-mono">{localSettings.inflationRate}%</span></span>
             </div>
             <div className="flex-1" />
-            <button
-              onClick={() => setApplyInflation(!applyInflation)}
-              className={`text-xs px-2 py-1 rounded ${
-                applyInflation
-                  ? 'bg-amber-500/20 text-amber-400'
-                  : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {applyInflation ? 'Inflation On' : 'Inflation Off'}
-            </button>
             <button
               onClick={() => setActiveTab('settings')}
               className="text-xs text-slate-400 hover:text-slate-200 underline"
@@ -702,12 +685,10 @@ function ProjectionsTab({
             <ProjectionsTable
               projections={projections}
               birthDate={settings.birthDate}
-              monthlySpend={settings.monthlySpend}
             />
           ) : (
             <ProjectionsChart
               chartData={chartData}
-              monthlySpend={settings.monthlySpend}
               fiYear={fiYear}
               crossoverYear={crossoverYear}
             />
@@ -721,11 +702,9 @@ function ProjectionsTab({
 function ProjectionsTable({
   projections,
   birthDate,
-  monthlySpend,
 }: {
   projections: ReturnType<typeof useFinancials>['projections'];
   birthDate: string;
-  monthlySpend: number;
 }) {
   const currentYear = new Date().getFullYear()
   
@@ -741,14 +720,11 @@ function ProjectionsTable({
             <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Interest</th>
             <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Contributed</th>
             <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Monthly SWR</th>
-            {monthlySpend > 0 && (
-              <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">FI %</th>
-            )}
-            {monthlySpend > 0 && (
-              <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700">
-                Coast FI {birthDate ? 'Age' : 'Year'}
-              </th>
-            )}
+            <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Monthly Budget</th>
+            <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">FI %</th>
+            <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700">
+              Coast FI {birthDate ? 'Age' : 'Year'}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -787,31 +763,30 @@ function ProjectionsTable({
                 <td className={`py-2 px-3 text-right font-mono ${row.swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/80'}`}>
                   {formatCurrency(row.monthlySwr)}
                 </td>
-                {monthlySpend > 0 && (
-                  <td className={`py-2 px-3 text-right font-mono ${row.fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}>
-                    {row.fiProgress.toFixed(1)}%
-                  </td>
-                )}
-                {monthlySpend > 0 && (
-                  <td className="py-2 px-3 text-right font-mono border-l border-slate-700">
-                    {row.coastFiYear ? (
-                      <span className={row.swrCoversSpend ? 'text-emerald-400' : 'text-violet-400'}>
-                        {row.swrCoversSpend ? (
-                          'Now'
-                        ) : (
-                          <>
-                            {row.coastFiYear - (typeof row.year === 'number' ? row.year : currentYear)}y
-                            <span className="text-slate-500 text-xs ml-1">
-                              ({birthDate ? `age ${row.coastFiAge}` : row.coastFiYear})
-                            </span>
-                          </>
-                        )}
-                      </span>
-                    ) : (
-                      <span className="text-slate-600">-</span>
-                    )}
-                  </td>
-                )}
+                <td className="py-2 px-3 text-right font-mono text-violet-400">
+                  {formatCurrency(row.monthlySpend)}
+                </td>
+                <td className={`py-2 px-3 text-right font-mono ${row.fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}>
+                  {row.fiProgress.toFixed(1)}%
+                </td>
+                <td className="py-2 px-3 text-right font-mono border-l border-slate-700">
+                  {row.coastFiYear ? (
+                    <span className={row.swrCoversSpend ? 'text-emerald-400' : 'text-violet-400'}>
+                      {row.swrCoversSpend ? (
+                        'Now'
+                      ) : (
+                        <>
+                          {row.coastFiYear - (typeof row.year === 'number' ? row.year : currentYear)}y
+                          <span className="text-slate-500 text-xs ml-1">
+                            ({birthDate ? `age ${row.coastFiAge}` : row.coastFiYear})
+                          </span>
+                        </>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">-</span>
+                  )}
+                </td>
               </tr>
             )
           })}
@@ -823,7 +798,6 @@ function ProjectionsTable({
 
 function ProjectionsChart({
   chartData,
-  monthlySpend,
   fiYear,
   crossoverYear,
 }: {
@@ -834,8 +808,9 @@ function ProjectionsChart({
     interest: number;
     contributed: number;
     fiProgress: number;
+    monthlySpend: number;
+    annualSpend: number;
   }>;
-  monthlySpend: number;
   fiYear: number | null;
   crossoverYear: number | null;
 }) {
@@ -882,19 +857,17 @@ function ProjectionsChart({
                   isAnimationActive={false}
                   connectNulls
                 />
-                {monthlySpend > 0 && (
-                  <Line 
-                    type="monotone" 
-                    dataKey="fiTarget" 
-                    name="FI Target"
-                    stroke="#8b5cf6" 
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={true}
-                    isAnimationActive={false}
-                    connectNulls
-                  />
-                )}
+                <Line 
+                  type="monotone" 
+                  dataKey="fiTarget" 
+                  name="FI Target"
+                  stroke="#8b5cf6" 
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={true}
+                  isAnimationActive={false}
+                  connectNulls
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -948,44 +921,78 @@ function ProjectionsChart({
         </div>
 
         {/* Chart 3: FI Progress */}
-        {monthlySpend > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-medium text-slate-200">FI Progress</h3>
-              <span className="text-sm text-violet-400 bg-violet-400/10 px-3 py-1 rounded-full">
-                Currently {chartData[0]?.fiProgress.toFixed(0)}% to FI
-              </span>
-            </div>
-            <div className="w-full h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData.map(d => ({ ...d, fiProgressCapped: Math.min(d.fiProgress, 150) }))}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="year" stroke="#94a3b8" />
-                  <YAxis 
-                    stroke="#94a3b8"
-                    domain={[0, 150]}
-                    tickFormatter={(v) => `${v}%`}
-                  />
-                  <Tooltip 
-                    formatter={(value) => `${(value as number).toFixed(1)}%`}
-                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                  />
-                  <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" />
-                  <Line 
-                    type="monotone" 
-                    dataKey="fiProgressCapped" 
-                    name="FI Progress"
-                    stroke="#8b5cf6" 
-                    strokeWidth={3}
-                    dot={true}
-                    isAnimationActive={false}
-                    connectNulls
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-medium text-slate-200">FI Progress</h3>
+            <span className="text-sm text-violet-400 bg-violet-400/10 px-3 py-1 rounded-full">
+              Currently {chartData[0]?.fiProgress.toFixed(0)}% to FI
+            </span>
           </div>
-        )}
+          <div className="w-full h-[250px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData.map(d => ({ ...d, fiProgressCapped: Math.min(d.fiProgress, 150) }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="year" stroke="#94a3b8" />
+                <YAxis 
+                  stroke="#94a3b8"
+                  domain={[0, 150]}
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <Tooltip 
+                  formatter={(value) => `${(value as number).toFixed(1)}%`}
+                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
+                />
+                <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" />
+                <Line 
+                  type="monotone" 
+                  dataKey="fiProgressCapped" 
+                  name="FI Progress"
+                  stroke="#8b5cf6" 
+                  strokeWidth={3}
+                  dot={true}
+                  isAnimationActive={false}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        
+        {/* Chart 4: Monthly Budget Over Time */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-medium text-slate-200">Monthly Budget Over Time</h3>
+            <span className="text-sm text-violet-400 bg-violet-400/10 px-3 py-1 rounded-full">
+              Current: {formatCurrency(chartData[0]?.monthlySpend || 0)}/mo
+            </span>
+          </div>
+          <div className="w-full h-[250px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="year" stroke="#94a3b8" />
+                <YAxis 
+                  stroke="#94a3b8"
+                  tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`}
+                />
+                <Tooltip 
+                  formatter={(value) => formatCurrency(value as number)}
+                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
+                />
+                <Legend />
+                <Area 
+                  type="monotone" 
+                  dataKey="monthlySpend" 
+                  name="Monthly Budget"
+                  stroke="#8b5cf6" 
+                  fill="#8b5cf6"
+                  fillOpacity={0.3}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -1298,8 +1305,6 @@ interface SettingsTabProps {
   updateLocalSetting: ReturnType<typeof useFinancials>['updateLocalSetting'];
   levelInfo: ReturnType<typeof useFinancials>['levelInfo'];
   latestEntry: ReturnType<typeof useFinancials>['latestEntry'];
-  applyInflation: boolean;
-  setApplyInflation: (value: boolean) => void;
 }
 
 function SettingsTab({
@@ -1307,12 +1312,7 @@ function SettingsTab({
   updateLocalSetting,
   levelInfo,
   latestEntry,
-  applyInflation,
-  setApplyInflation,
 }: SettingsTabProps) {
-  const monthlySpend = parseFloat(localSettings.monthlySpend) || 0
-  const swr = parseFloat(localSettings.swr) || 0
-  const fiTarget = monthlySpend > 0 && swr > 0 ? (monthlySpend * 12) / (swr / 100) : 0
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
@@ -1416,69 +1416,35 @@ function SettingsTab({
         </div>
       </div>
 
-      {/* Spending & FI Target */}
+      {/* Actual Spending (for Levels comparison) */}
       <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
         <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
           <span className="w-2 h-2 bg-violet-400 rounded-full"></span>
-          Spending & FI Target
+          Actual Spending
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Monthly Spending
-            </label>
-            <p className="text-xs text-slate-500 mb-2">
-              Your current monthly expenses (used to calculate FI target)
-            </p>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
-              <input
-                type="number"
-                value={localSettings.monthlySpend}
-                onChange={(e) => updateLocalSetting('monthlySpend', e.target.value)}
-                placeholder="0"
-                min="0"
-                step="100"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-              />
-            </div>
+        <div className="max-w-md">
+          <label className="block text-sm font-medium text-slate-300 mb-2">
+            Your Actual Monthly Spending
+          </label>
+          <p className="text-xs text-slate-500 mb-2">
+            Track your current spending to compare against your unlocked budget in the Levels tab
+          </p>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+            <input
+              type="number"
+              value={localSettings.monthlySpend}
+              onChange={(e) => updateLocalSetting('monthlySpend', e.target.value)}
+              placeholder="0"
+              min="0"
+              step="100"
+              className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+            />
           </div>
-          <div className="flex items-end">
-            <div className="w-full">
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Apply Inflation to Projections
-              </label>
-              <p className="text-xs text-slate-500 mb-2">
-                Increase spending target each year for inflation
-              </p>
-              <button
-                onClick={() => setApplyInflation(!applyInflation)}
-                className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  applyInflation
-                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
-                    : 'bg-slate-700/50 text-slate-400 border border-slate-600'
-                }`}
-              >
-                {applyInflation ? 'Inflation Enabled' : 'Inflation Disabled'}
-              </button>
-            </div>
-          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Note: Projections use your level-based budget (configured below), not this value.
+          </p>
         </div>
-
-        {/* Calculated FI Target */}
-        {fiTarget > 0 && (
-          <div className="mt-4 p-4 bg-slate-900/50 rounded-lg">
-            <p className="text-sm text-slate-400">
-              <span className="text-slate-300 font-medium">Your FI Target:</span>{' '}
-              <span className="font-mono text-violet-400">
-                {formatCurrency(fiTarget)}
-              </span>
-              <span className="text-slate-500 ml-2">
-                ({formatCurrency(monthlySpend)}/mo × 12 ÷ {localSettings.swr}%)
-              </span>
-            </p>
-          </div>
-        )}
       </div>
 
       {/* Levels System */}
@@ -1610,7 +1576,7 @@ function SettingsTab({
             <p className="text-sky-400 font-mono">{formatCurrency(parseFloat(localSettings.yearlyContribution) || 0)}</p>
           </div>
           <div>
-            <p className="text-slate-500 text-xs">Monthly Spend</p>
+            <p className="text-slate-500 text-xs">Actual Spending</p>
             <p className="text-violet-400 font-mono">{formatCurrency(parseFloat(localSettings.monthlySpend) || 0)}</p>
           </div>
           <div>
@@ -1622,14 +1588,12 @@ function SettingsTab({
             <p className="text-emerald-400 font-mono">{localSettings.spendingGrowthRate}%</p>
           </div>
           <div>
-            <p className="text-slate-500 text-xs">Inflation in Projections</p>
-            <p className={`font-mono ${applyInflation ? 'text-emerald-400' : 'text-slate-500'}`}>
-              {applyInflation ? 'Enabled' : 'Disabled'}
-            </p>
+            <p className="text-slate-500 text-xs">Current Budget</p>
+            <p className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</p>
           </div>
         </div>
         <p className="text-xs text-slate-500 mt-4">
-          Settings are saved automatically as you type.
+          Settings are saved automatically as you type. Projections use your level-based budget.
         </p>
       </div>
     </div>
