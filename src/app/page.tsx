@@ -669,73 +669,293 @@ function ProjectionsTable({
   scenarioProjections: ScenarioProjection[];
   birthDate: string;
 }) {
-  const primaryProjection = scenarioProjections[0];
-  const showComparison = scenarioProjections.length > 1;
+  const currentYear = new Date().getFullYear();
+  const birthYear = birthDate ? new Date(birthDate).getFullYear() : null;
+  
+  // Find the best and worst scenarios for various metrics
+  const getBestWorst = (getValue: (sp: ScenarioProjection) => number | null, lowerIsBetter = false) => {
+    const values = scenarioProjections.map(sp => ({ id: sp.scenario._id, value: getValue(sp) })).filter(v => v.value !== null);
+    if (values.length === 0) return { best: null, worst: null };
+    const sorted = [...values].sort((a, b) => (a.value! - b.value!) * (lowerIsBetter ? 1 : -1));
+    return { best: sorted[0]?.id, worst: sorted[sorted.length - 1]?.id };
+  };
+
+  const fiYearComparison = getBestWorst(sp => sp.fiYear, true);
+  
+  // Metric type definition
+  interface ComparisonMetric {
+    label: string;
+    getValue: (sp: ScenarioProjection) => string;
+    getNumericValue: (sp: ScenarioProjection) => number | null;
+    lowerIsBetter: boolean;
+    format: 'year' | 'years' | 'age' | 'currency' | 'percent' | 'number';
+    isInput?: boolean;
+  }
+
+  // Comparison metrics
+  const comparisonRows: { category: string; metrics: ComparisonMetric[] }[] = [
+    { 
+      category: 'Key Milestones',
+      metrics: [
+        {
+          label: 'Financial Independence Year',
+          getValue: (sp: ScenarioProjection) => sp.fiYear ? sp.fiYear.toString() : 'Not reached',
+          getNumericValue: (sp: ScenarioProjection) => sp.fiYear,
+          lowerIsBetter: true,
+          format: 'year',
+        },
+        {
+          label: 'Years to FI',
+          getValue: (sp: ScenarioProjection) => sp.fiYear ? `${sp.fiYear - currentYear} years` : '-',
+          getNumericValue: (sp: ScenarioProjection) => sp.fiYear ? sp.fiYear - currentYear : null,
+          lowerIsBetter: true,
+          format: 'years',
+        },
+        {
+          label: 'FI Age',
+          getValue: (sp: ScenarioProjection) => sp.fiAge ? `Age ${sp.fiAge}` : '-',
+          getNumericValue: (sp: ScenarioProjection) => sp.fiAge,
+          lowerIsBetter: true,
+          format: 'age',
+        },
+        {
+          label: 'Crossover Year',
+          getValue: (sp: ScenarioProjection) => sp.crossoverYear ? sp.crossoverYear.toString() : '-',
+          getNumericValue: (sp: ScenarioProjection) => sp.crossoverYear,
+          lowerIsBetter: true,
+          format: 'year',
+        },
+      ]
+    },
+    {
+      category: 'Net Worth Projections',
+      metrics: [
+        {
+          label: 'Current',
+          getValue: (sp: ScenarioProjection) => formatCurrency(sp.currentNetWorth.total),
+          getNumericValue: (sp: ScenarioProjection) => sp.currentNetWorth.total,
+          lowerIsBetter: false,
+          format: 'currency',
+        },
+        ...[5, 10, 15, 20, 25, 30].map(years => ({
+          label: `In ${years} Years (${currentYear + years})`,
+          getValue: (sp: ScenarioProjection) => {
+            const row = sp.projections.find(p => p.year === currentYear + years);
+            return row ? formatCurrency(row.netWorth) : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const row = sp.projections.find(p => p.year === currentYear + years);
+            return row?.netWorth ?? null;
+          },
+          lowerIsBetter: false,
+          format: 'currency' as const,
+        })),
+      ]
+    },
+    {
+      category: 'Monthly Safe Withdrawal',
+      metrics: [
+        {
+          label: 'Current',
+          getValue: (sp: ScenarioProjection) => formatCurrency(sp.currentMonthlySwr),
+          getNumericValue: (sp: ScenarioProjection) => sp.currentMonthlySwr,
+          lowerIsBetter: false,
+          format: 'currency',
+        },
+        ...[10, 20, 30].map(years => ({
+          label: `In ${years} Years`,
+          getValue: (sp: ScenarioProjection) => {
+            const row = sp.projections.find(p => p.year === currentYear + years);
+            return row ? formatCurrency(row.monthlySwr) : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const row = sp.projections.find(p => p.year === currentYear + years);
+            return row?.monthlySwr ?? null;
+          },
+          lowerIsBetter: false,
+          format: 'currency' as const,
+        })),
+      ]
+    },
+    {
+      category: 'FI Progress',
+      metrics: [
+        {
+          label: 'Current Progress',
+          getValue: (sp: ScenarioProjection) => `${sp.currentFiProgress.toFixed(1)}%`,
+          getNumericValue: (sp: ScenarioProjection) => sp.currentFiProgress,
+          lowerIsBetter: false,
+          format: 'percent',
+        },
+        ...[5, 10, 15].map(years => ({
+          label: `In ${years} Years`,
+          getValue: (sp: ScenarioProjection) => {
+            const row = sp.projections.find(p => p.year === currentYear + years);
+            return row ? `${row.fiProgress.toFixed(1)}%` : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const row = sp.projections.find(p => p.year === currentYear + years);
+            return row?.fiProgress ?? null;
+          },
+          lowerIsBetter: false,
+          format: 'percent' as const,
+        })),
+      ]
+    },
+    {
+      category: 'Scenario Settings',
+      metrics: [
+        {
+          label: 'Return Rate',
+          getValue: (sp: ScenarioProjection) => `${sp.scenario.currentRate}%`,
+          getNumericValue: (sp: ScenarioProjection) => sp.scenario.currentRate,
+          lowerIsBetter: false,
+          format: 'percent',
+          isInput: true,
+        },
+        {
+          label: 'Safe Withdrawal Rate',
+          getValue: (sp: ScenarioProjection) => `${sp.scenario.swr}%`,
+          getNumericValue: (sp: ScenarioProjection) => sp.scenario.swr,
+          lowerIsBetter: false,
+          format: 'percent',
+          isInput: true,
+        },
+        {
+          label: 'Yearly Contribution',
+          getValue: (sp: ScenarioProjection) => formatCurrency(sp.scenario.yearlyContribution),
+          getNumericValue: (sp: ScenarioProjection) => sp.scenario.yearlyContribution,
+          lowerIsBetter: false,
+          format: 'currency',
+          isInput: true,
+        },
+        {
+          label: 'Inflation Rate',
+          getValue: (sp: ScenarioProjection) => `${sp.scenario.inflationRate}%`,
+          getNumericValue: (sp: ScenarioProjection) => sp.scenario.inflationRate,
+          lowerIsBetter: true,
+          format: 'percent',
+          isInput: true,
+        },
+        {
+          label: 'Base Monthly Budget',
+          getValue: (sp: ScenarioProjection) => formatCurrency(sp.scenario.baseMonthlyBudget),
+          getNumericValue: (sp: ScenarioProjection) => sp.scenario.baseMonthlyBudget,
+          lowerIsBetter: false,
+          format: 'currency',
+          isInput: true,
+        },
+        {
+          label: 'Spending Growth Rate',
+          getValue: (sp: ScenarioProjection) => `${sp.scenario.spendingGrowthRate}%`,
+          getNumericValue: (sp: ScenarioProjection) => sp.scenario.spendingGrowthRate,
+          lowerIsBetter: true,
+          format: 'percent',
+          isInput: true,
+        },
+      ]
+    },
+  ];
   
   return (
     <div className="flex-1 overflow-auto bg-slate-800/30 rounded-xl border border-slate-700">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-slate-800 z-10">
           <tr className="border-b border-slate-700">
-            <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Year</th>
-            {birthDate && <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Age</th>}
+            <th className="text-left text-slate-400 font-medium py-3 px-4 whitespace-nowrap w-64">Metric</th>
             {scenarioProjections.map(sp => (
               <th 
                 key={sp.scenario._id} 
-                className="text-right font-medium py-3 px-3 whitespace-nowrap"
-                style={{ color: sp.scenario.color }}
+                className="text-right font-medium py-3 px-4 whitespace-nowrap min-w-[140px]"
               >
-                {sp.scenario.name}
+                <div className="flex items-center justify-end gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: sp.scenario.color }} />
+                  <span style={{ color: sp.scenario.color }}>{sp.scenario.name}</span>
+                </div>
               </th>
             ))}
-            <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Monthly SWR</th>
-            <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Monthly Budget</th>
-            <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">FI %</th>
+            {scenarioProjections.length > 1 && (
+              <th className="text-right text-slate-400 font-medium py-3 px-4 whitespace-nowrap min-w-[120px]">
+                Difference
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
-          {primaryProjection.projections.map((row) => {
-            const isNow = row.year === 'Now';
-            
-            return (
-              <tr
-                key={row.year}
-                className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${
-                  isNow ? 'border-b-2 border-slate-600 bg-slate-700/30' : ''
-                } ${row.isFiYear ? 'bg-emerald-900/30 border-emerald-500/50' : ''
-                } ${row.swrCoversSpend && !row.isFiYear && !isNow ? 'bg-emerald-900/10' : ''
-                } ${isNow && row.swrCoversSpend ? 'bg-emerald-900/30' : ''}`}
-              >
-                <td className={`py-2 px-3 font-medium ${isNow ? 'text-slate-200 font-semibold' : 'text-slate-300'}`}>
-                  {row.year}
-                  {row.isFiYear && <span className="ml-2 text-xs text-emerald-400 font-semibold">FI</span>}
-                  {isNow && row.swrCoversSpend && <span className="ml-2 text-xs text-emerald-400 font-semibold">FI</span>}
-                </td>
-                {birthDate && <td className={`py-2 px-3 ${isNow ? 'text-slate-300 font-medium' : 'text-slate-400'}`}>{row.age}</td>}
-                {scenarioProjections.map(sp => {
-                  const scenarioRow = sp.projections.find(p => p.year === row.year);
-                  return (
-                    <td 
-                      key={sp.scenario._id}
-                      className={`py-2 px-3 text-right font-mono ${isNow ? 'font-semibold' : ''}`}
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {formatCurrency(scenarioRow?.netWorth || 0)}
-                    </td>
-                  );
-                })}
-                <td className={`py-2 px-3 text-right font-mono ${row.swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/80'}`}>
-                  {formatCurrency(row.monthlySwr)}
-                </td>
-                <td className="py-2 px-3 text-right font-mono text-violet-400">
-                  {formatCurrency(row.monthlySpend)}
-                </td>
-                <td className={`py-2 px-3 text-right font-mono ${row.fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}>
-                  {row.fiProgress.toFixed(1)}%
+          {comparisonRows.map((category, catIdx) => (
+            <>
+              {/* Category Header */}
+              <tr key={`cat-${catIdx}`} className="bg-slate-900/50">
+                <td 
+                  colSpan={scenarioProjections.length + (scenarioProjections.length > 1 ? 2 : 1)} 
+                  className="py-2 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                >
+                  {category.category}
                 </td>
               </tr>
-            )
-          })}
+              {/* Metrics */}
+              {category.metrics.map((metric, metricIdx) => {
+                const values = scenarioProjections.map(sp => metric.getNumericValue(sp));
+                const validValues = values.filter((v): v is number => v !== null);
+                const best = validValues.length > 0 ? (metric.lowerIsBetter ? Math.min(...validValues) : Math.max(...validValues)) : null;
+                const worst = validValues.length > 0 ? (metric.lowerIsBetter ? Math.max(...validValues) : Math.min(...validValues)) : null;
+                
+                // Calculate difference between first and second scenario
+                const diff = scenarioProjections.length > 1 && values[0] !== null && values[1] !== null
+                  ? values[0] - values[1]
+                  : null;
+                
+                return (
+                  <tr 
+                    key={`${catIdx}-${metricIdx}`}
+                    className={`border-b border-slate-700/30 hover:bg-slate-700/20 ${
+                      metric.isInput ? 'bg-slate-800/30' : ''
+                    }`}
+                  >
+                    <td className="py-2.5 px-4 text-slate-300">
+                      {metric.label}
+                      {metric.isInput && <span className="ml-2 text-xs text-slate-500">(input)</span>}
+                    </td>
+                    {scenarioProjections.map((sp, spIdx) => {
+                      const numValue = metric.getNumericValue(sp);
+                      const isBest = numValue !== null && numValue === best && validValues.length > 1 && !metric.isInput;
+                      const isWorst = numValue !== null && numValue === worst && validValues.length > 1 && best !== worst && !metric.isInput;
+                      
+                      return (
+                        <td 
+                          key={sp.scenario._id}
+                          className={`py-2.5 px-4 text-right font-mono ${
+                            isBest ? 'text-emerald-400 font-semibold' : 
+                            isWorst ? 'text-red-400/70' : 
+                            'text-slate-300'
+                          }`}
+                        >
+                          <span className="flex items-center justify-end gap-2">
+                            {metric.getValue(sp)}
+                            {isBest && <span className="text-xs bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">Best</span>}
+                          </span>
+                        </td>
+                      );
+                    })}
+                    {scenarioProjections.length > 1 && (
+                      <td className="py-2.5 px-4 text-right font-mono text-slate-500">
+                        {diff !== null && !metric.isInput ? (
+                          <span className={diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400/70' : ''}>
+                            {metric.format === 'currency' && (diff > 0 ? '+' : '')}{
+                              metric.format === 'currency' ? formatCurrency(diff) :
+                              metric.format === 'percent' ? `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%` :
+                              metric.format === 'years' ? `${diff > 0 ? '+' : ''}${diff}y` :
+                              `${diff > 0 ? '+' : ''}${diff}`
+                            }
+                          </span>
+                        ) : '-'}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </>
+          ))}
         </tbody>
       </table>
     </div>
