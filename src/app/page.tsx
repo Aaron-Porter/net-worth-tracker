@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useMutation, useConvexAuth } from 'convex/react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { api } from '../../convex/_generated/api'
@@ -13,6 +13,7 @@ import {
   formatDate,
   getTimeSinceEntry,
 } from '../lib/useFinancials'
+import { useScenarios, Scenario, ScenarioProjection, SCENARIO_TEMPLATES } from '../lib/useScenarios'
 import {
   LineChart,
   Line,
@@ -53,13 +54,16 @@ function AuthenticatedApp() {
   // Use centralized calculations hook
   const financials = useFinancials()
   
+  // Use scenarios hook
+  const scenariosHook = useScenarios()
+  
   // Mutations
   const addEntry = useMutation(api.entries.add)
   const removeEntry = useMutation(api.entries.remove)
   
   // UI state
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
-  const [projectionsView, setProjectionsView] = useState<'table' | 'chart'>('table')
+  const [projectionsView, setProjectionsView] = useState<'table' | 'chart' | 'compare'>('table')
   const [newAmount, setNewAmount] = useState<string>('')
 
   // Destructure commonly used values from financials
@@ -233,6 +237,8 @@ function AuthenticatedApp() {
           fiYear={fiYear}
           crossoverYear={crossoverYear}
           setActiveTab={setActiveTab}
+          currentNetWorth={currentNetWorth}
+          scenariosHook={scenariosHook}
         />
       )}
 
@@ -253,6 +259,8 @@ function AuthenticatedApp() {
           updateLocalSetting={updateLocalSetting}
           levelInfo={levelInfo}
           latestEntry={latestEntry}
+          settings={settings}
+          scenariosHook={scenariosHook}
         />
       )}
     </main>
@@ -586,11 +594,13 @@ interface ProjectionsTabProps {
   projections: ReturnType<typeof useFinancials>['projections'];
   settings: ReturnType<typeof useFinancials>['settings'];
   localSettings: ReturnType<typeof useFinancials>['localSettings'];
-  projectionsView: 'table' | 'chart';
-  setProjectionsView: (view: 'table' | 'chart') => void;
+  projectionsView: 'table' | 'chart' | 'compare';
+  setProjectionsView: (view: 'table' | 'chart' | 'compare') => void;
   fiYear: number | null;
   crossoverYear: number | null;
   setActiveTab: (tab: Tab) => void;
+  currentNetWorth: ReturnType<typeof useFinancials>['currentNetWorth'];
+  scenariosHook: ReturnType<typeof useScenarios>;
 }
 
 function ProjectionsTab({
@@ -603,6 +613,8 @@ function ProjectionsTab({
   fiYear,
   crossoverYear,
   setActiveTab,
+  currentNetWorth,
+  scenariosHook,
 }: ProjectionsTabProps) {
   // Chart data (limited to 25 years for readability)
   const chartData = useMemo(() => {
@@ -621,6 +633,17 @@ function ProjectionsTab({
         annualSpend: Math.round(d.monthlySpend * 12),
       }))
   }, [projections, latestEntry])
+
+  // Generate scenario projections
+  const scenarioProjections = useMemo(() => {
+    if (!latestEntry) return [];
+    return scenariosHook.generateScenarioProjections(
+      latestEntry,
+      currentNetWorth.total,
+      currentNetWorth.appreciation,
+      settings.birthDate
+    );
+  }, [latestEntry, currentNetWorth, settings.birthDate, scenariosHook])
 
   return (
     <div className="h-[calc(100vh-57px)] flex flex-col p-4">
@@ -677,6 +700,21 @@ function ProjectionsTab({
               >
                 Chart
               </button>
+              <button
+                onClick={() => setProjectionsView('compare')}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  projectionsView === 'compare'
+                    ? 'bg-violet-500/20 text-violet-400'
+                    : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Compare
+                {scenariosHook.activeScenarios.length > 0 && (
+                  <span className="ml-1 text-xs bg-violet-500/30 px-1.5 py-0.5 rounded-full">
+                    {scenariosHook.activeScenarios.length}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 
@@ -686,11 +724,19 @@ function ProjectionsTab({
               projections={projections}
               birthDate={settings.birthDate}
             />
-          ) : (
+          ) : projectionsView === 'chart' ? (
             <ProjectionsChart
               chartData={chartData}
               fiYear={fiYear}
               crossoverYear={crossoverYear}
+            />
+          ) : (
+            <ScenariosCompareView
+              scenarioProjections={scenarioProjections}
+              currentProjections={projections}
+              localSettings={localSettings}
+              fiYear={fiYear}
+              setActiveTab={setActiveTab}
             />
           )}
         </>
@@ -996,6 +1042,343 @@ function ProjectionsChart({
       </div>
     </div>
   )
+}
+
+// ============================================================================
+// SCENARIOS COMPARE VIEW
+// ============================================================================
+
+interface ScenariosCompareViewProps {
+  scenarioProjections: ScenarioProjection[];
+  currentProjections: ReturnType<typeof useFinancials>['projections'];
+  localSettings: ReturnType<typeof useFinancials>['localSettings'];
+  fiYear: number | null;
+  setActiveTab: (tab: Tab) => void;
+}
+
+function ScenariosCompareView({
+  scenarioProjections,
+  currentProjections,
+  localSettings,
+  fiYear,
+  setActiveTab,
+}: ScenariosCompareViewProps) {
+  const currentYear = new Date().getFullYear();
+
+  // Prepare comparison chart data (limited to 30 years)
+  const comparisonChartData = useMemo(() => {
+    const years = currentProjections
+      .filter((d): d is typeof d & { year: number } => typeof d.year === 'number')
+      .slice(0, 30)
+      .map(d => d.year);
+
+    return years.map(year => {
+      const baseRow = currentProjections.find(p => p.year === year);
+      const dataPoint: Record<string, number | string> = {
+        year,
+        'Current Settings': Math.round(baseRow?.netWorth || 0),
+      };
+
+      scenarioProjections.forEach(sp => {
+        const scenarioRow = sp.projections.find(p => p.year === year);
+        dataPoint[sp.scenario.name] = Math.round(scenarioRow?.netWorth || 0);
+      });
+
+      return dataPoint;
+    });
+  }, [currentProjections, scenarioProjections]);
+
+  // Calculate FI comparison data
+  interface FiComparisonItem {
+    name: string;
+    color: string;
+    fiYear: number | null;
+    yearsToFi: number | null;
+    settings?: {
+      currentRate: number;
+      swr: number;
+      yearlyContribution: number;
+      baseMonthlyBudget: number;
+      spendingGrowthRate: number;
+    };
+  }
+
+  const fiComparison = useMemo((): FiComparisonItem[] => {
+    const baseData: FiComparisonItem = {
+      name: 'Current Settings',
+      color: '#10b981',
+      fiYear,
+      yearsToFi: fiYear ? fiYear - currentYear : null,
+    };
+
+    const scenarioData: FiComparisonItem[] = scenarioProjections.map(sp => ({
+      name: sp.scenario.name,
+      color: sp.scenario.color,
+      fiYear: sp.fiYear,
+      yearsToFi: sp.fiYear ? sp.fiYear - currentYear : null,
+      settings: {
+        currentRate: sp.scenario.currentRate,
+        swr: sp.scenario.swr,
+        yearlyContribution: sp.scenario.yearlyContribution,
+        baseMonthlyBudget: sp.scenario.baseMonthlyBudget,
+        spendingGrowthRate: sp.scenario.spendingGrowthRate,
+      },
+    }));
+
+    return [baseData, ...scenarioData];
+  }, [fiYear, currentYear, scenarioProjections]);
+
+  if (scenarioProjections.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-slate-800/30 rounded-xl border border-slate-700">
+        <div className="text-center p-8 max-w-md">
+          <div className="w-16 h-16 mx-auto mb-4 bg-violet-500/20 rounded-full flex items-center justify-center">
+            <svg className="w-8 h-8 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-slate-200 mb-2">No Scenarios to Compare</h3>
+          <p className="text-slate-400 text-sm mb-4">
+            Create scenarios in Settings to see how different assumptions affect your financial projections.
+          </p>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className="px-4 py-2 bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-colors"
+          >
+            Create Scenarios
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 bg-slate-800/30 rounded-xl border border-slate-700 p-6 overflow-auto">
+      <div className="space-y-8">
+        {/* FI Timeline Comparison */}
+        <div>
+          <h3 className="text-lg font-medium text-slate-200 mb-4">Financial Independence Timeline</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {fiComparison.map((item, index) => (
+              <div
+                key={item.name}
+                className="bg-slate-900/50 rounded-xl p-4 border-l-4"
+                style={{ borderLeftColor: item.color }}
+              >
+                <h4 className="font-medium text-slate-200 mb-2">{item.name}</h4>
+                {item.yearsToFi !== null ? (
+                  <>
+                    <p className="text-3xl font-mono" style={{ color: item.color }}>
+                      {item.yearsToFi} years
+                    </p>
+                    <p className="text-slate-500 text-sm">
+                      FI in {item.fiYear}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-slate-500 text-sm">FI date not reached in projection period</p>
+                )}
+                {index > 0 && item.settings && (
+                  <div className="mt-3 pt-3 border-t border-slate-700 text-xs text-slate-500 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Return:</span>
+                      <span className="text-emerald-400">{item.settings.currentRate}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>SWR:</span>
+                      <span className="text-amber-400">{item.settings.swr}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Contribution:</span>
+                      <span className="text-sky-400">{formatCurrency(item.settings.yearlyContribution)}/yr</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Net Worth Comparison Chart */}
+        <div>
+          <h3 className="text-lg font-medium text-slate-200 mb-4">Net Worth Projections Comparison</h3>
+          <div className="w-full h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={comparisonChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="year" stroke="#94a3b8" />
+                <YAxis
+                  stroke="#94a3b8"
+                  tickFormatter={(v) => `$${(v / 1000000).toFixed(1)}M`}
+                />
+                <Tooltip
+                  formatter={(value) => formatCurrency(value as number)}
+                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="Current Settings"
+                  name="Current Settings"
+                  stroke="#10b981"
+                  strokeWidth={3}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+                {scenarioProjections.map(sp => (
+                  <Line
+                    key={sp.scenario._id}
+                    type="monotone"
+                    dataKey={sp.scenario.name}
+                    name={sp.scenario.name}
+                    stroke={sp.scenario.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Detailed Comparison Table */}
+        <div>
+          <h3 className="text-lg font-medium text-slate-200 mb-4">Milestone Comparison</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-800">
+                <tr className="border-b border-slate-700">
+                  <th className="text-left text-slate-400 font-medium py-3 px-4">Milestone</th>
+                  <th className="text-center text-slate-400 font-medium py-3 px-4">
+                    <span className="text-emerald-400">Current</span>
+                  </th>
+                  {scenarioProjections.map(sp => (
+                    <th
+                      key={sp.scenario._id}
+                      className="text-center text-slate-400 font-medium py-3 px-4"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.scenario.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-slate-700/50">
+                  <td className="py-3 px-4 text-slate-300">FI Year</td>
+                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
+                    {fiYear || '-'}
+                  </td>
+                  {scenarioProjections.map(sp => (
+                    <td
+                      key={sp.scenario._id}
+                      className="py-3 px-4 text-center font-mono"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.fiYear || '-'}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b border-slate-700/50">
+                  <td className="py-3 px-4 text-slate-300">Years to FI</td>
+                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
+                    {fiYear ? fiYear - currentYear : '-'}
+                  </td>
+                  {scenarioProjections.map(sp => (
+                    <td
+                      key={sp.scenario._id}
+                      className="py-3 px-4 text-center font-mono"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.fiYear ? sp.fiYear - currentYear : '-'}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b border-slate-700/50">
+                  <td className="py-3 px-4 text-slate-300">FI Age</td>
+                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
+                    {currentProjections.find(p => p.isFiYear)?.age || '-'}
+                  </td>
+                  {scenarioProjections.map(sp => (
+                    <td
+                      key={sp.scenario._id}
+                      className="py-3 px-4 text-center font-mono"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.fiAge || '-'}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b border-slate-700/50">
+                  <td className="py-3 px-4 text-slate-300">Net Worth in 10 Years</td>
+                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
+                    {formatCurrency(currentProjections.find(p => p.year === currentYear + 10)?.netWorth || 0)}
+                  </td>
+                  {scenarioProjections.map(sp => {
+                    const row = sp.projections.find(p => p.year === currentYear + 10);
+                    return (
+                      <td
+                        key={sp.scenario._id}
+                        className="py-3 px-4 text-center font-mono"
+                        style={{ color: sp.scenario.color }}
+                      >
+                        {formatCurrency(row?.netWorth || 0)}
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr className="border-b border-slate-700/50">
+                  <td className="py-3 px-4 text-slate-300">Net Worth in 20 Years</td>
+                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
+                    {formatCurrency(currentProjections.find(p => p.year === currentYear + 20)?.netWorth || 0)}
+                  </td>
+                  {scenarioProjections.map(sp => {
+                    const row = sp.projections.find(p => p.year === currentYear + 20);
+                    return (
+                      <td
+                        key={sp.scenario._id}
+                        className="py-3 px-4 text-center font-mono"
+                        style={{ color: sp.scenario.color }}
+                      >
+                        {formatCurrency(row?.netWorth || 0)}
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr className="border-b border-slate-700/50">
+                  <td className="py-3 px-4 text-slate-300">Crossover Year</td>
+                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
+                    {currentProjections.find(p => p.isCrossover)?.year || '-'}
+                  </td>
+                  {scenarioProjections.map(sp => (
+                    <td
+                      key={sp.scenario._id}
+                      className="py-3 px-4 text-center font-mono"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.crossoverYear || '-'}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Manage Scenarios Link */}
+        <div className="text-center pt-4 border-t border-slate-700">
+          <button
+            onClick={() => setActiveTab('settings')}
+            className="text-sm text-violet-400 hover:text-violet-300 underline"
+          >
+            Manage Scenarios in Settings
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ============================================================================
@@ -1305,6 +1688,8 @@ interface SettingsTabProps {
   updateLocalSetting: ReturnType<typeof useFinancials>['updateLocalSetting'];
   levelInfo: ReturnType<typeof useFinancials>['levelInfo'];
   latestEntry: ReturnType<typeof useFinancials>['latestEntry'];
+  settings: ReturnType<typeof useFinancials>['settings'];
+  scenariosHook: ReturnType<typeof useScenarios>;
 }
 
 function SettingsTab({
@@ -1312,7 +1697,99 @@ function SettingsTab({
   updateLocalSetting,
   levelInfo,
   latestEntry,
+  settings,
+  scenariosHook,
 }: SettingsTabProps) {
+  const [showCreateScenario, setShowCreateScenario] = useState(false);
+  const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
+  const [scenarioForm, setScenarioForm] = useState({
+    name: '',
+    description: '',
+    currentRate: localSettings.rateOfReturn,
+    swr: localSettings.swr,
+    yearlyContribution: localSettings.yearlyContribution,
+    inflationRate: localSettings.inflationRate,
+    baseMonthlyBudget: localSettings.baseMonthlyBudget,
+    spendingGrowthRate: localSettings.spendingGrowthRate,
+  });
+
+  const resetScenarioForm = () => {
+    setScenarioForm({
+      name: '',
+      description: '',
+      currentRate: localSettings.rateOfReturn,
+      swr: localSettings.swr,
+      yearlyContribution: localSettings.yearlyContribution,
+      inflationRate: localSettings.inflationRate,
+      baseMonthlyBudget: localSettings.baseMonthlyBudget,
+      spendingGrowthRate: localSettings.spendingGrowthRate,
+    });
+  };
+
+  const handleCreateScenario = async () => {
+    if (!scenarioForm.name.trim()) return;
+    
+    await scenariosHook.createScenario({
+      name: scenarioForm.name.trim(),
+      description: scenarioForm.description.trim() || undefined,
+      currentRate: parseFloat(scenarioForm.currentRate) || 7,
+      swr: parseFloat(scenarioForm.swr) || 4,
+      yearlyContribution: parseFloat(scenarioForm.yearlyContribution) || 0,
+      inflationRate: parseFloat(scenarioForm.inflationRate) || 3,
+      baseMonthlyBudget: parseFloat(scenarioForm.baseMonthlyBudget) || 3000,
+      spendingGrowthRate: parseFloat(scenarioForm.spendingGrowthRate) || 2,
+    });
+    
+    resetScenarioForm();
+    setShowCreateScenario(false);
+  };
+
+  const handleUpdateScenario = async () => {
+    if (!editingScenario || !scenarioForm.name.trim()) return;
+    
+    await scenariosHook.updateScenario(editingScenario._id, {
+      name: scenarioForm.name.trim(),
+      description: scenarioForm.description.trim() || undefined,
+      currentRate: parseFloat(scenarioForm.currentRate) || 7,
+      swr: parseFloat(scenarioForm.swr) || 4,
+      yearlyContribution: parseFloat(scenarioForm.yearlyContribution) || 0,
+      inflationRate: parseFloat(scenarioForm.inflationRate) || 3,
+      baseMonthlyBudget: parseFloat(scenarioForm.baseMonthlyBudget) || 3000,
+      spendingGrowthRate: parseFloat(scenarioForm.spendingGrowthRate) || 2,
+    });
+    
+    setEditingScenario(null);
+    resetScenarioForm();
+  };
+
+  const startEditingScenario = (scenario: Scenario) => {
+    setScenarioForm({
+      name: scenario.name,
+      description: scenario.description || '',
+      currentRate: scenario.currentRate.toString(),
+      swr: scenario.swr.toString(),
+      yearlyContribution: scenario.yearlyContribution.toString(),
+      inflationRate: scenario.inflationRate.toString(),
+      baseMonthlyBudget: scenario.baseMonthlyBudget.toString(),
+      spendingGrowthRate: scenario.spendingGrowthRate.toString(),
+    });
+    setEditingScenario(scenario);
+    setShowCreateScenario(false);
+  };
+
+  const applyTemplate = (template: typeof SCENARIO_TEMPLATES[number]) => {
+    setScenarioForm(prev => ({
+      ...prev,
+      name: template.name,
+      description: template.description,
+      currentRate: template.currentRate.toString(),
+      swr: template.swr.toString(),
+      inflationRate: template.inflationRate.toString(),
+      yearlyContribution: 'yearlyContribution' in template 
+        ? template.yearlyContribution.toString() 
+        : localSettings.yearlyContribution,
+    }));
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
@@ -1529,6 +2006,291 @@ function SettingsTab({
               <span className="font-medium">On track:</span> With {localSettings.rateOfReturn}% returns and {localSettings.spendingGrowthRate}% spending rate, 
               you keep {(parseFloat(localSettings.rateOfReturn) - parseFloat(localSettings.spendingGrowthRate)).toFixed(1)}% of net worth growth toward FI each year.
             </p>
+          </div>
+        )}
+      </div>
+
+      {/* Scenarios Section */}
+      <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-violet-500/30">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+            <span className="w-2 h-2 bg-violet-400 rounded-full"></span>
+            Scenarios
+          </h3>
+          <button
+            onClick={() => {
+              resetScenarioForm();
+              setEditingScenario(null);
+              setShowCreateScenario(!showCreateScenario);
+            }}
+            className="px-3 py-1.5 text-sm bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-colors"
+          >
+            {showCreateScenario ? 'Cancel' : '+ New Scenario'}
+          </button>
+        </div>
+        
+        <p className="text-sm text-slate-400 mb-4">
+          Create different scenarios to compare how various assumptions affect your financial projections.
+          Toggle scenarios on/off to include them in comparisons.
+        </p>
+
+        {/* Create/Edit Scenario Form */}
+        {(showCreateScenario || editingScenario) && (
+          <div className="bg-slate-900/50 rounded-xl p-4 mb-4 border border-violet-500/20">
+            <h4 className="text-sm font-medium text-violet-400 mb-3">
+              {editingScenario ? `Edit: ${editingScenario.name}` : 'Create New Scenario'}
+            </h4>
+            
+            {/* Templates (only for new scenarios) */}
+            {!editingScenario && (
+              <div className="mb-4">
+                <p className="text-xs text-slate-500 mb-2">Quick start from template:</p>
+                <div className="flex flex-wrap gap-2">
+                  {SCENARIO_TEMPLATES.map(template => (
+                    <button
+                      key={template.name}
+                      onClick={() => applyTemplate(template)}
+                      className="px-2 py-1 text-xs bg-slate-700/50 text-slate-300 rounded hover:bg-slate-700 transition-colors"
+                      title={template.description}
+                    >
+                      {template.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Scenario Name *
+                </label>
+                <input
+                  type="text"
+                  value={scenarioForm.name}
+                  onChange={(e) => setScenarioForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., Conservative Plan"
+                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Description (optional)
+                </label>
+                <input
+                  type="text"
+                  value={scenarioForm.description}
+                  onChange={(e) => setScenarioForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Brief description..."
+                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Return Rate %</label>
+                <input
+                  type="number"
+                  value={scenarioForm.currentRate}
+                  onChange={(e) => setScenarioForm(prev => ({ ...prev, currentRate: e.target.value }))}
+                  placeholder="7"
+                  step="0.1"
+                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">SWR %</label>
+                <input
+                  type="number"
+                  value={scenarioForm.swr}
+                  onChange={(e) => setScenarioForm(prev => ({ ...prev, swr: e.target.value }))}
+                  placeholder="4"
+                  step="0.1"
+                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Inflation %</label>
+                <input
+                  type="number"
+                  value={scenarioForm.inflationRate}
+                  onChange={(e) => setScenarioForm(prev => ({ ...prev, inflationRate: e.target.value }))}
+                  placeholder="3"
+                  step="0.1"
+                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Yearly Contribution</label>
+                <input
+                  type="number"
+                  value={scenarioForm.yearlyContribution}
+                  onChange={(e) => setScenarioForm(prev => ({ ...prev, yearlyContribution: e.target.value }))}
+                  placeholder="0"
+                  step="1000"
+                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Base Budget</label>
+                <input
+                  type="number"
+                  value={scenarioForm.baseMonthlyBudget}
+                  onChange={(e) => setScenarioForm(prev => ({ ...prev, baseMonthlyBudget: e.target.value }))}
+                  placeholder="3000"
+                  step="100"
+                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Spending Rate %</label>
+                <input
+                  type="number"
+                  value={scenarioForm.spendingGrowthRate}
+                  onChange={(e) => setScenarioForm(prev => ({ ...prev, spendingGrowthRate: e.target.value }))}
+                  placeholder="2"
+                  step="0.1"
+                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            
+            <div className="flex gap-2">
+              {editingScenario ? (
+                <>
+                  <button
+                    onClick={handleUpdateScenario}
+                    disabled={!scenarioForm.name.trim()}
+                    className="px-4 py-2 bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Save Changes
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingScenario(null);
+                      resetScenarioForm();
+                    }}
+                    className="px-4 py-2 bg-slate-700/50 text-slate-400 rounded-lg hover:bg-slate-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleCreateScenario}
+                    disabled={!scenarioForm.name.trim()}
+                    className="px-4 py-2 bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Create Scenario
+                  </button>
+                  <button
+                    onClick={() => scenariosHook.createScenarioFromSettings('Current Settings', settings)}
+                    className="px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors"
+                    title="Create a scenario with your current settings"
+                  >
+                    Save Current as Scenario
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Scenarios List */}
+        {scenariosHook.scenarios.length > 0 ? (
+          <div className="space-y-2">
+            {scenariosHook.scenarios.map(scenario => (
+              <div
+                key={scenario._id}
+                className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                  scenario.isActive
+                    ? 'bg-slate-900/50 border-slate-600'
+                    : 'bg-slate-900/20 border-slate-700/50 opacity-60'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: scenario.color }}
+                  />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-200">{scenario.name}</span>
+                      {!scenario.isActive && (
+                        <span className="text-xs text-slate-500 bg-slate-700/50 px-1.5 py-0.5 rounded">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                    {scenario.description && (
+                      <p className="text-xs text-slate-500">{scenario.description}</p>
+                    )}
+                    <div className="flex gap-3 text-xs text-slate-500 mt-1">
+                      <span>Return: <span className="text-emerald-400">{scenario.currentRate}%</span></span>
+                      <span>SWR: <span className="text-amber-400">{scenario.swr}%</span></span>
+                      <span>Contribution: <span className="text-sky-400">{formatCurrency(scenario.yearlyContribution)}/yr</span></span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => scenariosHook.toggleScenarioActive(scenario._id)}
+                    className={`p-1.5 rounded transition-colors ${
+                      scenario.isActive
+                        ? 'text-emerald-400 hover:bg-emerald-500/20'
+                        : 'text-slate-500 hover:bg-slate-700'
+                    }`}
+                    title={scenario.isActive ? 'Deactivate' : 'Activate'}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      {scenario.isActive ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                      )}
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => startEditingScenario(scenario)}
+                    className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors"
+                    title="Edit"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => scenariosHook.duplicateScenario(scenario._id)}
+                    className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors"
+                    title="Duplicate"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete scenario "${scenario.name}"?`)) {
+                        scenariosHook.deleteScenario(scenario._id);
+                      }
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                    title="Delete"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-6 text-slate-500">
+            <p className="mb-2">No scenarios created yet.</p>
+            <p className="text-xs">Create scenarios to compare different financial assumptions.</p>
           </div>
         )}
       </div>

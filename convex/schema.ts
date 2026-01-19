@@ -23,4 +23,21 @@ export default defineSchema({
     amount: v.number(),
     timestamp: v.number(),
   }).index("by_user", ["userId"]),
+
+  scenarios: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    color: v.string(), // Hex color for chart visualization
+    isActive: v.boolean(), // Whether to include in comparisons
+    // Scenario-specific settings (override user settings)
+    currentRate: v.number(),
+    swr: v.number(),
+    yearlyContribution: v.number(),
+    inflationRate: v.number(),
+    baseMonthlyBudget: v.number(),
+    spendingGrowthRate: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
 });
