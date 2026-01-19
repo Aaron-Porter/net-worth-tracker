@@ -14,6 +14,10 @@ import type * as http from "../http.js";
 import type * as scenarios from "../scenarios.js";
 import type * as settings from "../settings.js";
 
+// Note: The scenarios and settings modules have been updated.
+// scenarios: list, getSelected, get, create, createDefault, update, remove, duplicate, toggleSelected, selectOnly, setSelected
+// settings: getProfile, saveProfile, get (legacy), save (legacy)
+
 import type {
   ApiFromModules,
   FilterApi,

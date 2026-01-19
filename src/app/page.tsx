@@ -1,19 +1,13 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useMutation, useConvexAuth } from 'convex/react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { api } from '../../convex/_generated/api'
 import { Id } from '../../convex/_generated/dataModel'
 import { SignIn } from './components/SignIn'
-import {
-  useFinancials,
-  LEVEL_THRESHOLDS,
-  formatCurrency,
-  formatDate,
-  getTimeSinceEntry,
-} from '../lib/useFinancials'
 import { useScenarios, Scenario, ScenarioProjection, SCENARIO_TEMPLATES } from '../lib/useScenarios'
+import { formatCurrency, formatDate, getTimeSinceEntry, LEVEL_THRESHOLDS } from '../lib/calculations'
 import {
   LineChart,
   Line,
@@ -28,7 +22,7 @@ import {
   ReferenceLine,
 } from 'recharts'
 
-type Tab = 'dashboard' | 'entries' | 'projections' | 'levels' | 'settings'
+type Tab = 'dashboard' | 'entries' | 'projections' | 'levels' | 'scenarios'
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useConvexAuth()
@@ -51,10 +45,7 @@ export default function Home() {
 function AuthenticatedApp() {
   const { signOut } = useAuthActions()
   
-  // Use centralized calculations hook
-  const financials = useFinancials()
-  
-  // Use scenarios hook
+  // Use scenarios hook - the primary source of truth
   const scenariosHook = useScenarios()
   
   // Mutations
@@ -63,29 +54,18 @@ function AuthenticatedApp() {
   
   // UI state
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
-  const [projectionsView, setProjectionsView] = useState<'table' | 'chart' | 'compare'>('table')
+  const [projectionsView, setProjectionsView] = useState<'table' | 'chart'>('table')
   const [newAmount, setNewAmount] = useState<string>('')
 
-  // Destructure commonly used values from financials
-  const {
-    isLoading,
-    settings,
-    entries,
-    latestEntry,
-    currentNetWorth,
-    growthRates,
-    projections,
-    levelInfo,
-    fiYear,
-    crossoverYear,
-    currentFiProgress,
-    currentMonthlySwr,
-    currentAnnualSwr,
-    includeContributions,
-    setIncludeContributions,
-    localSettings,
-    updateLocalSetting,
-  } = financials
+  // Get the primary scenario (first selected) for dashboard display
+  const primaryProjection = scenariosHook.scenarioProjections[0] || null;
+
+  // Create default scenario if user has none
+  useEffect(() => {
+    if (!scenariosHook.isLoading && !scenariosHook.hasScenarios) {
+      scenariosHook.createDefaultScenario();
+    }
+  }, [scenariosHook.isLoading, scenariosHook.hasScenarios, scenariosHook]);
 
   const handleAddEntry = async () => {
     const amount = parseFloat(newAmount.replace(/,/g, ''))
@@ -106,8 +86,8 @@ function AuthenticatedApp() {
     return value.replace(/[^0-9.]/g, '')
   }
 
-  // Show loading while settings are being fetched
-  if (isLoading) {
+  // Show loading while data is being fetched
+  if (scenariosHook.isLoading) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-center">
         <div className="text-slate-400">Loading...</div>
@@ -174,16 +154,21 @@ function AuthenticatedApp() {
               )}
             </button>
             <button
-              onClick={() => setActiveTab('settings')}
+              onClick={() => setActiveTab('scenarios')}
               className={`px-6 py-4 font-medium transition-colors relative ${
-                activeTab === 'settings'
-                  ? 'text-emerald-400'
+                activeTab === 'scenarios'
+                  ? 'text-violet-400'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Settings
-              {activeTab === 'settings' && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
+              Scenarios
+              {scenariosHook.scenarios.length > 0 && (
+                <span className="ml-1 text-xs bg-violet-500/30 px-1.5 py-0.5 rounded-full">
+                  {scenariosHook.selectedScenarios.length}/{scenariosHook.scenarios.length}
+                </span>
+              )}
+              {activeTab === 'scenarios' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-400" />
               )}
             </button>
             <div className="flex-1" />
@@ -200,14 +185,9 @@ function AuthenticatedApp() {
       {/* Dashboard Tab */}
       {activeTab === 'dashboard' && (
         <DashboardTab
-          latestEntry={latestEntry}
-          currentNetWorth={currentNetWorth}
-          growthRates={growthRates}
-          settings={settings}
-          includeContributions={includeContributions}
-          setIncludeContributions={setIncludeContributions}
-          currentMonthlySwr={currentMonthlySwr}
-          currentAnnualSwr={currentAnnualSwr}
+          latestEntry={scenariosHook.latestEntry}
+          primaryProjection={primaryProjection}
+          selectedScenarios={scenariosHook.selectedScenarios}
           setActiveTab={setActiveTab}
         />
       )}
@@ -215,7 +195,7 @@ function AuthenticatedApp() {
       {/* Entries Tab */}
       {activeTab === 'entries' && (
         <EntriesTab
-          entries={entries}
+          entries={scenariosHook.entries}
           newAmount={newAmount}
           setNewAmount={setNewAmount}
           formatNetWorthInput={formatNetWorthInput}
@@ -228,38 +208,28 @@ function AuthenticatedApp() {
       {/* Projections Tab */}
       {activeTab === 'projections' && (
         <ProjectionsTab
-          latestEntry={latestEntry}
-          projections={projections}
-          settings={settings}
-          localSettings={localSettings}
+          latestEntry={scenariosHook.latestEntry}
+          scenarioProjections={scenariosHook.scenarioProjections}
+          profile={scenariosHook.profile}
           projectionsView={projectionsView}
           setProjectionsView={setProjectionsView}
-          fiYear={fiYear}
-          crossoverYear={crossoverYear}
           setActiveTab={setActiveTab}
-          currentNetWorth={currentNetWorth}
-          scenariosHook={scenariosHook}
         />
       )}
 
       {/* Levels Tab */}
       {activeTab === 'levels' && (
         <LevelsTab
-          latestEntry={latestEntry}
-          levelInfo={levelInfo}
-          localSettings={localSettings}
+          latestEntry={scenariosHook.latestEntry}
+          primaryProjection={primaryProjection}
+          profile={scenariosHook.profile}
           setActiveTab={setActiveTab}
         />
       )}
 
-      {/* Settings Tab */}
-      {activeTab === 'settings' && (
-        <SettingsTab
-          localSettings={localSettings}
-          updateLocalSetting={updateLocalSetting}
-          levelInfo={levelInfo}
-          latestEntry={latestEntry}
-          settings={settings}
+      {/* Scenarios Tab */}
+      {activeTab === 'scenarios' && (
+        <ScenariosTab
           scenariosHook={scenariosHook}
         />
       )}
@@ -272,26 +242,16 @@ function AuthenticatedApp() {
 // ============================================================================
 
 interface DashboardTabProps {
-  latestEntry: ReturnType<typeof useFinancials>['latestEntry'];
-  currentNetWorth: ReturnType<typeof useFinancials>['currentNetWorth'];
-  growthRates: ReturnType<typeof useFinancials>['growthRates'];
-  settings: ReturnType<typeof useFinancials>['settings'];
-  includeContributions: boolean;
-  setIncludeContributions: (value: boolean) => void;
-  currentMonthlySwr: number;
-  currentAnnualSwr: number;
+  latestEntry: ReturnType<typeof useScenarios>['latestEntry'];
+  primaryProjection: ScenarioProjection | null;
+  selectedScenarios: Scenario[];
   setActiveTab: (tab: Tab) => void;
 }
 
 function DashboardTab({
   latestEntry,
-  currentNetWorth,
-  growthRates,
-  settings,
-  includeContributions,
-  setIncludeContributions,
-  currentMonthlySwr,
-  currentAnnualSwr,
+  primaryProjection,
+  selectedScenarios,
   setActiveTab,
 }: DashboardTabProps) {
   return (
@@ -304,69 +264,43 @@ function DashboardTab({
       </p>
 
       {/* Current Total Display */}
-      {latestEntry ? (
+      {latestEntry && primaryProjection ? (
         <div className="mb-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-emerald-500/30">
-          {/* Toggle for including contributions */}
+          {/* Scenario indicator */}
           <div className="flex justify-center mb-4">
-            <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
-              <button
-                onClick={() => setIncludeContributions(false)}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  !includeContributions
-                    ? 'bg-emerald-500/20 text-emerald-400'
-                    : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Appreciation Only
-              </button>
-              <button
-                onClick={() => setIncludeContributions(true)}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  includeContributions
-                    ? 'bg-sky-500/20 text-sky-400'
-                    : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                + Contributions
-              </button>
+            <div 
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm"
+              style={{ backgroundColor: `${primaryProjection.scenario.color}20`, color: primaryProjection.scenario.color }}
+            >
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: primaryProjection.scenario.color }} />
+              {primaryProjection.scenario.name}
+              {selectedScenarios.length > 1 && (
+                <span className="text-slate-400">+{selectedScenarios.length - 1} more</span>
+              )}
             </div>
           </div>
 
           <h2 className="text-sm font-medium text-slate-400 text-center mb-1">
-            {includeContributions ? 'Projected Net Worth' : 'Current Net Worth'}
+            Current Net Worth
           </h2>
           <div className="text-center">
             <span className="text-4xl md:text-5xl font-bold font-mono bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
-              {formatCurrency(currentNetWorth.total, 6)}
+              {formatCurrency(primaryProjection.currentNetWorth.total, 6)}
             </span>
           </div>
-          <div className={`mt-4 flex justify-center ${includeContributions ? 'gap-4' : 'gap-8'} text-sm`}>
+          <div className="mt-4 flex justify-center gap-8 text-sm">
             <div className="text-center">
               <p className="text-slate-500">Base Amount</p>
-              <p className="text-slate-300 font-mono">{formatCurrency(currentNetWorth.baseAmount)}</p>
+              <p className="text-slate-300 font-mono">{formatCurrency(primaryProjection.currentNetWorth.baseAmount)}</p>
             </div>
             <div className="text-center">
               <p className="text-slate-500">Appreciation</p>
-              <p className="text-emerald-400 font-mono">+{formatCurrency(currentNetWorth.appreciation, 4)}</p>
+              <p className="text-emerald-400 font-mono">+{formatCurrency(primaryProjection.currentNetWorth.appreciation, 4)}</p>
             </div>
-            {includeContributions && (
-              <div className="text-center">
-                <p className="text-slate-500">Saved</p>
-                <p className="text-sky-400 font-mono">+{formatCurrency(currentNetWorth.contributions, 4)}</p>
-              </div>
-            )}
           </div>
           <p className="text-slate-500 text-center mt-4 text-xs">
-            Last updated {getTimeSinceEntry(latestEntry.timestamp)} at {settings.currentRate}% annual return
-            {includeContributions && settings.yearlyContribution > 0 && (
-              <span> + {formatCurrency(settings.yearlyContribution)}/yr contributions</span>
-            )}
+            Last updated {getTimeSinceEntry(latestEntry.timestamp)} at {primaryProjection.scenario.currentRate}% annual return
           </p>
-          {includeContributions && settings.yearlyContribution === 0 && (
-            <p className="text-amber-400/70 text-center mt-2 text-xs">
-              Set your yearly contribution in Settings to see savings growth
-            </p>
-          )}
         </div>
       ) : (
         <div className="mb-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700 text-center">
@@ -381,7 +315,7 @@ function DashboardTab({
       )}
 
       {/* Metrics Section */}
-      {latestEntry && (
+      {latestEntry && primaryProjection && (
         <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
           <h2 className="text-lg font-semibold text-slate-300 mb-4">
             Metrics
@@ -390,46 +324,38 @@ function DashboardTab({
           {/* Growth/Appreciation Rates */}
           <div className="mb-6">
             <h3 className="text-sm font-medium text-slate-400 mb-3">
-              {includeContributions ? 'Growth Rate' : 'Appreciation Rate'}
-              {includeContributions && (
-                <span className="ml-2 text-xs text-sky-400">(includes contributions)</span>
-              )}
+              Appreciation Rate
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Second</p>
-                <p className={`${includeContributions ? 'text-sky-400' : 'text-emerald-400'} font-mono`}>
-                  {formatCurrency(growthRates.perSecond, 6)}
+                <p className="text-emerald-400 font-mono">
+                  {formatCurrency(primaryProjection.growthRates.perSecond, 6)}
                 </p>
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Minute</p>
-                <p className={`${includeContributions ? 'text-sky-400' : 'text-emerald-400'} font-mono`}>
-                  {formatCurrency(growthRates.perMinute, 4)}
+                <p className="text-emerald-400 font-mono">
+                  {formatCurrency(primaryProjection.growthRates.perMinute, 4)}
                 </p>
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Hour</p>
-                <p className={`${includeContributions ? 'text-sky-400' : 'text-emerald-400'} font-mono`}>
-                  {formatCurrency(growthRates.perHour)}
+                <p className="text-emerald-400 font-mono">
+                  {formatCurrency(primaryProjection.growthRates.perHour)}
                 </p>
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Day</p>
-                <p className={`${includeContributions ? 'text-sky-400' : 'text-emerald-400'} font-mono`}>
-                  {formatCurrency(growthRates.perDay)}
+                <p className="text-emerald-400 font-mono">
+                  {formatCurrency(primaryProjection.growthRates.perDay)}
                 </p>
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3 col-span-2 sm:col-span-2">
                 <p className="text-slate-500 text-xs">Per Year</p>
-                <p className={`${includeContributions ? 'text-sky-400' : 'text-emerald-400'} font-mono text-lg`}>
-                  {formatCurrency(growthRates.perYear)}
+                <p className="text-emerald-400 font-mono text-lg">
+                  {formatCurrency(primaryProjection.growthRates.perYear)}
                 </p>
-                {includeContributions && settings.yearlyContribution > 0 && (
-                  <p className="text-slate-500 text-xs mt-1">
-                    {formatCurrency(growthRates.yearlyAppreciation)} appreciation + {formatCurrency(growthRates.yearlyContributions)} saved
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -437,19 +363,19 @@ function DashboardTab({
           {/* Safe Withdrawal Rate */}
           <div>
             <h3 className="text-sm font-medium text-slate-400 mb-3">
-              Safe Withdrawal Rate <span className="text-slate-500">({settings.swr}%)</span>
+              Safe Withdrawal Rate <span className="text-slate-500">({primaryProjection.scenario.swr}%)</span>
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Annual</p>
                 <p className="text-amber-400 font-mono text-lg">
-                  {formatCurrency(currentAnnualSwr)}
+                  {formatCurrency(primaryProjection.currentNetWorth.total * (primaryProjection.scenario.swr / 100))}
                 </p>
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Monthly</p>
                 <p className="text-amber-400 font-mono text-lg">
-                  {formatCurrency(currentMonthlySwr)}
+                  {formatCurrency(primaryProjection.currentMonthlySwr)}
                 </p>
               </div>
             </div>
@@ -465,7 +391,7 @@ function DashboardTab({
 // ============================================================================
 
 interface EntriesTabProps {
-  entries: ReturnType<typeof useFinancials>['entries'];
+  entries: ReturnType<typeof useScenarios>['entries'];
   newAmount: string;
   setNewAmount: (value: string) => void;
   formatNetWorthInput: (value: string) => string;
@@ -481,7 +407,6 @@ function EntriesTab({
   formatNetWorthInput,
   handleAddEntry,
   handleDeleteEntry,
-  setActiveTab,
 }: EntriesTabProps) {
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -590,169 +515,162 @@ function EntriesTab({
 // ============================================================================
 
 interface ProjectionsTabProps {
-  latestEntry: ReturnType<typeof useFinancials>['latestEntry'];
-  projections: ReturnType<typeof useFinancials>['projections'];
-  settings: ReturnType<typeof useFinancials>['settings'];
-  localSettings: ReturnType<typeof useFinancials>['localSettings'];
-  projectionsView: 'table' | 'chart' | 'compare';
-  setProjectionsView: (view: 'table' | 'chart' | 'compare') => void;
-  fiYear: number | null;
-  crossoverYear: number | null;
+  latestEntry: ReturnType<typeof useScenarios>['latestEntry'];
+  scenarioProjections: ScenarioProjection[];
+  profile: ReturnType<typeof useScenarios>['profile'];
+  projectionsView: 'table' | 'chart';
+  setProjectionsView: (view: 'table' | 'chart') => void;
   setActiveTab: (tab: Tab) => void;
-  currentNetWorth: ReturnType<typeof useFinancials>['currentNetWorth'];
-  scenariosHook: ReturnType<typeof useScenarios>;
 }
 
 function ProjectionsTab({
   latestEntry,
-  projections,
-  settings,
-  localSettings,
+  scenarioProjections,
+  profile,
   projectionsView,
   setProjectionsView,
-  fiYear,
-  crossoverYear,
   setActiveTab,
-  currentNetWorth,
-  scenariosHook,
 }: ProjectionsTabProps) {
-  // Chart data (limited to 25 years for readability)
-  const chartData = useMemo(() => {
-    return projections
-      .filter((d): d is typeof d & { year: number } => typeof d.year === 'number')
-      .slice(0, 25)
-      .map(d => ({
-        year: d.year,
-        netWorth: Math.round(d.netWorth),
-        fiTarget: Math.round(d.fiTarget),
-        interest: Math.round(d.interest),
-        contributed: Math.round(d.contributed),
-        fiProgress: Math.round(d.fiProgress * 10) / 10,
-        initialAmount: Math.round(latestEntry?.amount || 0),
-        monthlySpend: Math.round(d.monthlySpend),
-        annualSpend: Math.round(d.monthlySpend * 12),
-      }))
-  }, [projections, latestEntry])
+  const currentYear = new Date().getFullYear();
+  const primaryProjection = scenarioProjections[0] || null;
 
-  // Generate scenario projections
-  const scenarioProjections = useMemo(() => {
-    if (!latestEntry) return [];
-    return scenariosHook.generateScenarioProjections(
-      latestEntry,
-      currentNetWorth.total,
-      currentNetWorth.appreciation,
-      settings.birthDate
+  // Prepare comparison chart data (limited to 30 years)
+  const comparisonChartData = useMemo(() => {
+    if (!primaryProjection) return [];
+    
+    const years = primaryProjection.projections
+      .filter((d): d is typeof d & { year: number } => typeof d.year === 'number')
+      .slice(0, 30)
+      .map(d => d.year);
+
+    return years.map(year => {
+      const dataPoint: Record<string, number | string> = { year };
+
+      scenarioProjections.forEach(sp => {
+        const row = sp.projections.find(p => p.year === year);
+        dataPoint[sp.scenario.name] = Math.round(row?.netWorth || 0);
+      });
+
+      return dataPoint;
+    });
+  }, [primaryProjection, scenarioProjections]);
+
+  if (!latestEntry) {
+    return (
+      <div className="h-[calc(100vh-57px)] flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-400 mb-4">No net worth data found.</p>
+          <button
+            onClick={() => setActiveTab('entries')}
+            className="text-emerald-400 hover:text-emerald-300 underline"
+          >
+            Add your first entry
+          </button>
+        </div>
+      </div>
     );
-  }, [latestEntry, currentNetWorth, settings.birthDate, scenariosHook])
+  }
+
+  if (scenarioProjections.length === 0) {
+    return (
+      <div className="h-[calc(100vh-57px)] flex items-center justify-center">
+        <div className="text-center p-8 max-w-md">
+          <div className="w-16 h-16 mx-auto mb-4 bg-violet-500/20 rounded-full flex items-center justify-center">
+            <svg className="w-8 h-8 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-slate-200 mb-2">No Scenarios Selected</h3>
+          <p className="text-slate-400 text-sm mb-4">
+            Select at least one scenario to view projections.
+          </p>
+          <button
+            onClick={() => setActiveTab('scenarios')}
+            className="px-4 py-2 bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-colors"
+          >
+            Manage Scenarios
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-57px)] flex flex-col p-4">
-      {!latestEntry ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-slate-400 mb-4">No net worth data found.</p>
-            <button
-              onClick={() => setActiveTab('entries')}
-              className="text-emerald-400 hover:text-emerald-300 underline"
+      {/* Summary Bar */}
+      <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+        <div className="flex flex-wrap items-center gap-2">
+          {scenarioProjections.map(sp => (
+            <div
+              key={sp.scenario._id}
+              className="flex items-center gap-2 px-2 py-1 rounded-full text-xs"
+              style={{ backgroundColor: `${sp.scenario.color}20`, color: sp.scenario.color }}
             >
-              Add your first entry
-            </button>
-          </div>
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: sp.scenario.color }} />
+              {sp.scenario.name}
+              {sp.fiYear && (
+                <span className="text-slate-400">FI: {sp.fiYear}</span>
+              )}
+            </div>
+          ))}
         </div>
-      ) : (
-        <>
-          {/* Summary Bar */}
-          <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-              <span>Net Worth: <span className="text-emerald-400 font-mono">{formatCurrency(latestEntry.amount)}</span></span>
-              <span>Return: <span className="text-emerald-400 font-mono">{localSettings.rateOfReturn}%</span></span>
-              <span>SWR: <span className="text-amber-400 font-mono">{localSettings.swr}%</span></span>
-              <span>Contribution: <span className="text-sky-400 font-mono">{formatCurrency(settings.yearlyContribution)}/yr</span></span>
-              <span>Base Budget: <span className="text-amber-400 font-mono">{formatCurrency(parseFloat(localSettings.baseMonthlyBudget) || 0)}</span></span>
-              <span>Spend Rate: <span className="text-violet-400 font-mono">{localSettings.spendingGrowthRate}%</span></span>
-              <span>Inflation: <span className="text-amber-400 font-mono">{localSettings.inflationRate}%</span></span>
-            </div>
-            <div className="flex-1" />
-            <button
-              onClick={() => setActiveTab('settings')}
-              className="text-xs text-slate-400 hover:text-slate-200 underline"
-            >
-              Edit Settings
-            </button>
-            <div className="flex rounded-lg border border-slate-600 overflow-hidden">
-              <button
-                onClick={() => setProjectionsView('table')}
-                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                  projectionsView === 'table'
-                    ? 'bg-emerald-500/20 text-emerald-400'
-                    : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Table
-              </button>
-              <button
-                onClick={() => setProjectionsView('chart')}
-                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                  projectionsView === 'chart'
-                    ? 'bg-emerald-500/20 text-emerald-400'
-                    : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Chart
-              </button>
-              <button
-                onClick={() => setProjectionsView('compare')}
-                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                  projectionsView === 'compare'
-                    ? 'bg-violet-500/20 text-violet-400'
-                    : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Compare
-                {scenariosHook.activeScenarios.length > 0 && (
-                  <span className="ml-1 text-xs bg-violet-500/30 px-1.5 py-0.5 rounded-full">
-                    {scenariosHook.activeScenarios.length}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
+        <div className="flex-1" />
+        <button
+          onClick={() => setActiveTab('scenarios')}
+          className="text-xs text-slate-400 hover:text-slate-200 underline"
+        >
+          Edit Scenarios
+        </button>
+        <div className="flex rounded-lg border border-slate-600 overflow-hidden">
+          <button
+            onClick={() => setProjectionsView('table')}
+            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+              projectionsView === 'table'
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Table
+          </button>
+          <button
+            onClick={() => setProjectionsView('chart')}
+            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+              projectionsView === 'chart'
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Chart
+          </button>
+        </div>
+      </div>
 
-          {/* Projections Content */}
-          {projectionsView === 'table' ? (
-            <ProjectionsTable
-              projections={projections}
-              birthDate={settings.birthDate}
-            />
-          ) : projectionsView === 'chart' ? (
-            <ProjectionsChart
-              chartData={chartData}
-              fiYear={fiYear}
-              crossoverYear={crossoverYear}
-            />
-          ) : (
-            <ScenariosCompareView
-              scenarioProjections={scenarioProjections}
-              currentProjections={projections}
-              localSettings={localSettings}
-              fiYear={fiYear}
-              setActiveTab={setActiveTab}
-            />
-          )}
-        </>
+      {/* Projections Content */}
+      {projectionsView === 'table' ? (
+        <ProjectionsTable
+          scenarioProjections={scenarioProjections}
+          birthDate={profile.birthDate}
+        />
+      ) : (
+        <ProjectionsChart
+          scenarioProjections={scenarioProjections}
+          comparisonChartData={comparisonChartData}
+          currentYear={currentYear}
+        />
       )}
     </div>
-  )
+  );
 }
 
 function ProjectionsTable({
-  projections,
+  scenarioProjections,
   birthDate,
 }: {
-  projections: ReturnType<typeof useFinancials>['projections'];
+  scenarioProjections: ScenarioProjection[];
   birthDate: string;
 }) {
-  const currentYear = new Date().getFullYear()
+  const primaryProjection = scenarioProjections[0];
+  const showComparison = scenarioProjections.length > 1;
   
   return (
     <div className="flex-1 overflow-auto bg-slate-800/30 rounded-xl border border-slate-700">
@@ -761,21 +679,23 @@ function ProjectionsTable({
           <tr className="border-b border-slate-700">
             <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Year</th>
             {birthDate && <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Age</th>}
-            <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Elapsed</th>
-            <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Net Worth</th>
-            <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Interest</th>
-            <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Contributed</th>
+            {scenarioProjections.map(sp => (
+              <th 
+                key={sp.scenario._id} 
+                className="text-right font-medium py-3 px-3 whitespace-nowrap"
+                style={{ color: sp.scenario.color }}
+              >
+                {sp.scenario.name}
+              </th>
+            ))}
             <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Monthly SWR</th>
             <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Monthly Budget</th>
             <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">FI %</th>
-            <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700">
-              Coast FI {birthDate ? 'Age' : 'Year'}
-            </th>
           </tr>
         </thead>
         <tbody>
-          {projections.map((row) => {
-            const isNow = row.year === 'Now'
+          {primaryProjection.projections.map((row) => {
+            const isNow = row.year === 'Now';
             
             return (
               <tr
@@ -784,28 +704,26 @@ function ProjectionsTable({
                   isNow ? 'border-b-2 border-slate-600 bg-slate-700/30' : ''
                 } ${row.isFiYear ? 'bg-emerald-900/30 border-emerald-500/50' : ''
                 } ${row.swrCoversSpend && !row.isFiYear && !isNow ? 'bg-emerald-900/10' : ''
-                } ${row.isCrossover ? 'bg-sky-900/30 border-sky-500/50' : ''
                 } ${isNow && row.swrCoversSpend ? 'bg-emerald-900/30' : ''}`}
               >
                 <td className={`py-2 px-3 font-medium ${isNow ? 'text-slate-200 font-semibold' : 'text-slate-300'}`}>
                   {row.year}
                   {row.isFiYear && <span className="ml-2 text-xs text-emerald-400 font-semibold">FI</span>}
                   {isNow && row.swrCoversSpend && <span className="ml-2 text-xs text-emerald-400 font-semibold">FI</span>}
-                  {row.isCrossover && <span className="ml-2 text-xs text-sky-400 font-semibold">✨</span>}
                 </td>
                 {birthDate && <td className={`py-2 px-3 ${isNow ? 'text-slate-300 font-medium' : 'text-slate-400'}`}>{row.age}</td>}
-                <td className={`py-2 px-3 ${isNow ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {isNow ? '-' : `+${row.yearsFromEntry.toFixed(1)}y`}
-                </td>
-                <td className={`py-2 px-3 text-right font-mono text-emerald-400 ${isNow ? 'font-semibold' : ''}`}>
-                  {formatCurrency(row.netWorth)}
-                </td>
-                <td className={`py-2 px-3 text-right font-mono ${row.interest > row.contributed ? 'text-emerald-400' : 'text-emerald-400/70'}`}>
-                  +{formatCurrency(row.interest)}
-                </td>
-                <td className="py-2 px-3 text-right font-mono text-sky-400/70">
-                  {isNow ? '-' : formatCurrency(row.contributed)}
-                </td>
+                {scenarioProjections.map(sp => {
+                  const scenarioRow = sp.projections.find(p => p.year === row.year);
+                  return (
+                    <td 
+                      key={sp.scenario._id}
+                      className={`py-2 px-3 text-right font-mono ${isNow ? 'font-semibold' : ''}`}
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {formatCurrency(scenarioRow?.netWorth || 0)}
+                    </td>
+                  );
+                })}
                 <td className={`py-2 px-3 text-right font-mono ${row.swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/80'}`}>
                   {formatCurrency(row.monthlySwr)}
                 </td>
@@ -814,24 +732,6 @@ function ProjectionsTable({
                 </td>
                 <td className={`py-2 px-3 text-right font-mono ${row.fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}>
                   {row.fiProgress.toFixed(1)}%
-                </td>
-                <td className="py-2 px-3 text-right font-mono border-l border-slate-700">
-                  {row.coastFiYear ? (
-                    <span className={row.swrCoversSpend ? 'text-emerald-400' : 'text-violet-400'}>
-                      {row.swrCoversSpend ? (
-                        'Now'
-                      ) : (
-                        <>
-                          {row.coastFiYear - (typeof row.year === 'number' ? row.year : currentYear)}y
-                          <span className="text-slate-500 text-xs ml-1">
-                            ({birthDate ? `age ${row.coastFiAge}` : row.coastFiYear})
-                          </span>
-                        </>
-                      )}
-                    </span>
-                  ) : (
-                    <span className="text-slate-600">-</span>
-                  )}
                 </td>
               </tr>
             )
@@ -843,397 +743,62 @@ function ProjectionsTable({
 }
 
 function ProjectionsChart({
-  chartData,
-  fiYear,
-  crossoverYear,
+  scenarioProjections,
+  comparisonChartData,
+  currentYear,
 }: {
-  chartData: Array<{
-    year: number;
-    netWorth: number;
-    fiTarget: number;
-    interest: number;
-    contributed: number;
-    fiProgress: number;
-    monthlySpend: number;
-    annualSpend: number;
-  }>;
-  fiYear: number | null;
-  crossoverYear: number | null;
+  scenarioProjections: ScenarioProjection[];
+  comparisonChartData: Record<string, number | string>[];
+  currentYear: number;
 }) {
-  const currentYear = new Date().getFullYear()
-
-  if (chartData.length === 0) {
+  if (comparisonChartData.length === 0) {
     return <div className="text-slate-400">No projection data available</div>
   }
 
   return (
     <div className="flex-1 bg-slate-800/30 rounded-xl border border-slate-700 p-6 overflow-auto">
       <div className="space-y-8">
-        {/* Chart 1: Net Worth Over Time */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-medium text-slate-200">Net Worth Over Time</h3>
-            {fiYear && (
-              <span className="text-sm text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full">
-                FI in {fiYear - currentYear} years ({fiYear})
-              </span>
-            )}
-          </div>
-          <div className="w-full h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="year" stroke="#94a3b8" />
-                <YAxis 
-                  stroke="#94a3b8"
-                  tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`}
-                />
-                <Tooltip 
-                  formatter={(value) => formatCurrency(value as number)}
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="netWorth" 
-                  name="Net Worth"
-                  stroke="#10b981" 
-                  strokeWidth={3}
-                  dot={true}
-                  isAnimationActive={false}
-                  connectNulls
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="fiTarget" 
-                  name="FI Target"
-                  stroke="#8b5cf6" 
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={true}
-                  isAnimationActive={false}
-                  connectNulls
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Chart 2: Interest vs Contributions */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-medium text-slate-200">Interest vs Contributions</h3>
-            {crossoverYear && (
-              <span className="text-sm text-sky-400 bg-sky-400/10 px-3 py-1 rounded-full">
-                Crossover in {crossoverYear - currentYear} years
-              </span>
-            )}
-          </div>
-          <div className="w-full h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="year" stroke="#94a3b8" />
-                <YAxis 
-                  stroke="#94a3b8"
-                  tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`}
-                />
-                <Tooltip 
-                  formatter={(value) => formatCurrency(value as number)}
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                />
-                <Legend />
-                <Area 
-                  type="monotone" 
-                  dataKey="contributed" 
-                  name="Contributions"
-                  stackId="1"
-                  stroke="#0ea5e9" 
-                  fill="#0ea5e9"
-                  isAnimationActive={false}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="interest" 
-                  name="Interest Earned"
-                  stackId="1"
-                  stroke="#10b981" 
-                  fill="#10b981"
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Chart 3: FI Progress */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-medium text-slate-200">FI Progress</h3>
-            <span className="text-sm text-violet-400 bg-violet-400/10 px-3 py-1 rounded-full">
-              Currently {chartData[0]?.fiProgress.toFixed(0)}% to FI
-            </span>
-          </div>
-          <div className="w-full h-[250px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData.map(d => ({ ...d, fiProgressCapped: Math.min(d.fiProgress, 150) }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="year" stroke="#94a3b8" />
-                <YAxis 
-                  stroke="#94a3b8"
-                  domain={[0, 150]}
-                  tickFormatter={(v) => `${v}%`}
-                />
-                <Tooltip 
-                  formatter={(value) => `${(value as number).toFixed(1)}%`}
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                />
-                <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" />
-                <Line 
-                  type="monotone" 
-                  dataKey="fiProgressCapped" 
-                  name="FI Progress"
-                  stroke="#8b5cf6" 
-                  strokeWidth={3}
-                  dot={true}
-                  isAnimationActive={false}
-                  connectNulls
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        
-        {/* Chart 4: Monthly Budget Over Time */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-medium text-slate-200">Monthly Budget Over Time</h3>
-            <span className="text-sm text-violet-400 bg-violet-400/10 px-3 py-1 rounded-full">
-              Current: {formatCurrency(chartData[0]?.monthlySpend || 0)}/mo
-            </span>
-          </div>
-          <div className="w-full h-[250px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="year" stroke="#94a3b8" />
-                <YAxis 
-                  stroke="#94a3b8"
-                  tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`}
-                />
-                <Tooltip 
-                  formatter={(value) => formatCurrency(value as number)}
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                />
-                <Legend />
-                <Area 
-                  type="monotone" 
-                  dataKey="monthlySpend" 
-                  name="Monthly Budget"
-                  stroke="#8b5cf6" 
-                  fill="#8b5cf6"
-                  fillOpacity={0.3}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ============================================================================
-// SCENARIOS COMPARE VIEW
-// ============================================================================
-
-interface ScenariosCompareViewProps {
-  scenarioProjections: ScenarioProjection[];
-  currentProjections: ReturnType<typeof useFinancials>['projections'];
-  localSettings: ReturnType<typeof useFinancials>['localSettings'];
-  fiYear: number | null;
-  setActiveTab: (tab: Tab) => void;
-}
-
-function ScenariosCompareView({
-  scenarioProjections,
-  currentProjections,
-  localSettings,
-  fiYear,
-  setActiveTab,
-}: ScenariosCompareViewProps) {
-  const currentYear = new Date().getFullYear();
-
-  // Prepare comparison chart data (limited to 30 years)
-  const comparisonChartData = useMemo(() => {
-    const years = currentProjections
-      .filter((d): d is typeof d & { year: number } => typeof d.year === 'number')
-      .slice(0, 30)
-      .map(d => d.year);
-
-    return years.map(year => {
-      const baseRow = currentProjections.find(p => p.year === year);
-      const dataPoint: Record<string, number | string> = {
-        year,
-        'Current Settings': Math.round(baseRow?.netWorth || 0),
-      };
-
-      scenarioProjections.forEach(sp => {
-        const scenarioRow = sp.projections.find(p => p.year === year);
-        dataPoint[sp.scenario.name] = Math.round(scenarioRow?.netWorth || 0);
-      });
-
-      return dataPoint;
-    });
-  }, [currentProjections, scenarioProjections]);
-
-  // Calculate FI comparison data
-  interface FiComparisonItem {
-    name: string;
-    color: string;
-    fiYear: number | null;
-    yearsToFi: number | null;
-    settings?: {
-      currentRate: number;
-      swr: number;
-      yearlyContribution: number;
-      baseMonthlyBudget: number;
-      spendingGrowthRate: number;
-    };
-  }
-
-  const fiComparison = useMemo((): FiComparisonItem[] => {
-    const baseData: FiComparisonItem = {
-      name: 'Current Settings',
-      color: '#10b981',
-      fiYear,
-      yearsToFi: fiYear ? fiYear - currentYear : null,
-    };
-
-    const scenarioData: FiComparisonItem[] = scenarioProjections.map(sp => ({
-      name: sp.scenario.name,
-      color: sp.scenario.color,
-      fiYear: sp.fiYear,
-      yearsToFi: sp.fiYear ? sp.fiYear - currentYear : null,
-      settings: {
-        currentRate: sp.scenario.currentRate,
-        swr: sp.scenario.swr,
-        yearlyContribution: sp.scenario.yearlyContribution,
-        baseMonthlyBudget: sp.scenario.baseMonthlyBudget,
-        spendingGrowthRate: sp.scenario.spendingGrowthRate,
-      },
-    }));
-
-    return [baseData, ...scenarioData];
-  }, [fiYear, currentYear, scenarioProjections]);
-
-  if (scenarioProjections.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-slate-800/30 rounded-xl border border-slate-700">
-        <div className="text-center p-8 max-w-md">
-          <div className="w-16 h-16 mx-auto mb-4 bg-violet-500/20 rounded-full flex items-center justify-center">
-            <svg className="w-8 h-8 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-semibold text-slate-200 mb-2">No Scenarios to Compare</h3>
-          <p className="text-slate-400 text-sm mb-4">
-            Create scenarios in Settings to see how different assumptions affect your financial projections.
-          </p>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className="px-4 py-2 bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-colors"
-          >
-            Create Scenarios
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 bg-slate-800/30 rounded-xl border border-slate-700 p-6 overflow-auto">
-      <div className="space-y-8">
-        {/* FI Timeline Comparison */}
-        <div>
-          <h3 className="text-lg font-medium text-slate-200 mb-4">Financial Independence Timeline</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {fiComparison.map((item, index) => (
-              <div
-                key={item.name}
-                className="bg-slate-900/50 rounded-xl p-4 border-l-4"
-                style={{ borderLeftColor: item.color }}
-              >
-                <h4 className="font-medium text-slate-200 mb-2">{item.name}</h4>
-                {item.yearsToFi !== null ? (
-                  <>
-                    <p className="text-3xl font-mono" style={{ color: item.color }}>
-                      {item.yearsToFi} years
-                    </p>
-                    <p className="text-slate-500 text-sm">
-                      FI in {item.fiYear}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-slate-500 text-sm">FI date not reached in projection period</p>
-                )}
-                {index > 0 && item.settings && (
-                  <div className="mt-3 pt-3 border-t border-slate-700 text-xs text-slate-500 space-y-1">
-                    <div className="flex justify-between">
-                      <span>Return:</span>
-                      <span className="text-emerald-400">{item.settings.currentRate}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>SWR:</span>
-                      <span className="text-amber-400">{item.settings.swr}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Contribution:</span>
-                      <span className="text-sky-400">{formatCurrency(item.settings.yearlyContribution)}/yr</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Net Worth Comparison Chart */}
         <div>
-          <h3 className="text-lg font-medium text-slate-200 mb-4">Net Worth Projections Comparison</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-medium text-slate-200">Net Worth Projections</h3>
+            <div className="flex gap-2">
+              {scenarioProjections.map(sp => (
+                sp.fiYear && (
+                  <span 
+                    key={sp.scenario._id}
+                    className="text-sm px-3 py-1 rounded-full"
+                    style={{ backgroundColor: `${sp.scenario.color}20`, color: sp.scenario.color }}
+                  >
+                    {sp.scenario.name}: FI in {sp.fiYear - currentYear}y
+                  </span>
+                )
+              ))}
+            </div>
+          </div>
           <div className="w-full h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={comparisonChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                 <XAxis dataKey="year" stroke="#94a3b8" />
-                <YAxis
+                <YAxis 
                   stroke="#94a3b8"
-                  tickFormatter={(v) => `$${(v / 1000000).toFixed(1)}M`}
+                  tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`}
                 />
-                <Tooltip
+                <Tooltip 
                   formatter={(value) => formatCurrency(value as number)}
                   contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
                 />
                 <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="Current Settings"
-                  name="Current Settings"
-                  stroke="#10b981"
-                  strokeWidth={3}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-                {scenarioProjections.map(sp => (
-                  <Line
+                {scenarioProjections.map((sp, index) => (
+                  <Line 
                     key={sp.scenario._id}
-                    type="monotone"
+                    type="monotone" 
                     dataKey={sp.scenario.name}
                     name={sp.scenario.name}
                     stroke={sp.scenario.color}
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
+                    strokeWidth={index === 0 ? 3 : 2}
+                    strokeDasharray={index === 0 ? undefined : "5 5"}
                     dot={false}
                     isAnimationActive={false}
                   />
@@ -1243,142 +808,102 @@ function ScenariosCompareView({
           </div>
         </div>
 
-        {/* Detailed Comparison Table */}
+        {/* FI Timeline Comparison */}
         <div>
-          <h3 className="text-lg font-medium text-slate-200 mb-4">Milestone Comparison</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-800">
-                <tr className="border-b border-slate-700">
-                  <th className="text-left text-slate-400 font-medium py-3 px-4">Milestone</th>
-                  <th className="text-center text-slate-400 font-medium py-3 px-4">
-                    <span className="text-emerald-400">Current</span>
-                  </th>
-                  {scenarioProjections.map(sp => (
-                    <th
-                      key={sp.scenario._id}
-                      className="text-center text-slate-400 font-medium py-3 px-4"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.scenario.name}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-slate-700/50">
-                  <td className="py-3 px-4 text-slate-300">FI Year</td>
-                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
-                    {fiYear || '-'}
-                  </td>
-                  {scenarioProjections.map(sp => (
-                    <td
-                      key={sp.scenario._id}
-                      className="py-3 px-4 text-center font-mono"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.fiYear || '-'}
-                    </td>
-                  ))}
-                </tr>
-                <tr className="border-b border-slate-700/50">
-                  <td className="py-3 px-4 text-slate-300">Years to FI</td>
-                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
-                    {fiYear ? fiYear - currentYear : '-'}
-                  </td>
-                  {scenarioProjections.map(sp => (
-                    <td
-                      key={sp.scenario._id}
-                      className="py-3 px-4 text-center font-mono"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.fiYear ? sp.fiYear - currentYear : '-'}
-                    </td>
-                  ))}
-                </tr>
-                <tr className="border-b border-slate-700/50">
-                  <td className="py-3 px-4 text-slate-300">FI Age</td>
-                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
-                    {currentProjections.find(p => p.isFiYear)?.age || '-'}
-                  </td>
-                  {scenarioProjections.map(sp => (
-                    <td
-                      key={sp.scenario._id}
-                      className="py-3 px-4 text-center font-mono"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.fiAge || '-'}
-                    </td>
-                  ))}
-                </tr>
-                <tr className="border-b border-slate-700/50">
-                  <td className="py-3 px-4 text-slate-300">Net Worth in 10 Years</td>
-                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
-                    {formatCurrency(currentProjections.find(p => p.year === currentYear + 10)?.netWorth || 0)}
-                  </td>
-                  {scenarioProjections.map(sp => {
-                    const row = sp.projections.find(p => p.year === currentYear + 10);
-                    return (
-                      <td
-                        key={sp.scenario._id}
-                        className="py-3 px-4 text-center font-mono"
-                        style={{ color: sp.scenario.color }}
-                      >
-                        {formatCurrency(row?.netWorth || 0)}
-                      </td>
-                    );
-                  })}
-                </tr>
-                <tr className="border-b border-slate-700/50">
-                  <td className="py-3 px-4 text-slate-300">Net Worth in 20 Years</td>
-                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
-                    {formatCurrency(currentProjections.find(p => p.year === currentYear + 20)?.netWorth || 0)}
-                  </td>
-                  {scenarioProjections.map(sp => {
-                    const row = sp.projections.find(p => p.year === currentYear + 20);
-                    return (
-                      <td
-                        key={sp.scenario._id}
-                        className="py-3 px-4 text-center font-mono"
-                        style={{ color: sp.scenario.color }}
-                      >
-                        {formatCurrency(row?.netWorth || 0)}
-                      </td>
-                    );
-                  })}
-                </tr>
-                <tr className="border-b border-slate-700/50">
-                  <td className="py-3 px-4 text-slate-300">Crossover Year</td>
-                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
-                    {currentProjections.find(p => p.isCrossover)?.year || '-'}
-                  </td>
-                  {scenarioProjections.map(sp => (
-                    <td
-                      key={sp.scenario._id}
-                      className="py-3 px-4 text-center font-mono"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.crossoverYear || '-'}
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
+          <h3 className="text-lg font-medium text-slate-200 mb-4">Financial Independence Timeline</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {scenarioProjections.map(sp => (
+              <div
+                key={sp.scenario._id}
+                className="bg-slate-900/50 rounded-xl p-4 border-l-4"
+                style={{ borderLeftColor: sp.scenario.color }}
+              >
+                <h4 className="font-medium text-slate-200 mb-2">{sp.scenario.name}</h4>
+                {sp.fiYear ? (
+                  <>
+                    <p className="text-3xl font-mono" style={{ color: sp.scenario.color }}>
+                      {sp.fiYear - currentYear} years
+                    </p>
+                    <p className="text-slate-500 text-sm">
+                      FI in {sp.fiYear}{sp.fiAge ? ` (age ${sp.fiAge})` : ''}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-slate-500 text-sm">FI date not reached in projection period</p>
+                )}
+                <div className="mt-3 pt-3 border-t border-slate-700 text-xs text-slate-500 space-y-1">
+                  <div className="flex justify-between">
+                    <span>Return:</span>
+                    <span className="text-emerald-400">{sp.scenario.currentRate}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>SWR:</span>
+                    <span className="text-amber-400">{sp.scenario.swr}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Contribution:</span>
+                    <span className="text-sky-400">{formatCurrency(sp.scenario.yearlyContribution)}/yr</span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Manage Scenarios Link */}
-        <div className="text-center pt-4 border-t border-slate-700">
-          <button
-            onClick={() => setActiveTab('settings')}
-            className="text-sm text-violet-400 hover:text-violet-300 underline"
-          >
-            Manage Scenarios in Settings
-          </button>
-        </div>
+        {/* Interest vs Contributions - Primary Scenario */}
+        {scenarioProjections[0] && (
+          <div>
+            <h3 className="text-lg font-medium text-slate-200 mb-3">
+              Interest vs Contributions ({scenarioProjections[0].scenario.name})
+            </h3>
+            <div className="w-full h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={scenarioProjections[0].projections
+                  .filter((d): d is typeof d & { year: number } => typeof d.year === 'number')
+                  .slice(0, 25)
+                  .map(d => ({
+                    year: d.year,
+                    contributed: Math.round(d.contributed),
+                    interest: Math.round(d.interest),
+                  }))
+                }>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="year" stroke="#94a3b8" />
+                  <YAxis 
+                    stroke="#94a3b8"
+                    tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`}
+                  />
+                  <Tooltip 
+                    formatter={(value) => formatCurrency(value as number)}
+                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
+                  />
+                  <Legend />
+                  <Area 
+                    type="monotone" 
+                    dataKey="contributed" 
+                    name="Contributions"
+                    stackId="1"
+                    stroke="#0ea5e9" 
+                    fill="#0ea5e9"
+                    isAnimationActive={false}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="interest" 
+                    name="Interest Earned"
+                    stackId="1"
+                    stroke="#10b981" 
+                    fill="#10b981"
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
       </div>
     </div>
-  );
+  )
 }
 
 // ============================================================================
@@ -1386,28 +911,27 @@ function ScenariosCompareView({
 // ============================================================================
 
 interface LevelsTabProps {
-  latestEntry: ReturnType<typeof useFinancials>['latestEntry'];
-  levelInfo: ReturnType<typeof useFinancials>['levelInfo'];
-  localSettings: ReturnType<typeof useFinancials>['localSettings'];
+  latestEntry: ReturnType<typeof useScenarios>['latestEntry'];
+  primaryProjection: ScenarioProjection | null;
+  profile: ReturnType<typeof useScenarios>['profile'];
   setActiveTab: (tab: Tab) => void;
 }
 
 function LevelsTab({
   latestEntry,
-  levelInfo,
-  localSettings,
+  primaryProjection,
+  profile,
   setActiveTab,
 }: LevelsTabProps) {
-  return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
-        Spending Levels
-      </h1>
-      <p className="text-slate-400 text-center mb-8">
-        Unlock higher monthly spending as your net worth grows
-      </p>
-
-      {!latestEntry ? (
+  if (!latestEntry || !primaryProjection) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
+          Spending Levels
+        </h1>
+        <p className="text-slate-400 text-center mb-8">
+          Unlock higher monthly spending as your net worth grows
+        </p>
         <div className="text-center py-12">
           <p className="text-slate-400 mb-4">No net worth data found.</p>
           <button
@@ -1417,312 +941,208 @@ function LevelsTab({
             Add your first entry
           </button>
         </div>
-      ) : (
-        <>
-          {/* Budget Summary */}
-          <div className="bg-slate-800/50 rounded-xl p-4 mb-6 border border-slate-700">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="space-y-2">
-                <p className="text-sm text-slate-300 font-medium">
-                  Budget Formula: <span className="text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)} base</span> + <span className="text-emerald-400">{formatCurrency(levelInfo.netWorthPortion)} from net worth</span> = <span className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
-                </p>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                  <span>Base: <span className="text-amber-400">{formatCurrency(levelInfo.baseBudgetOriginal, 0)}</span></span>
-                  <span>Spending Rate: <span className="text-emerald-400">{(levelInfo.spendingRate * 100).toFixed(1)}%</span></span>
-                  <span>Inflation: <span className="text-amber-400">{(levelInfo.inflation * 100).toFixed(1)}%</span></span>
-                  <span>Return Rate: <span className="text-emerald-400">{localSettings.rateOfReturn}%</span></span>
-                </div>
-              </div>
-              <button
-                onClick={() => setActiveTab('settings')}
-                className="text-xs text-slate-400 hover:text-slate-200 underline"
+      </div>
+    );
+  }
+
+  const { levelInfo, scenario } = primaryProjection;
+
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
+        Spending Levels
+      </h1>
+      <p className="text-slate-400 text-center mb-8">
+        Unlock higher monthly spending as your net worth grows
+      </p>
+
+      {/* Budget Summary */}
+      <div className="bg-slate-800/50 rounded-xl p-4 mb-6 border border-slate-700">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: scenario.color }} />
+              <span className="text-sm text-slate-300 font-medium">{scenario.name}</span>
+            </div>
+            <p className="text-sm text-slate-300">
+              Budget Formula: <span className="text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)} base</span> + <span className="text-emerald-400">{formatCurrency(levelInfo.netWorthPortion)} from net worth</span> = <span className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
+            </p>
+          </div>
+          <button
+            onClick={() => setActiveTab('scenarios')}
+            className="text-xs text-slate-400 hover:text-slate-200 underline"
+          >
+            Edit Scenario
+          </button>
+        </div>
+      </div>
+
+      {/* Current Level Hero Card */}
+      <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur rounded-2xl p-8 shadow-xl border border-violet-500/30 mb-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <p className="text-slate-400 text-sm mb-1">Current Level</p>
+            <h2 className="text-3xl font-bold text-white">
+              Level {levelInfo.currentLevel.level}: {levelInfo.currentLevel.name}
+            </h2>
+          </div>
+          <div className="text-right">
+            <p className="text-slate-400 text-sm mb-1">Net Worth</p>
+            <p className="text-2xl font-mono text-emerald-400">{formatCurrency(levelInfo.netWorth)}</p>
+          </div>
+        </div>
+
+        {/* Progress to Next Level */}
+        {levelInfo.nextLevel ? (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-slate-400 text-sm">Progress to Level {levelInfo.nextLevel.level}: {levelInfo.nextLevel.name}</span>
+              <span className="text-slate-300 text-sm font-mono">
+                {formatCurrency(levelInfo.amountToNext)} to go
+              </span>
+            </div>
+            <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-gradient-to-r from-violet-500 to-purple-500 rounded-full transition-all duration-500"
+                style={{ width: `${levelInfo.progressToNext}%` }}
+              />
+            </div>
+            <div className="flex justify-between mt-2 text-xs text-slate-500">
+              <span>{formatCurrency(levelInfo.currentLevel.threshold)}</span>
+              <span className="text-violet-400">{levelInfo.progressToNext.toFixed(1)}%</span>
+              <span>{formatCurrency(levelInfo.nextLevel.threshold)}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-6 text-center py-4">
+            <span className="text-2xl">🎉</span>
+            <p className="text-violet-400 font-medium mt-2">Maximum Level Achieved!</p>
+          </div>
+        )}
+
+        {/* Unlocked Spending Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="bg-slate-900/50 rounded-xl p-4">
+            <p className="text-slate-500 text-xs mb-1">Your Unlocked Monthly Budget</p>
+            <p className="text-3xl font-mono text-violet-400">{formatCurrency(levelInfo.unlockedAtNetWorth)}</p>
+            <p className="text-slate-600 text-xs mt-2">
+              = {formatCurrency(levelInfo.unlockedAtNetWorth * 12)}/year
+            </p>
+          </div>
+          <div className="bg-slate-900/50 rounded-xl p-4">
+            <p className="text-slate-500 text-xs mb-1">Your Actual Monthly Spend</p>
+            <p className={`text-3xl font-mono ${
+              levelInfo.spendingStatus === 'within_budget' ? 'text-emerald-400' :
+              levelInfo.spendingStatus === 'slightly_over' ? 'text-amber-400' : 'text-red-400'
+            }`}>
+              {formatCurrency(profile.monthlySpend)}
+            </p>
+            <p className="text-slate-600 text-xs mt-2">
+              {levelInfo.spendingStatus === 'within_budget' 
+                ? `${formatCurrency(levelInfo.unlockedAtNetWorth - profile.monthlySpend)} buffer`
+                : `${formatCurrency(profile.monthlySpend - levelInfo.unlockedAtNetWorth)} over budget`
+              }
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* All Levels Table */}
+      <h3 className="text-xl font-semibold text-slate-200 mb-4">All Levels</h3>
+      <div className="bg-slate-800/30 rounded-xl border border-slate-700 overflow-hidden max-h-[500px] overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-800 sticky top-0 z-10">
+            <tr className="border-b border-slate-700">
+              <th className="text-left text-slate-400 font-medium py-3 px-4">Level</th>
+              <th className="text-right text-slate-400 font-medium py-3 px-4">Net Worth Required</th>
+              <th className="text-right text-slate-400 font-medium py-3 px-4">Monthly Budget</th>
+              <th className="text-right text-slate-400 font-medium py-3 px-4">Annual Budget</th>
+            </tr>
+          </thead>
+          <tbody>
+            {levelInfo.levelsWithStatus.map((level) => (
+              <tr 
+                key={level.level}
+                className={`border-b border-slate-700/50 ${
+                  level.isCurrent ? 'bg-violet-500/10' : level.isUnlocked ? 'bg-emerald-500/5' : ''
+                } ${level.isNext ? 'bg-violet-500/5' : ''}`}
               >
-                Edit Settings
-              </button>
-            </div>
-
-            {/* Warning if spending rate >= return rate */}
-            {parseFloat(localSettings.spendingGrowthRate) >= parseFloat(localSettings.rateOfReturn) && (
-              <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <p className="text-sm text-red-400">
-                  Warning: Your net worth spending rate ({localSettings.spendingGrowthRate}%) is greater than or equal to your return rate ({localSettings.rateOfReturn}%). 
-                  You won&apos;t make progress toward FI this way!
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Current Level Hero Card */}
-          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur rounded-2xl p-8 shadow-xl border border-violet-500/30 mb-8">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <p className="text-slate-400 text-sm mb-1">Current Level</p>
-                <h2 className="text-3xl font-bold text-white">
-                  Level {levelInfo.currentLevel.level}: {levelInfo.currentLevel.name}
-                </h2>
-              </div>
-              <div className="text-right">
-                <p className="text-slate-400 text-sm mb-1">Net Worth</p>
-                <p className="text-2xl font-mono text-emerald-400">{formatCurrency(levelInfo.netWorth)}</p>
-              </div>
-            </div>
-
-            {/* Progress to Next Level */}
-            {levelInfo.nextLevel ? (
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-slate-400 text-sm">Progress to Level {levelInfo.nextLevel.level}: {levelInfo.nextLevel.name}</span>
-                  <span className="text-slate-300 text-sm font-mono">
-                    {formatCurrency(levelInfo.amountToNext)} to go
-                  </span>
-                </div>
-                <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-violet-500 to-purple-500 rounded-full transition-all duration-500"
-                    style={{ width: `${levelInfo.progressToNext}%` }}
-                  />
-                </div>
-                <div className="flex justify-between mt-2 text-xs text-slate-500">
-                  <span>{formatCurrency(levelInfo.currentLevel.threshold)}</span>
-                  <span className="text-violet-400">{levelInfo.progressToNext.toFixed(1)}%</span>
-                  <span>{formatCurrency(levelInfo.nextLevel.threshold)}</span>
-                </div>
-              </div>
-            ) : (
-              <div className="mb-6 text-center py-4">
-                <span className="text-2xl">🎉</span>
-                <p className="text-violet-400 font-medium mt-2">Maximum Level Achieved!</p>
-              </div>
-            )}
-
-            {/* Unlocked Spending Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div className="bg-slate-900/50 rounded-xl p-4">
-                <p className="text-slate-500 text-xs mb-1">Your Unlocked Monthly Budget</p>
-                <p className="text-3xl font-mono text-violet-400">{formatCurrency(levelInfo.unlockedAtNetWorth)}</p>
-                <div className="mt-2 text-xs space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-amber-400">Base (inflation-adjusted):</span>
-                    <span className="font-mono text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)}</span>
+                <td className="py-2 px-4">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      level.isCurrent
+                        ? 'bg-violet-500/30 text-violet-300'
+                        : level.isUnlocked
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : level.isNext
+                            ? 'bg-violet-500/10 text-violet-400'
+                            : 'bg-slate-700/50 text-slate-500'
+                    }`}>
+                      {level.level}
+                    </span>
+                    <span className={`font-medium ${level.isUnlocked ? 'text-slate-200' : 'text-slate-500'}`}>
+                      {level.name}
+                    </span>
+                    {level.isCurrent && <span className="text-xs text-violet-400">← Current</span>}
+                    {level.isNext && <span className="text-xs text-violet-400/70">← Next</span>}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-emerald-400">From net worth ({(levelInfo.spendingRate * 100).toFixed(1)}%):</span>
-                    <span className="font-mono text-emerald-400">+{formatCurrency(levelInfo.netWorthPortion)}</span>
-                  </div>
-                </div>
-                <p className="text-slate-600 text-xs mt-2">
-                  = {formatCurrency(levelInfo.unlockedAtNetWorth * 12)}/year
-                </p>
-              </div>
-              <div className="bg-slate-900/50 rounded-xl p-4">
-                <p className="text-slate-500 text-xs mb-1">Your Monthly Spend Setting</p>
-                <p className={`text-3xl font-mono ${
-                  levelInfo.spendingStatus === 'within_budget' ? 'text-emerald-400' :
-                  levelInfo.spendingStatus === 'slightly_over' ? 'text-amber-400' : 'text-red-400'
+                </td>
+                <td className="py-2 px-4 text-right font-mono text-slate-400">
+                  {level.threshold === 0 ? '-' : formatCurrency(level.threshold, 0)}
+                </td>
+                <td className={`py-2 px-4 text-right font-mono ${
+                  level.isCurrent ? 'text-violet-400 font-semibold' : level.isUnlocked ? 'text-emerald-400' : 'text-slate-500'
                 }`}>
-                  {formatCurrency(levelInfo.currentSpend)}
-                </p>
-                <div className="mt-2">
-                  {levelInfo.spendingStatus === 'within_budget' ? (
-                    <>
-                      <p className="text-sm font-medium text-emerald-400">Within Budget</p>
-                      <p className="text-slate-500 text-xs mt-1">
-                        {formatCurrency(levelInfo.unlockedAtNetWorth - levelInfo.currentSpend)} buffer remaining
-                      </p>
-                    </>
-                  ) : levelInfo.spendingStatus === 'slightly_over' ? (
-                    <>
-                      <p className="text-sm font-medium text-amber-400">Slightly Over</p>
-                      <p className="text-slate-500 text-xs mt-1">
-                        {formatCurrency(levelInfo.currentSpend - levelInfo.unlockedAtNetWorth)} over budget
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm font-medium text-red-400">Over Budget</p>
-                      <p className="text-slate-500 text-xs mt-1">
-                        {formatCurrency(levelInfo.currentSpend - levelInfo.unlockedAtNetWorth)} over budget
-                      </p>
-                    </>
-                  )}
-                </div>
-                <p className="text-slate-600 text-xs mt-2">
-                  Set in Settings tab
-                </p>
-              </div>
-            </div>
-
-            {/* Next Level Reward Preview */}
-            {levelInfo.nextLevel && (
-              <div className="mt-6 p-4 bg-violet-500/10 border border-violet-500/30 rounded-xl">
-                <p className="text-violet-300 text-sm">
-                  <span className="font-medium">Next unlock:</span> Level {levelInfo.nextLevel.level} ({levelInfo.nextLevel.name}) unlocks{' '}
-                  <span className="font-mono text-violet-400">{formatCurrency(levelInfo.nextLevel.monthlyBudget)}/mo</span>{' '}
-                  (+{formatCurrency(levelInfo.nextLevelSpendingIncrease)}) at {formatCurrency(levelInfo.nextLevel.threshold)} net worth
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* How It Works */}
-          <div className="bg-slate-800/50 rounded-xl p-6 mb-8 border border-slate-700">
-            <h3 className="text-lg font-semibold text-slate-200 mb-3">How Levels Work</h3>
-            <p className="text-slate-400 text-sm mb-3">
-              Your budget has two components: a <span className="text-amber-400">base amount</span> that adjusts for inflation each year, 
-              plus a <span className="text-emerald-400">percentage of your current net worth</span>. As your wealth grows, 
-              so does your budget - but always at a rate below your returns.
-            </p>
-            <p className="text-slate-400 text-sm">
-              Your net worth spending rate of <span className="text-violet-400">{localSettings.spendingGrowthRate}%</span> is{' '}
-              {parseFloat(localSettings.spendingGrowthRate) < parseFloat(localSettings.rateOfReturn) ? (
-                <span className="text-emerald-400">{(parseFloat(localSettings.rateOfReturn) - parseFloat(localSettings.spendingGrowthRate)).toFixed(1)}% below</span>
-              ) : (
-                <span className="text-red-400">{(parseFloat(localSettings.spendingGrowthRate) - parseFloat(localSettings.rateOfReturn)).toFixed(1)}% above</span>
-              )}{' '}
-              your expected return rate of {localSettings.rateOfReturn}%. This means{' '}
-              {parseFloat(localSettings.spendingGrowthRate) < parseFloat(localSettings.rateOfReturn) ? (
-                <span className="text-emerald-400">your wealth will continue to compound even as you enjoy lifestyle upgrades.</span>
-              ) : (
-                <span className="text-red-400">you may not make progress toward FI - consider lowering your spending rate.</span>
-              )}
-            </p>
-          </div>
-
-          {/* All Levels Table */}
-          <h3 className="text-xl font-semibold text-slate-200 mb-4">All Levels</h3>
-          <div className="bg-slate-800/30 rounded-xl border border-slate-700 overflow-hidden max-h-[500px] overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-800 sticky top-0 z-10">
-                <tr className="border-b border-slate-700">
-                  <th className="text-left text-slate-400 font-medium py-3 px-4">Level</th>
-                  <th className="text-right text-slate-400 font-medium py-3 px-4">Net Worth Required</th>
-                  <th className="text-right text-slate-400 font-medium py-3 px-4">Monthly Budget</th>
-                  <th className="text-right text-slate-400 font-medium py-3 px-4">Annual Budget</th>
-                </tr>
-              </thead>
-              <tbody>
-                {levelInfo.levelsWithStatus.map((level) => (
-                  <tr 
-                    key={level.level}
-                    className={`border-b border-slate-700/50 ${
-                      level.isCurrent ? 'bg-violet-500/10' : level.isUnlocked ? 'bg-emerald-500/5' : ''
-                    } ${level.isNext ? 'bg-violet-500/5' : ''}`}
-                  >
-                    <td className="py-2 px-4">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          level.isCurrent
-                            ? 'bg-violet-500/30 text-violet-300'
-                            : level.isUnlocked
-                              ? 'bg-emerald-500/20 text-emerald-400'
-                              : level.isNext
-                                ? 'bg-violet-500/10 text-violet-400'
-                                : 'bg-slate-700/50 text-slate-500'
-                        }`}>
-                          {level.level}
-                        </span>
-                        <span className={`font-medium ${level.isUnlocked ? 'text-slate-200' : 'text-slate-500'}`}>
-                          {level.name}
-                        </span>
-                        {level.isCurrent && <span className="text-xs text-violet-400">← Current</span>}
-                        {level.isNext && <span className="text-xs text-violet-400/70">← Next</span>}
-                      </div>
-                    </td>
-                    <td className="py-2 px-4 text-right font-mono text-slate-400">
-                      {level.threshold === 0 ? '-' : formatCurrency(level.threshold, 0)}
-                    </td>
-                    <td className={`py-2 px-4 text-right font-mono ${
-                      level.isCurrent ? 'text-violet-400 font-semibold' : level.isUnlocked ? 'text-emerald-400' : 'text-slate-500'
-                    }`}>
-                      {formatCurrency(level.monthlyBudget, 0)}
-                    </td>
-                    <td className={`py-2 px-4 text-right font-mono ${
-                      level.isCurrent ? 'text-violet-400/80' : level.isUnlocked ? 'text-emerald-400/80' : 'text-slate-600'
-                    }`}>
-                      {formatCurrency(level.monthlyBudget * 12, 0)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Quick Reference Cards */}
-          <div className="mt-8">
-            <h4 className="text-sm font-medium text-slate-400 mb-3">Quick Reference (at today&apos;s inflation-adjusted base of {formatCurrency(levelInfo.baseBudgetInflationAdjusted, 0)})</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[
-                { label: 'At $100K', nw: 100000 },
-                { label: 'At $500K', nw: 500000 },
-                { label: 'At $1M', nw: 1000000 },
-                { label: 'At $2M', nw: 2000000 },
-              ].map((item) => {
-                const value = levelInfo.baseBudgetInflationAdjusted + (item.nw * levelInfo.spendingRate / 12)
-                const nwPortion = item.nw * levelInfo.spendingRate / 12
-                return (
-                  <div key={item.label} className="bg-slate-800/30 rounded-lg p-3 border border-slate-700">
-                    <p className="text-xs text-slate-500">{item.label}</p>
-                    <p className="text-lg font-mono text-violet-400">{formatCurrency(value, 0)}/mo</p>
-                    <p className="text-xs text-slate-600">
-                      <span className="text-amber-400/60">{formatCurrency(levelInfo.baseBudgetInflationAdjusted, 0)}</span>
-                      {' + '}
-                      <span className="text-emerald-400/60">{formatCurrency(nwPortion, 0)}</span>
-                    </p>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </>
-      )}
+                  {formatCurrency(level.monthlyBudget, 0)}
+                </td>
+                <td className={`py-2 px-4 text-right font-mono ${
+                  level.isCurrent ? 'text-violet-400/80' : level.isUnlocked ? 'text-emerald-400/80' : 'text-slate-600'
+                }`}>
+                  {formatCurrency(level.monthlyBudget * 12, 0)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
 
 // ============================================================================
-// SETTINGS TAB
+// SCENARIOS TAB
 // ============================================================================
 
-interface SettingsTabProps {
-  localSettings: ReturnType<typeof useFinancials>['localSettings'];
-  updateLocalSetting: ReturnType<typeof useFinancials>['updateLocalSetting'];
-  levelInfo: ReturnType<typeof useFinancials>['levelInfo'];
-  latestEntry: ReturnType<typeof useFinancials>['latestEntry'];
-  settings: ReturnType<typeof useFinancials>['settings'];
+interface ScenariosTabProps {
   scenariosHook: ReturnType<typeof useScenarios>;
 }
 
-function SettingsTab({
-  localSettings,
-  updateLocalSetting,
-  levelInfo,
-  latestEntry,
-  settings,
+function ScenariosTab({
   scenariosHook,
-}: SettingsTabProps) {
+}: ScenariosTabProps) {
   const [showCreateScenario, setShowCreateScenario] = useState(false);
   const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
   const [scenarioForm, setScenarioForm] = useState({
     name: '',
     description: '',
-    currentRate: localSettings.rateOfReturn,
-    swr: localSettings.swr,
-    yearlyContribution: localSettings.yearlyContribution,
-    inflationRate: localSettings.inflationRate,
-    baseMonthlyBudget: localSettings.baseMonthlyBudget,
-    spendingGrowthRate: localSettings.spendingGrowthRate,
+    currentRate: '7',
+    swr: '4',
+    yearlyContribution: '0',
+    inflationRate: '3',
+    baseMonthlyBudget: '3000',
+    spendingGrowthRate: '2',
   });
 
   const resetScenarioForm = () => {
     setScenarioForm({
       name: '',
       description: '',
-      currentRate: localSettings.rateOfReturn,
-      swr: localSettings.swr,
-      yearlyContribution: localSettings.yearlyContribution,
-      inflationRate: localSettings.inflationRate,
-      baseMonthlyBudget: localSettings.baseMonthlyBudget,
-      spendingGrowthRate: localSettings.spendingGrowthRate,
+      currentRate: '7',
+      swr: '4',
+      yearlyContribution: '0',
+      inflationRate: '3',
+      baseMonthlyBudget: '3000',
+      spendingGrowthRate: '2',
     });
   };
 
@@ -1778,236 +1198,69 @@ function SettingsTab({
   };
 
   const applyTemplate = (template: typeof SCENARIO_TEMPLATES[number]) => {
-    setScenarioForm(prev => ({
-      ...prev,
+    setScenarioForm({
       name: template.name,
       description: template.description,
       currentRate: template.currentRate.toString(),
       swr: template.swr.toString(),
       inflationRate: template.inflationRate.toString(),
-      yearlyContribution: 'yearlyContribution' in template 
-        ? template.yearlyContribution.toString() 
-        : localSettings.yearlyContribution,
-    }));
+      yearlyContribution: template.yearlyContribution.toString(),
+      baseMonthlyBudget: template.baseMonthlyBudget.toString(),
+      spendingGrowthRate: template.spendingGrowthRate.toString(),
+    });
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-3xl">
-      <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-slate-400 to-slate-300 bg-clip-text text-transparent">
-        Settings
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
+        Scenarios
       </h1>
       <p className="text-slate-400 text-center mb-8">
-        Configure your assumptions and preferences
+        Create and compare different financial assumptions
       </p>
 
-      {/* Investment Assumptions */}
+      {/* Personal Info Section */}
       <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
         <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
-          <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
-          Investment Assumptions
+          <span className="w-2 h-2 bg-sky-400 rounded-full"></span>
+          Personal Info
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              Expected Rate of Return
+              Birth Date
             </label>
             <p className="text-xs text-slate-500 mb-2">
-              Annual return rate for your investments (e.g., 7% for stock market average)
+              Used to show your age in projections
             </p>
-            <div className="relative">
-              <input
-                type="number"
-                value={localSettings.rateOfReturn}
-                onChange={(e) => updateLocalSetting('rateOfReturn', e.target.value)}
-                placeholder="7"
-                min="0"
-                max="30"
-                step="0.1"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Inflation Rate
-            </label>
-            <p className="text-xs text-slate-500 mb-2">
-              Expected annual inflation for adjusting future values
-            </p>
-            <div className="relative">
-              <input
-                type="number"
-                value={localSettings.inflationRate}
-                onChange={(e) => updateLocalSetting('inflationRate', e.target.value)}
-                placeholder="3"
-                min="0"
-                max="20"
-                step="0.1"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Safe Withdrawal Rate (SWR)
-            </label>
-            <p className="text-xs text-slate-500 mb-2">
-              Percentage you can safely withdraw annually in retirement (typically 3-4%)
-            </p>
-            <div className="relative">
-              <input
-                type="number"
-                value={localSettings.swr}
-                onChange={(e) => updateLocalSetting('swr', e.target.value)}
-                placeholder="4"
-                min="0"
-                max="10"
-                step="0.1"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Yearly Contribution
-            </label>
-            <p className="text-xs text-slate-500 mb-2">
-              How much you add to investments annually
-            </p>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
-              <input
-                type="number"
-                value={localSettings.yearlyContribution}
-                onChange={(e) => updateLocalSetting('yearlyContribution', e.target.value)}
-                placeholder="0"
-                min="0"
-                step="1000"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Actual Spending (for Levels comparison) */}
-      <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
-        <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
-          <span className="w-2 h-2 bg-violet-400 rounded-full"></span>
-          Actual Spending
-        </h3>
-        <div className="max-w-md">
-          <label className="block text-sm font-medium text-slate-300 mb-2">
-            Your Actual Monthly Spending
-          </label>
-          <p className="text-xs text-slate-500 mb-2">
-            Track your current spending to compare against your unlocked budget in the Levels tab
-          </p>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
             <input
-              type="number"
-              value={localSettings.monthlySpend}
-              onChange={(e) => updateLocalSetting('monthlySpend', e.target.value)}
-              placeholder="0"
-              min="0"
-              step="100"
-              className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+              type="date"
+              value={scenariosHook.profile.birthDate}
+              onChange={(e) => scenariosHook.updateProfile({ birthDate: e.target.value })}
+              className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
             />
           </div>
-          <p className="text-xs text-slate-500 mt-2">
-            Note: Projections use your level-based budget (configured below), not this value.
-          </p>
-        </div>
-      </div>
-
-      {/* Levels System */}
-      <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
-        <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
-          <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
-          Levels System
-        </h3>
-        <p className="text-sm text-slate-400 mb-4">
-          Configure how your spending budget grows with your net worth
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              Base Monthly Budget
+              Actual Monthly Spending
             </label>
             <p className="text-xs text-slate-500 mb-2">
-              Floor spending for essentials (in today&apos;s dollars, adjusts for inflation)
+              For tracking against your budget in Levels
             </p>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
               <input
                 type="number"
-                value={localSettings.baseMonthlyBudget}
-                onChange={(e) => updateLocalSetting('baseMonthlyBudget', e.target.value)}
-                placeholder="3000"
+                value={scenariosHook.profile.monthlySpend}
+                onChange={(e) => scenariosHook.updateProfile({ monthlySpend: parseFloat(e.target.value) || 0 })}
+                placeholder="0"
                 min="0"
                 step="100"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pl-7 font-mono focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
               />
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Net Worth Spending Rate
-            </label>
-            <p className="text-xs text-slate-500 mb-2">
-              % of current net worth added to monthly budget (keep below return rate!)
-            </p>
-            <div className="relative">
-              <input
-                type="number"
-                value={localSettings.spendingGrowthRate}
-                onChange={(e) => updateLocalSetting('spendingGrowthRate', e.target.value)}
-                placeholder="2"
-                min="0"
-                max="10"
-                step="0.1"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 pr-8 font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
-            </div>
-          </div>
         </div>
-
-        {/* Formula Preview */}
-        <div className="mt-4 p-4 bg-slate-900/50 rounded-lg space-y-2">
-          <p className="text-sm text-slate-300 font-medium">Budget Formula:</p>
-          <p className="text-xs text-slate-400">
-            Unlocked Budget = <span className="text-amber-400">Base (inflation-adjusted)</span> + <span className="text-emerald-400">(Net Worth × {localSettings.spendingGrowthRate}% ÷ 12)</span>
-          </p>
-          {latestEntry && (
-            <p className="text-xs text-slate-500 pt-2 border-t border-slate-700">
-              Current: <span className="text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)}</span> + <span className="text-emerald-400">{formatCurrency(levelInfo.netWorthPortion)}</span> = <span className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
-            </p>
-          )}
-        </div>
-
-        {/* Warning if spending rate >= return rate */}
-        {parseFloat(localSettings.spendingGrowthRate) >= parseFloat(localSettings.rateOfReturn) && (
-          <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-            <p className="text-sm text-red-400">
-              Warning: Your spending rate ({localSettings.spendingGrowthRate}%) should be less than your return rate ({localSettings.rateOfReturn}%) to make progress toward FI.
-            </p>
-          </div>
-        )}
-
-        {/* Progress info */}
-        {parseFloat(localSettings.spendingGrowthRate) < parseFloat(localSettings.rateOfReturn) && (
-          <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-            <p className="text-xs text-emerald-400">
-              <span className="font-medium">On track:</span> With {localSettings.rateOfReturn}% returns and {localSettings.spendingGrowthRate}% spending rate, 
-              you keep {(parseFloat(localSettings.rateOfReturn) - parseFloat(localSettings.spendingGrowthRate)).toFixed(1)}% of net worth growth toward FI each year.
-            </p>
-          </div>
-        )}
       </div>
 
       {/* Scenarios Section */}
@@ -2015,7 +1268,7 @@ function SettingsTab({
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
             <span className="w-2 h-2 bg-violet-400 rounded-full"></span>
-            Scenarios
+            Your Scenarios
           </h3>
           <button
             onClick={() => {
@@ -2030,8 +1283,7 @@ function SettingsTab({
         </div>
         
         <p className="text-sm text-slate-400 mb-4">
-          Create different scenarios to compare how various assumptions affect your financial projections.
-          Toggle scenarios on/off to include them in comparisons.
+          Each scenario represents a different set of financial assumptions. Select one or more to compare in Projections.
         </p>
 
         {/* Create/Edit Scenario Form */}
@@ -2177,22 +1429,13 @@ function SettingsTab({
                   </button>
                 </>
               ) : (
-                <>
-                  <button
-                    onClick={handleCreateScenario}
-                    disabled={!scenarioForm.name.trim()}
-                    className="px-4 py-2 bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Create Scenario
-                  </button>
-                  <button
-                    onClick={() => scenariosHook.createScenarioFromSettings('Current Settings', settings)}
-                    className="px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors"
-                    title="Create a scenario with your current settings"
-                  >
-                    Save Current as Scenario
-                  </button>
-                </>
+                <button
+                  onClick={handleCreateScenario}
+                  disabled={!scenarioForm.name.trim()}
+                  className="px-4 py-2 bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create Scenario
+                </button>
               )}
             </div>
           </div>
@@ -2204,28 +1447,37 @@ function SettingsTab({
             {scenariosHook.scenarios.map(scenario => (
               <div
                 key={scenario._id}
-                className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                  scenario.isActive
+                className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
+                  scenario.isSelected
                     ? 'bg-slate-900/50 border-slate-600'
                     : 'bg-slate-900/20 border-slate-700/50 opacity-60'
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <button
+                    onClick={() => scenariosHook.toggleSelected(scenario._id)}
+                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                      scenario.isSelected
+                        ? 'border-emerald-400 bg-emerald-400/20'
+                        : 'border-slate-500 hover:border-slate-400'
+                    }`}
+                  >
+                    {scenario.isSelected && (
+                      <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </button>
                   <div
-                    className="w-3 h-3 rounded-full"
+                    className="w-3 h-3 rounded-full shrink-0"
                     style={{ backgroundColor: scenario.color }}
                   />
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-slate-200">{scenario.name}</span>
-                      {!scenario.isActive && (
-                        <span className="text-xs text-slate-500 bg-slate-700/50 px-1.5 py-0.5 rounded">
-                          Inactive
-                        </span>
-                      )}
+                      <span className="font-medium text-slate-200 truncate">{scenario.name}</span>
                     </div>
                     {scenario.description && (
-                      <p className="text-xs text-slate-500">{scenario.description}</p>
+                      <p className="text-xs text-slate-500 truncate">{scenario.description}</p>
                     )}
                     <div className="flex gap-3 text-xs text-slate-500 mt-1">
                       <span>Return: <span className="text-emerald-400">{scenario.currentRate}%</span></span>
@@ -2234,22 +1486,14 @@ function SettingsTab({
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 shrink-0">
                   <button
-                    onClick={() => scenariosHook.toggleScenarioActive(scenario._id)}
-                    className={`p-1.5 rounded transition-colors ${
-                      scenario.isActive
-                        ? 'text-emerald-400 hover:bg-emerald-500/20'
-                        : 'text-slate-500 hover:bg-slate-700'
-                    }`}
-                    title={scenario.isActive ? 'Deactivate' : 'Activate'}
+                    onClick={() => scenariosHook.selectOnly(scenario._id)}
+                    className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
+                    title="Select only this scenario"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      {scenario.isActive ? (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      ) : (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                      )}
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </button>
                   <button
@@ -2270,19 +1514,21 @@ function SettingsTab({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                   </button>
-                  <button
-                    onClick={() => {
-                      if (confirm(`Delete scenario "${scenario.name}"?`)) {
-                        scenariosHook.deleteScenario(scenario._id);
-                      }
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                    title="Delete"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                  {scenariosHook.scenarios.length > 1 && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete scenario "${scenario.name}"?`)) {
+                          scenariosHook.deleteScenario(scenario._id);
+                        }
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                      title="Delete"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -2290,73 +1536,47 @@ function SettingsTab({
         ) : (
           <div className="text-center py-6 text-slate-500">
             <p className="mb-2">No scenarios created yet.</p>
-            <p className="text-xs">Create scenarios to compare different financial assumptions.</p>
+            <p className="text-xs">Creating your first scenario...</p>
           </div>
+        )}
+
+        {/* Selection hint */}
+        {scenariosHook.scenarios.length > 1 && (
+          <p className="text-xs text-slate-500 mt-4 text-center">
+            Tip: Select multiple scenarios to compare them side-by-side in Projections
+          </p>
         )}
       </div>
 
-      {/* Personal Info */}
-      <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
-        <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
-          <span className="w-2 h-2 bg-sky-400 rounded-full"></span>
-          Personal Info
-        </h3>
-        <div className="max-w-xs">
-          <label className="block text-sm font-medium text-slate-300 mb-2">
-            Birth Date
-          </label>
-          <p className="text-xs text-slate-500 mb-2">
-            Used to show your age in projections
-          </p>
-          <input
-            type="date"
-            value={localSettings.birthDate}
-            onChange={(e) => updateLocalSetting('birthDate', e.target.value)}
-            className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-          />
-        </div>
-      </div>
-
-      {/* Settings Summary */}
-      <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-xl p-6 border border-slate-600">
-        <h3 className="text-lg font-semibold text-slate-200 mb-4">Current Configuration</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+      {/* Help Section */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+        <h3 className="text-lg font-semibold text-slate-200 mb-3">Understanding Scenario Settings</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div>
-            <p className="text-slate-500 text-xs">Return Rate</p>
-            <p className="text-emerald-400 font-mono">{localSettings.rateOfReturn}%</p>
+            <p className="text-emerald-400 font-medium">Return Rate</p>
+            <p className="text-slate-400">Expected annual investment return (e.g., 7% for stock market average)</p>
           </div>
           <div>
-            <p className="text-slate-500 text-xs">SWR</p>
-            <p className="text-amber-400 font-mono">{localSettings.swr}%</p>
+            <p className="text-amber-400 font-medium">Safe Withdrawal Rate (SWR)</p>
+            <p className="text-slate-400">Percentage you can safely withdraw annually in retirement (typically 3-4%)</p>
           </div>
           <div>
-            <p className="text-slate-500 text-xs">Inflation</p>
-            <p className="text-amber-400 font-mono">{localSettings.inflationRate}%</p>
+            <p className="text-sky-400 font-medium">Yearly Contribution</p>
+            <p className="text-slate-400">How much you add to investments each year</p>
           </div>
           <div>
-            <p className="text-slate-500 text-xs">Yearly Contribution</p>
-            <p className="text-sky-400 font-mono">{formatCurrency(parseFloat(localSettings.yearlyContribution) || 0)}</p>
+            <p className="text-amber-400 font-medium">Inflation Rate</p>
+            <p className="text-slate-400">Expected annual inflation for adjusting future values</p>
           </div>
           <div>
-            <p className="text-slate-500 text-xs">Actual Spending</p>
-            <p className="text-violet-400 font-mono">{formatCurrency(parseFloat(localSettings.monthlySpend) || 0)}</p>
+            <p className="text-violet-400 font-medium">Base Budget</p>
+            <p className="text-slate-400">Floor monthly spending regardless of net worth (adjusts for inflation)</p>
           </div>
           <div>
-            <p className="text-slate-500 text-xs">Base Budget</p>
-            <p className="text-amber-400 font-mono">{formatCurrency(parseFloat(localSettings.baseMonthlyBudget) || 0)}</p>
-          </div>
-          <div>
-            <p className="text-slate-500 text-xs">Spending Rate</p>
-            <p className="text-emerald-400 font-mono">{localSettings.spendingGrowthRate}%</p>
-          </div>
-          <div>
-            <p className="text-slate-500 text-xs">Current Budget</p>
-            <p className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</p>
+            <p className="text-violet-400 font-medium">Spending Rate</p>
+            <p className="text-slate-400">Percentage of net worth added to monthly budget (keep below return rate!)</p>
           </div>
         </div>
-        <p className="text-xs text-slate-500 mt-4">
-          Settings are saved automatically as you type. Projections use your level-based budget.
-        </p>
       </div>
     </div>
   )
