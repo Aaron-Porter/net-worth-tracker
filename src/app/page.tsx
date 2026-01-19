@@ -671,6 +671,7 @@ function ProjectionsTable({
 }) {
   const currentYear = new Date().getFullYear();
   const birthYear = birthDate ? new Date(birthDate).getFullYear() : null;
+  const [showYearlyDetail, setShowYearlyDetail] = useState(true);
   
   // Find the best and worst scenarios for various metrics
   const getBestWorst = (getValue: (sp: ScenarioProjection) => number | null, lowerIsBetter = false) => {
@@ -857,107 +858,260 @@ function ProjectionsTable({
     },
   ];
   
+  const primaryProjection = scenarioProjections[0];
+
   return (
-    <div className="flex-1 overflow-auto bg-slate-800/30 rounded-xl border border-slate-700">
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-slate-800 z-10">
-          <tr className="border-b border-slate-700">
-            <th className="text-left text-slate-400 font-medium py-3 px-4 whitespace-nowrap w-64">Metric</th>
-            {scenarioProjections.map(sp => (
-              <th 
-                key={sp.scenario._id} 
-                className="text-right font-medium py-3 px-4 whitespace-nowrap min-w-[140px]"
-              >
-                <div className="flex items-center justify-end gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: sp.scenario.color }} />
-                  <span style={{ color: sp.scenario.color }}>{sp.scenario.name}</span>
-                </div>
-              </th>
-            ))}
-            {scenarioProjections.length > 1 && (
-              <th className="text-right text-slate-400 font-medium py-3 px-4 whitespace-nowrap min-w-[120px]">
-                Difference
-              </th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {comparisonRows.map((category, catIdx) => (
-            <>
-              {/* Category Header */}
-              <tr key={`cat-${catIdx}`} className="bg-slate-900/50">
-                <td 
-                  colSpan={scenarioProjections.length + (scenarioProjections.length > 1 ? 2 : 1)} 
-                  className="py-2 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider"
+    <div className="flex-1 overflow-auto space-y-4">
+      {/* Summary Comparison Table */}
+      <div className="bg-slate-800/30 rounded-xl border border-slate-700">
+        <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-300">Scenario Comparison Summary</h3>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-slate-800">
+            <tr className="border-b border-slate-700">
+              <th className="text-left text-slate-400 font-medium py-3 px-4 whitespace-nowrap w-64">Metric</th>
+              {scenarioProjections.map(sp => (
+                <th 
+                  key={sp.scenario._id} 
+                  className="text-right font-medium py-3 px-4 whitespace-nowrap min-w-[140px]"
                 >
-                  {category.category}
-                </td>
-              </tr>
-              {/* Metrics */}
-              {category.metrics.map((metric, metricIdx) => {
-                const values = scenarioProjections.map(sp => metric.getNumericValue(sp));
-                const validValues = values.filter((v): v is number => v !== null);
-                const best = validValues.length > 0 ? (metric.lowerIsBetter ? Math.min(...validValues) : Math.max(...validValues)) : null;
-                const worst = validValues.length > 0 ? (metric.lowerIsBetter ? Math.max(...validValues) : Math.min(...validValues)) : null;
-                
-                // Calculate difference between first and second scenario
-                const diff = scenarioProjections.length > 1 && values[0] !== null && values[1] !== null
-                  ? values[0] - values[1]
-                  : null;
-                
-                return (
-                  <tr 
-                    key={`${catIdx}-${metricIdx}`}
-                    className={`border-b border-slate-700/30 hover:bg-slate-700/20 ${
-                      metric.isInput ? 'bg-slate-800/30' : ''
-                    }`}
+                  <div className="flex items-center justify-end gap-2">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: sp.scenario.color }} />
+                    <span style={{ color: sp.scenario.color }}>{sp.scenario.name}</span>
+                  </div>
+                </th>
+              ))}
+              {scenarioProjections.length > 1 && (
+                <th className="text-right text-slate-400 font-medium py-3 px-4 whitespace-nowrap min-w-[120px]">
+                  Difference
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {comparisonRows.map((category, catIdx) => (
+              <>
+                {/* Category Header */}
+                <tr key={`cat-${catIdx}`} className="bg-slate-900/50">
+                  <td 
+                    colSpan={scenarioProjections.length + (scenarioProjections.length > 1 ? 2 : 1)} 
+                    className="py-2 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider"
                   >
-                    <td className="py-2.5 px-4 text-slate-300">
-                      {metric.label}
-                      {metric.isInput && <span className="ml-2 text-xs text-slate-500">(input)</span>}
-                    </td>
-                    {scenarioProjections.map((sp, spIdx) => {
-                      const numValue = metric.getNumericValue(sp);
-                      const isBest = numValue !== null && numValue === best && validValues.length > 1 && !metric.isInput;
-                      const isWorst = numValue !== null && numValue === worst && validValues.length > 1 && best !== worst && !metric.isInput;
-                      
-                      return (
-                        <td 
-                          key={sp.scenario._id}
-                          className={`py-2.5 px-4 text-right font-mono ${
-                            isBest ? 'text-emerald-400 font-semibold' : 
-                            isWorst ? 'text-red-400/70' : 
-                            'text-slate-300'
-                          }`}
-                        >
-                          <span className="flex items-center justify-end gap-2">
-                            {metric.getValue(sp)}
-                            {isBest && <span className="text-xs bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">Best</span>}
-                          </span>
-                        </td>
-                      );
-                    })}
-                    {scenarioProjections.length > 1 && (
-                      <td className="py-2.5 px-4 text-right font-mono text-slate-500">
-                        {diff !== null && !metric.isInput ? (
-                          <span className={diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400/70' : ''}>
-                            {metric.format === 'currency' && (diff > 0 ? '+' : '')}{
-                              metric.format === 'currency' ? formatCurrency(diff) :
-                              metric.format === 'percent' ? `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%` :
-                              metric.format === 'years' ? `${diff > 0 ? '+' : ''}${diff}y` :
-                              `${diff > 0 ? '+' : ''}${diff}`
-                            }
-                          </span>
-                        ) : '-'}
+                    {category.category}
+                  </td>
+                </tr>
+                {/* Metrics */}
+                {category.metrics.map((metric, metricIdx) => {
+                  const values = scenarioProjections.map(sp => metric.getNumericValue(sp));
+                  const validValues = values.filter((v): v is number => v !== null);
+                  const best = validValues.length > 0 ? (metric.lowerIsBetter ? Math.min(...validValues) : Math.max(...validValues)) : null;
+                  const worst = validValues.length > 0 ? (metric.lowerIsBetter ? Math.max(...validValues) : Math.min(...validValues)) : null;
+                  
+                  // Calculate difference between first and second scenario
+                  const diff = scenarioProjections.length > 1 && values[0] !== null && values[1] !== null
+                    ? values[0] - values[1]
+                    : null;
+                  
+                  return (
+                    <tr 
+                      key={`${catIdx}-${metricIdx}`}
+                      className={`border-b border-slate-700/30 hover:bg-slate-700/20 ${
+                        metric.isInput ? 'bg-slate-800/30' : ''
+                      }`}
+                    >
+                      <td className="py-2.5 px-4 text-slate-300">
+                        {metric.label}
+                        {metric.isInput && <span className="ml-2 text-xs text-slate-500">(input)</span>}
                       </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </>
-          ))}
-        </tbody>
-      </table>
+                      {scenarioProjections.map((sp, spIdx) => {
+                        const numValue = metric.getNumericValue(sp);
+                        const isBest = numValue !== null && numValue === best && validValues.length > 1 && !metric.isInput;
+                        const isWorst = numValue !== null && numValue === worst && validValues.length > 1 && best !== worst && !metric.isInput;
+                        
+                        return (
+                          <td 
+                            key={sp.scenario._id}
+                            className={`py-2.5 px-4 text-right font-mono ${
+                              isBest ? 'text-emerald-400 font-semibold' : 
+                              isWorst ? 'text-red-400/70' : 
+                              'text-slate-300'
+                            }`}
+                          >
+                            <span className="flex items-center justify-end gap-2">
+                              {metric.getValue(sp)}
+                              {isBest && <span className="text-xs bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">Best</span>}
+                            </span>
+                          </td>
+                        );
+                      })}
+                      {scenarioProjections.length > 1 && (
+                        <td className="py-2.5 px-4 text-right font-mono text-slate-500">
+                          {diff !== null && !metric.isInput ? (
+                            <span className={diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400/70' : ''}>
+                              {metric.format === 'currency' && (diff > 0 ? '+' : '')}{
+                                metric.format === 'currency' ? formatCurrency(diff) :
+                                metric.format === 'percent' ? `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%` :
+                                metric.format === 'years' ? `${diff > 0 ? '+' : ''}${diff}y` :
+                                `${diff > 0 ? '+' : ''}${diff}`
+                              }
+                            </span>
+                          ) : '-'}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Year-by-Year Detail Table */}
+      <div className="bg-slate-800/30 rounded-xl border border-slate-700">
+        <button 
+          onClick={() => setShowYearlyDetail(!showYearlyDetail)}
+          className="w-full px-4 py-3 border-b border-slate-700 flex items-center justify-between hover:bg-slate-700/20 transition-colors"
+        >
+          <h3 className="text-sm font-semibold text-slate-300">Year-by-Year Breakdown</h3>
+          <svg 
+            className={`w-5 h-5 text-slate-400 transition-transform ${showYearlyDetail ? 'rotate-180' : ''}`} 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        
+        {showYearlyDetail && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-slate-800 z-10">
+                <tr className="border-b border-slate-700">
+                  <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Year</th>
+                  {birthDate && <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Age</th>}
+                  {/* Net Worth columns for each scenario */}
+                  {scenarioProjections.map(sp => (
+                    <th 
+                      key={`nw-${sp.scenario._id}`} 
+                      className="text-right font-medium py-3 px-3 whitespace-nowrap"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.scenario.name}
+                      <div className="text-xs font-normal text-slate-500">Net Worth</div>
+                    </th>
+                  ))}
+                  {/* Monthly SWR columns for each scenario */}
+                  {scenarioProjections.map(sp => (
+                    <th 
+                      key={`swr-${sp.scenario._id}`} 
+                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.scenario.name}
+                      <div className="text-xs font-normal text-slate-500">Monthly SWR</div>
+                    </th>
+                  ))}
+                  {/* FI Progress columns for each scenario */}
+                  {scenarioProjections.map(sp => (
+                    <th 
+                      key={`fi-${sp.scenario._id}`} 
+                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.scenario.name}
+                      <div className="text-xs font-normal text-slate-500">FI %</div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {primaryProjection.projections.map((row) => {
+                  const isNow = row.year === 'Now';
+                  
+                  // Check if any scenario hits FI this year
+                  const scenarioFiStatus = scenarioProjections.map(sp => {
+                    const scenarioRow = sp.projections.find(p => p.year === row.year);
+                    return {
+                      scenario: sp,
+                      isFiYear: scenarioRow?.isFiYear || false,
+                      swrCoversSpend: scenarioRow?.swrCoversSpend || false,
+                    };
+                  });
+                  const anyFiYear = scenarioFiStatus.some(s => s.isFiYear);
+                  const anyFiNow = isNow && scenarioFiStatus.some(s => s.swrCoversSpend);
+                  
+                  return (
+                    <tr
+                      key={row.year}
+                      className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${
+                        isNow ? 'border-b-2 border-slate-600 bg-slate-700/30' : ''
+                      } ${anyFiYear ? 'bg-emerald-900/20' : ''
+                      } ${anyFiNow ? 'bg-emerald-900/30' : ''}`}
+                    >
+                      <td className={`py-2 px-3 font-medium ${isNow ? 'text-slate-200 font-semibold' : 'text-slate-300'}`}>
+                        {row.year}
+                      </td>
+                      {birthDate && (
+                        <td className={`py-2 px-3 ${isNow ? 'text-slate-300 font-medium' : 'text-slate-400'}`}>
+                          {row.age}
+                        </td>
+                      )}
+                      {/* Net Worth values */}
+                      {scenarioProjections.map(sp => {
+                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const isFiYear = scenarioRow?.isFiYear;
+                        return (
+                          <td 
+                            key={`nw-${sp.scenario._id}`}
+                            className={`py-2 px-3 text-right font-mono ${isNow ? 'font-semibold' : ''}`}
+                            style={{ color: sp.scenario.color }}
+                          >
+                            {formatCurrency(scenarioRow?.netWorth || 0)}
+                            {isFiYear && <span className="ml-1 text-xs text-emerald-400">FI</span>}
+                          </td>
+                        );
+                      })}
+                      {/* Monthly SWR values */}
+                      {scenarioProjections.map(sp => {
+                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const swrCoversSpend = scenarioRow?.swrCoversSpend;
+                        return (
+                          <td 
+                            key={`swr-${sp.scenario._id}`}
+                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
+                              swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'
+                            }`}
+                          >
+                            {formatCurrency(scenarioRow?.monthlySwr || 0)}
+                          </td>
+                        );
+                      })}
+                      {/* FI Progress values */}
+                      {scenarioProjections.map(sp => {
+                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const fiProgress = scenarioRow?.fiProgress || 0;
+                        return (
+                          <td 
+                            key={`fi-${sp.scenario._id}`}
+                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
+                              fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'
+                            }`}
+                          >
+                            {fiProgress.toFixed(1)}%
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
