@@ -1013,6 +1013,28 @@ function ProjectionsTable({
                       <div className="text-xs font-normal text-slate-500">Net Worth</div>
                     </th>
                   ))}
+                  {/* Annual Spending columns for each scenario */}
+                  {scenarioProjections.map(sp => (
+                    <th 
+                      key={`spend-${sp.scenario._id}`} 
+                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.scenario.name}
+                      <div className="text-xs font-normal text-slate-500">Spending/yr</div>
+                    </th>
+                  ))}
+                  {/* Annual Savings columns for each scenario */}
+                  {scenarioProjections.map(sp => (
+                    <th 
+                      key={`save-${sp.scenario._id}`} 
+                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.scenario.name}
+                      <div className="text-xs font-normal text-slate-500">Savings/yr</div>
+                    </th>
+                  ))}
                   {/* Monthly SWR columns for each scenario */}
                   {scenarioProjections.map(sp => (
                     <th 
@@ -1081,6 +1103,33 @@ function ProjectionsTable({
                           >
                             {formatCurrency(scenarioRow?.netWorth || 0)}
                             {isFiYear && <span className="ml-1 text-xs text-emerald-400">FI</span>}
+                          </td>
+                        );
+                      })}
+                      {/* Annual Spending values */}
+                      {scenarioProjections.map(sp => {
+                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        return (
+                          <td 
+                            key={`spend-${sp.scenario._id}`}
+                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 text-rose-400/80`}
+                          >
+                            {formatCurrency(scenarioRow?.annualSpending || 0)}
+                          </td>
+                        );
+                      })}
+                      {/* Annual Savings values */}
+                      {scenarioProjections.map(sp => {
+                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const savings = scenarioRow?.annualSavings || 0;
+                        return (
+                          <td 
+                            key={`save-${sp.scenario._id}`}
+                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
+                              savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'
+                            }`}
+                          >
+                            {formatCurrency(savings)}
                           </td>
                         );
                       })}

@@ -39,6 +39,8 @@ export interface ProjectionRow {
   weeklySwr: number;
   dailySwr: number;
   monthlySpend: number;      // Inflation-adjusted spending target
+  annualSpending: number;     // Annual spending (monthlySpend * 12)
+  annualSavings: number;      // Annual savings after spending increase is accounted for
   fiTarget: number;           // Net worth needed for FI
   fiProgress: number;         // Percentage toward FI (0-100+)
   coastFiYear: number | null;
@@ -608,6 +610,10 @@ export function calculateLevelBasedSpending(
 
 /**
  * Generate projection data for the specified number of years
+ * 
+ * IMPORTANT: This function now properly accounts for spending increases reducing savings.
+ * As spending increases over time (due to inflation and spending growth rate), the
+ * available savings decrease. Net worth growth is calculated iteratively to reflect this.
  */
 export function generateProjections(
   latestEntry: NetWorthEntry | null,
@@ -650,10 +656,17 @@ export function generateProjections(
     }
   };
   
-  // "Now" row
-  const currentSpend = useSpendingLevels 
+  // Calculate base spending (year 0) - this is our reference point
+  const baseMonthlySpend = useSpendingLevels 
     ? calculateLevelBasedSpending(currentNetWorth, settings, 0)
     : monthlySpend;
+  const baseAnnualSpend = baseMonthlySpend * 12;
+  
+  // "Now" row
+  const currentSpend = baseMonthlySpend;
+  const currentAnnualSpending = currentSpend * 12;
+  // At year 0, savings equals the full yearly contribution
+  const currentAnnualSavings = yearlyContribution;
   const currentFiTarget = calculateFiTarget(currentSpend, swr);
   const currentSwrAmounts = calculateSwrAmounts(currentNetWorth, swr);
   const currentSwrCoversSpend = currentSpend > 0 && currentSwrAmounts.monthly >= currentSpend;
@@ -674,6 +687,8 @@ export function generateProjections(
     weeklySwr: currentSwrAmounts.weekly,
     dailySwr: currentSwrAmounts.daily,
     monthlySpend: currentSpend,
+    annualSpending: currentAnnualSpending,
+    annualSavings: currentAnnualSavings,
     fiTarget: currentFiTarget,
     fiProgress: currentFiProgress,
     coastFiYear: currentCoastFiYear,
@@ -683,52 +698,71 @@ export function generateProjections(
     swrCoversSpend: currentSwrCoversSpend,
   });
   
-  // Future projection rows
+  // Track cumulative values for proper calculation
+  let previousNetWorth = currentNetWorth;
+  let cumulativeInterest = currentAppreciation;
+  let cumulativeContributed = 0;
+  
+  // Future projection rows - now calculated iteratively with dynamic savings
   for (let i = 0; i < PROJECTION_YEARS; i++) {
     const year = currentYear + i;
-    const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999).getTime();
-    const yearsFromEntry = (endOfYear - latestEntry.timestamp) / MS_PER_YEAR;
     const age = birthYear ? year - birthYear : null;
     
-    // Calculate future value
-    const fv = calculateFutureValue(
-      latestEntry.amount,
-      currentRate,
-      yearsFromEntry,
-      yearlyContribution
-    );
+    // Calculate spending for this year based on previous year's ending net worth
+    const yearMonthlySpend = getSpendingForYear(i, previousNetWorth);
+    const yearAnnualSpending = yearMonthlySpend * 12;
     
-    // Get spending for this year (may be based on projected net worth)
-    const yearSpend = getSpendingForYear(i, fv.total);
-    const yearFiTarget = calculateFiTarget(yearSpend, swr);
-    const fiProgress = yearFiTarget > 0 ? (fv.total / yearFiTarget) * 100 : 0;
+    // Calculate savings: base contribution minus the spending increase from base level
+    // This reflects that increased spending comes from what would have been savings
+    const spendingIncrease = Math.max(0, yearAnnualSpending - baseAnnualSpend);
+    const yearAnnualSavings = Math.max(0, yearlyContribution - spendingIncrease);
+    
+    // Calculate this year's interest on previous net worth
+    const yearInterest = previousNetWorth * r;
+    
+    // New net worth = previous + interest + savings for this year
+    const yearNetWorth = previousNetWorth + yearInterest + yearAnnualSavings;
+    
+    // Update cumulative trackers
+    cumulativeInterest += yearInterest;
+    cumulativeContributed += yearAnnualSavings;
+    
+    // Calculate years from entry for reference
+    const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999).getTime();
+    const yearsFromEntry = (endOfYear - latestEntry.timestamp) / MS_PER_YEAR;
+    
+    // FI calculations
+    const yearFiTarget = calculateFiTarget(yearMonthlySpend, swr);
+    const fiProgress = yearFiTarget > 0 ? (yearNetWorth / yearFiTarget) * 100 : 0;
     
     // Calculate SWR amounts
-    const swrAmounts = calculateSwrAmounts(fv.total, swr);
-    const swrCoversSpend = yearSpend > 0 && swrAmounts.monthly >= yearSpend;
+    const swrAmounts = calculateSwrAmounts(yearNetWorth, swr);
+    const swrCoversSpend = yearMonthlySpend > 0 && swrAmounts.monthly >= yearMonthlySpend;
     
     // Check milestones
     const isFiYear = swrCoversSpend && !fiYearFound;
     if (isFiYear) fiYearFound = true;
     
-    const isCrossover = fv.totalInterest > fv.totalContributed && !crossoverFound && fv.totalContributed > 0;
+    const isCrossover = cumulativeInterest > cumulativeContributed && !crossoverFound && cumulativeContributed > 0;
     if (isCrossover) crossoverFound = true;
     
     // Coast FI
-    const coastFiYear = findCoastFiYear(fv.total, year, i, settings, applyInflation, useSpendingLevels);
+    const coastFiYear = findCoastFiYear(yearNetWorth, year, i, settings, applyInflation, useSpendingLevels);
     
     data.push({
       year,
       age,
       yearsFromEntry,
-      netWorth: fv.total,
-      interest: fv.totalInterest,
-      contributed: fv.totalContributed,
+      netWorth: yearNetWorth,
+      interest: cumulativeInterest,
+      contributed: cumulativeContributed,
       annualSwr: swrAmounts.annual,
       monthlySwr: swrAmounts.monthly,
       weeklySwr: swrAmounts.weekly,
       dailySwr: swrAmounts.daily,
-      monthlySpend: yearSpend,
+      monthlySpend: yearMonthlySpend,
+      annualSpending: yearAnnualSpending,
+      annualSavings: yearAnnualSavings,
       fiTarget: yearFiTarget,
       fiProgress,
       coastFiYear,
@@ -737,6 +771,9 @@ export function generateProjections(
       isCrossover,
       swrCoversSpend,
     });
+    
+    // Update for next iteration
+    previousNetWorth = yearNetWorth;
   }
   
   return data;
