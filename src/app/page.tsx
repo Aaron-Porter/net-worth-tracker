@@ -7,7 +7,18 @@ import { api } from '../../convex/_generated/api'
 import { Id } from '../../convex/_generated/dataModel'
 import { SignIn } from './components/SignIn'
 import { useScenarios, Scenario, ScenarioProjection, SCENARIO_TEMPLATES } from '../lib/useScenarios'
-import { formatCurrency, formatDate, getTimeSinceEntry, LEVEL_THRESHOLDS, calculateIncomeBreakdown, TAX_RATE_PRESETS, formatPercent, IncomeBreakdown } from '../lib/calculations'
+import { 
+  formatCurrency, 
+  formatDate, 
+  getTimeSinceEntry, 
+  LEVEL_THRESHOLDS, 
+  formatPercent,
+  calculateScenarioIncome,
+  STATE_TAX_RATES,
+  CONTRIBUTION_LIMITS,
+  FilingStatus,
+  ScenarioIncomeBreakdown,
+} from '../lib/calculations'
 import {
   LineChart,
   Line,
@@ -1480,733 +1491,494 @@ function LevelsTab({
 }
 
 // ============================================================================
-// SCENARIOS TAB
+// SCENARIOS TAB - Step-by-Step Scenario Builder
 // ============================================================================
+
+type WizardStep = 'list' | 'income' | 'filing' | 'pretax' | 'spending' | 'investments' | 'summary';
+
+interface ScenarioWizardState {
+  name: string;
+  grossIncome: string;
+  filingStatus: FilingStatus;
+  stateCode: string;
+  preTax401k: string;
+  preTaxIRA: string;
+  preTaxHSA: string;
+  preTaxOther: string;
+  baseMonthlyBudget: string;
+  spendingGrowthRate: string;
+  currentRate: string;
+  swr: string;
+  inflationRate: string;
+}
+
+const DEFAULT_WIZARD_STATE: ScenarioWizardState = {
+  name: '',
+  grossIncome: '',
+  filingStatus: 'single',
+  stateCode: '',
+  preTax401k: '',
+  preTaxIRA: '',
+  preTaxHSA: '',
+  preTaxOther: '',
+  baseMonthlyBudget: '3000',
+  spendingGrowthRate: '2',
+  currentRate: '7',
+  swr: '4',
+  inflationRate: '3',
+};
 
 interface ScenariosTabProps {
   scenariosHook: ReturnType<typeof useScenarios>;
 }
 
-function ScenariosTab({
-  scenariosHook,
-}: ScenariosTabProps) {
-  const [showCreateScenario, setShowCreateScenario] = useState(false);
-  const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
-  const [scenarioForm, setScenarioForm] = useState({
-    name: '',
-    description: '',
-    currentRate: '7',
-    swr: '4',
-    yearlyContribution: '0',
-    inflationRate: '3',
-    baseMonthlyBudget: '3000',
-    spendingGrowthRate: '2',
-    grossIncome: '',
-    effectiveTaxRate: '',
-  });
+function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
+  const [wizardStep, setWizardStep] = useState<WizardStep>('list');
+  const [wizardState, setWizardState] = useState<ScenarioWizardState>(DEFAULT_WIZARD_STATE);
+  const [editingScenarioId, setEditingScenarioId] = useState<string | null>(null);
 
-  const resetScenarioForm = () => {
-    setScenarioForm({
-      name: '',
-      description: '',
-      currentRate: '7',
-      swr: '4',
-      yearlyContribution: '0',
-      inflationRate: '3',
-      baseMonthlyBudget: '3000',
-      spendingGrowthRate: '2',
-      grossIncome: '',
-      effectiveTaxRate: '',
-    });
+  // Get current net worth for context
+  const currentNetWorth = scenariosHook.scenarioProjections[0]?.currentNetWorth.total || 0;
+
+  // Calculate income breakdown in real-time as user fills wizard
+  const incomeBreakdown = useMemo((): ScenarioIncomeBreakdown | null => {
+    const gross = parseFloat(wizardState.grossIncome) || 0;
+    if (gross <= 0) return null;
+    
+    const monthlySpend = parseFloat(wizardState.baseMonthlyBudget) || 3000;
+    
+    return calculateScenarioIncome(
+      gross,
+      wizardState.filingStatus,
+      wizardState.stateCode || null,
+      {
+        traditional401k: parseFloat(wizardState.preTax401k) || 0,
+        traditionalIRA: parseFloat(wizardState.preTaxIRA) || 0,
+        hsa: parseFloat(wizardState.preTaxHSA) || 0,
+        other: parseFloat(wizardState.preTaxOther) || 0,
+      },
+      monthlySpend,
+      currentNetWorth
+    );
+  }, [wizardState, currentNetWorth]);
+
+  const resetWizard = () => {
+    setWizardState(DEFAULT_WIZARD_STATE);
+    setWizardStep('list');
+    setEditingScenarioId(null);
   };
 
-  const handleCreateScenario = async () => {
-    if (!scenarioForm.name.trim()) return;
-    
-    await scenariosHook.createScenario({
-      name: scenarioForm.name.trim(),
-      description: scenarioForm.description.trim() || undefined,
-      currentRate: parseFloat(scenarioForm.currentRate) || 7,
-      swr: parseFloat(scenarioForm.swr) || 4,
-      yearlyContribution: parseFloat(scenarioForm.yearlyContribution) || 0,
-      inflationRate: parseFloat(scenarioForm.inflationRate) || 3,
-      baseMonthlyBudget: parseFloat(scenarioForm.baseMonthlyBudget) || 3000,
-      spendingGrowthRate: parseFloat(scenarioForm.spendingGrowthRate) || 2,
-      grossIncome: scenarioForm.grossIncome ? parseFloat(scenarioForm.grossIncome) : undefined,
-      effectiveTaxRate: scenarioForm.effectiveTaxRate ? parseFloat(scenarioForm.effectiveTaxRate) : undefined,
-    });
-    
-    resetScenarioForm();
-    setShowCreateScenario(false);
-  };
-
-  const handleUpdateScenario = async () => {
-    if (!editingScenario || !scenarioForm.name.trim()) return;
-    
-    await scenariosHook.updateScenario(editingScenario._id, {
-      name: scenarioForm.name.trim(),
-      description: scenarioForm.description.trim() || undefined,
-      currentRate: parseFloat(scenarioForm.currentRate) || 7,
-      swr: parseFloat(scenarioForm.swr) || 4,
-      yearlyContribution: parseFloat(scenarioForm.yearlyContribution) || 0,
-      inflationRate: parseFloat(scenarioForm.inflationRate) || 3,
-      baseMonthlyBudget: parseFloat(scenarioForm.baseMonthlyBudget) || 3000,
-      spendingGrowthRate: parseFloat(scenarioForm.spendingGrowthRate) || 2,
-      grossIncome: scenarioForm.grossIncome ? parseFloat(scenarioForm.grossIncome) : undefined,
-      effectiveTaxRate: scenarioForm.effectiveTaxRate ? parseFloat(scenarioForm.effectiveTaxRate) : undefined,
-    });
-    
-    setEditingScenario(null);
-    resetScenarioForm();
+  const startNewScenario = () => {
+    setWizardState(DEFAULT_WIZARD_STATE);
+    setEditingScenarioId(null);
+    setWizardStep('income');
   };
 
   const startEditingScenario = (scenario: Scenario) => {
-    setScenarioForm({
+    setWizardState({
       name: scenario.name,
-      description: scenario.description || '',
-      currentRate: scenario.currentRate.toString(),
-      swr: scenario.swr.toString(),
-      yearlyContribution: scenario.yearlyContribution.toString(),
-      inflationRate: scenario.inflationRate.toString(),
+      grossIncome: scenario.grossIncome?.toString() || '',
+      filingStatus: (scenario.filingStatus as FilingStatus) || 'single',
+      stateCode: scenario.stateCode || '',
+      preTax401k: scenario.preTax401k?.toString() || '',
+      preTaxIRA: scenario.preTaxIRA?.toString() || '',
+      preTaxHSA: scenario.preTaxHSA?.toString() || '',
+      preTaxOther: scenario.preTaxOther?.toString() || '',
       baseMonthlyBudget: scenario.baseMonthlyBudget.toString(),
       spendingGrowthRate: scenario.spendingGrowthRate.toString(),
-      grossIncome: scenario.grossIncome?.toString() || '',
-      effectiveTaxRate: scenario.effectiveTaxRate?.toString() || '',
+      currentRate: scenario.currentRate.toString(),
+      swr: scenario.swr.toString(),
+      inflationRate: scenario.inflationRate.toString(),
     });
-    setEditingScenario(scenario);
-    setShowCreateScenario(false);
+    setEditingScenarioId(scenario._id);
+    setWizardStep('income');
   };
 
-  const applyTemplate = (template: typeof SCENARIO_TEMPLATES[number]) => {
-    setScenarioForm({
-      name: template.name,
-      description: template.description,
+  const handleSaveScenario = async () => {
+    // Calculate total yearly contribution from pre-tax + post-tax savings
+    const totalPreTax = (parseFloat(wizardState.preTax401k) || 0) +
+                        (parseFloat(wizardState.preTaxIRA) || 0) +
+                        (parseFloat(wizardState.preTaxHSA) || 0) +
+                        (parseFloat(wizardState.preTaxOther) || 0);
+    const postTaxSavings = incomeBreakdown?.postTaxSavingsAvailable || 0;
+    const totalYearlySavings = totalPreTax + postTaxSavings;
+
+    const scenarioData = {
+      name: wizardState.name.trim() || `Scenario ${new Date().toLocaleDateString()}`,
+      currentRate: parseFloat(wizardState.currentRate) || 7,
+      swr: parseFloat(wizardState.swr) || 4,
+      yearlyContribution: Math.max(0, totalYearlySavings),
+      inflationRate: parseFloat(wizardState.inflationRate) || 3,
+      baseMonthlyBudget: parseFloat(wizardState.baseMonthlyBudget) || 3000,
+      spendingGrowthRate: parseFloat(wizardState.spendingGrowthRate) || 2,
+      grossIncome: parseFloat(wizardState.grossIncome) || undefined,
+      filingStatus: wizardState.filingStatus,
+      stateCode: wizardState.stateCode || undefined,
+      preTax401k: parseFloat(wizardState.preTax401k) || undefined,
+      preTaxIRA: parseFloat(wizardState.preTaxIRA) || undefined,
+      preTaxHSA: parseFloat(wizardState.preTaxHSA) || undefined,
+      preTaxOther: parseFloat(wizardState.preTaxOther) || undefined,
+      effectiveTaxRate: incomeBreakdown?.taxes.effectiveTotalRate,
+    };
+
+    if (editingScenarioId) {
+      await scenariosHook.updateScenario(editingScenarioId as any, scenarioData);
+    } else {
+      await scenariosHook.createScenario(scenarioData);
+    }
+    
+    resetWizard();
+  };
+
+  const applyInvestmentTemplate = (template: typeof SCENARIO_TEMPLATES[number]) => {
+    setWizardState(prev => ({
+      ...prev,
       currentRate: template.currentRate.toString(),
       swr: template.swr.toString(),
       inflationRate: template.inflationRate.toString(),
-      yearlyContribution: template.yearlyContribution.toString(),
-      baseMonthlyBudget: template.baseMonthlyBudget.toString(),
-      spendingGrowthRate: template.spendingGrowthRate.toString(),
-      grossIncome: template.grossIncome?.toString() || '',
-      effectiveTaxRate: template.effectiveTaxRate?.toString() || '',
-    });
+    }));
   };
-  
-  // Calculate income breakdown for the primary selected scenario
-  const primaryScenario = scenariosHook.selectedScenarios[0];
-  const primaryProjection = scenariosHook.scenarioProjections[0];
-  const incomeBreakdown = useMemo((): IncomeBreakdown | null => {
-    if (!primaryScenario || !primaryProjection) return null;
-    if (!primaryScenario.grossIncome || !primaryScenario.effectiveTaxRate) return null;
-    
-    return calculateIncomeBreakdown(
-      primaryScenario.grossIncome,
-      primaryScenario.effectiveTaxRate,
-      primaryProjection.levelInfo.unlockedAtNetWorth,
-      primaryProjection.currentNetWorth.total
-    );
-  }, [primaryScenario, primaryProjection]);
 
-  return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
-        Scenarios
-      </h1>
-      <p className="text-slate-400 text-center mb-8">
-        Create and compare different financial assumptions
-      </p>
+  // Wizard step navigation
+  const STEPS: WizardStep[] = ['income', 'filing', 'pretax', 'spending', 'investments', 'summary'];
+  const currentStepIndex = STEPS.indexOf(wizardStep);
+  const canGoNext = currentStepIndex < STEPS.length - 1;
+  const canGoBack = currentStepIndex > 0;
+  const goNext = () => canGoNext && setWizardStep(STEPS[currentStepIndex + 1]);
+  const goBack = () => canGoBack && setWizardStep(STEPS[currentStepIndex - 1]);
 
-      {/* Personal Info Section */}
-      <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
-        <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
-          <span className="w-2 h-2 bg-sky-400 rounded-full"></span>
-          Personal Info
-        </h3>
-        <div className="max-w-xs">
-          <label className="block text-sm font-medium text-slate-300 mb-2">
-            Birth Date
-          </label>
-          <p className="text-xs text-slate-500 mb-2">
-            Used to show your age in projections
-          </p>
-          <input
-            type="date"
-            value={scenariosHook.profile.birthDate}
-            onChange={(e) => scenariosHook.updateProfile({ birthDate: e.target.value })}
-            className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-          />
-        </div>
-      </div>
-
-      {/* Scenarios Section */}
-      <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-violet-500/30">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-            <span className="w-2 h-2 bg-violet-400 rounded-full"></span>
-            Your Scenarios
-          </h3>
-          <button
-            onClick={() => {
-              resetScenarioForm();
-              setEditingScenario(null);
-              setShowCreateScenario(!showCreateScenario);
-            }}
-            className="px-3 py-1.5 text-sm bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-colors"
-          >
-            {showCreateScenario ? 'Cancel' : '+ New Scenario'}
-          </button>
-        </div>
-        
-        <p className="text-sm text-slate-400 mb-4">
-          Each scenario represents a different set of financial assumptions. Select one or more to compare in Projections.
+  // Show scenario list if not in wizard
+  if (wizardStep === 'list') {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
+          Scenario Builder
+        </h1>
+        <p className="text-slate-400 text-center mb-8">
+          Build scenarios step-by-step to understand your financial picture
         </p>
 
-        {/* Create/Edit Scenario Form */}
-        {(showCreateScenario || editingScenario) && (
-          <div className="bg-slate-900/50 rounded-xl p-4 mb-4 border border-violet-500/20">
-            <h4 className="text-sm font-medium text-violet-400 mb-3">
-              {editingScenario ? `Edit: ${editingScenario.name}` : 'Create New Scenario'}
-            </h4>
-            
-            {/* Templates (only for new scenarios) */}
-            {!editingScenario && (
-              <div className="mb-4">
-                <p className="text-xs text-slate-500 mb-2">Quick start from template:</p>
-                <div className="flex flex-wrap gap-2">
-                  {SCENARIO_TEMPLATES.map(template => (
-                    <button
-                      key={template.name}
-                      onClick={() => applyTemplate(template)}
-                      className="px-2 py-1 text-xs bg-slate-700/50 text-slate-300 rounded hover:bg-slate-700 transition-colors"
-                      title={template.description}
-                    >
-                      {template.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Scenario Name *
-                </label>
-                <input
-                  type="text"
-                  value={scenarioForm.name}
-                  onChange={(e) => setScenarioForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., Conservative Plan"
-                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Description (optional)
-                </label>
-                <input
-                  type="text"
-                  value={scenarioForm.description}
-                  onChange={(e) => setScenarioForm(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Brief description..."
-                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-            
-            {/* Investment Settings */}
-            <div className="mb-4">
-              <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide font-medium">Investment Settings</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Return Rate %</label>
-                  <input
-                    type="number"
-                    value={scenarioForm.currentRate}
-                    onChange={(e) => setScenarioForm(prev => ({ ...prev, currentRate: e.target.value }))}
-                    placeholder="7"
-                    step="0.1"
-                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">SWR %</label>
-                  <input
-                    type="number"
-                    value={scenarioForm.swr}
-                    onChange={(e) => setScenarioForm(prev => ({ ...prev, swr: e.target.value }))}
-                    placeholder="4"
-                    step="0.1"
-                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Inflation %</label>
-                  <input
-                    type="number"
-                    value={scenarioForm.inflationRate}
-                    onChange={(e) => setScenarioForm(prev => ({ ...prev, inflationRate: e.target.value }))}
-                    placeholder="3"
-                    step="0.1"
-                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-            </div>
-            
-            {/* Spending Settings */}
-            <div className="mb-4">
-              <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide font-medium">Spending Settings</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Base Budget (Monthly)</label>
-                  <input
-                    type="number"
-                    value={scenarioForm.baseMonthlyBudget}
-                    onChange={(e) => setScenarioForm(prev => ({ ...prev, baseMonthlyBudget: e.target.value }))}
-                    placeholder="3000"
-                    step="100"
-                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Spending Rate %</label>
-                  <input
-                    type="number"
-                    value={scenarioForm.spendingGrowthRate}
-                    onChange={(e) => setScenarioForm(prev => ({ ...prev, spendingGrowthRate: e.target.value }))}
-                    placeholder="2"
-                    step="0.1"
-                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Yearly Contribution</label>
-                  <input
-                    type="number"
-                    value={scenarioForm.yearlyContribution}
-                    onChange={(e) => setScenarioForm(prev => ({ ...prev, yearlyContribution: e.target.value }))}
-                    placeholder="0"
-                    step="1000"
-                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-            </div>
-            
-            {/* Income & Tax Settings */}
-            <div className="mb-4">
-              <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide font-medium">Income & Taxes (Optional)</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Gross Annual Income</label>
-                  <input
-                    type="number"
-                    value={scenarioForm.grossIncome}
-                    onChange={(e) => setScenarioForm(prev => ({ ...prev, grossIncome: e.target.value }))}
-                    placeholder="100000"
-                    step="1000"
-                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Effective Tax Rate %</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={scenarioForm.effectiveTaxRate}
-                      onChange={(e) => setScenarioForm(prev => ({ ...prev, effectiveTaxRate: e.target.value }))}
-                      placeholder="22"
-                      step="1"
-                      className="flex-1 bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    />
-                    <select
-                      value=""
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          setScenarioForm(prev => ({ ...prev, effectiveTaxRate: e.target.value }));
-                        }
-                      }}
-                      className="bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-2 text-xs text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    >
-                      <option value="">Presets</option>
-                      {TAX_RATE_PRESETS.map(preset => (
-                        <option key={preset.rate} value={preset.rate}>{preset.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-slate-600 mt-2">
-                Adding income data enables the Income Calculator below to help determine realistic contribution amounts.
-              </p>
-            </div>
-            
-            <div className="flex gap-2">
-              {editingScenario ? (
-                <>
-                  <button
-                    onClick={handleUpdateScenario}
-                    disabled={!scenarioForm.name.trim()}
-                    className="px-4 py-2 bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Save Changes
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditingScenario(null);
-                      resetScenarioForm();
-                    }}
-                    className="px-4 py-2 bg-slate-700/50 text-slate-400 rounded-lg hover:bg-slate-700 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={handleCreateScenario}
-                  disabled={!scenarioForm.name.trim()}
-                  className="px-4 py-2 bg-violet-500/20 text-violet-400 rounded-lg hover:bg-violet-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Create Scenario
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Scenarios List */}
-        {scenariosHook.scenarios.length > 0 ? (
-          <div className="space-y-2">
-            {scenariosHook.scenarios.map(scenario => (
-              <div
-                key={scenario._id}
-                className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
-                  scenario.isSelected
-                    ? 'bg-slate-900/50 border-slate-600'
-                    : 'bg-slate-900/20 border-slate-700/50 opacity-60'
-                }`}
-              >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <button
-                    onClick={() => scenariosHook.toggleSelected(scenario._id)}
-                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                      scenario.isSelected
-                        ? 'border-emerald-400 bg-emerald-400/20'
-                        : 'border-slate-500 hover:border-slate-400'
-                    }`}
-                  >
-                    {scenario.isSelected && (
-                      <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    )}
-                  </button>
-                  <div
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: scenario.color }}
-                  />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-slate-200 truncate">{scenario.name}</span>
-                    </div>
-                    {scenario.description && (
-                      <p className="text-xs text-slate-500 truncate">{scenario.description}</p>
-                    )}
-                    <div className="flex gap-3 text-xs text-slate-500 mt-1">
-                      <span>Return: <span className="text-emerald-400">{scenario.currentRate}%</span></span>
-                      <span>SWR: <span className="text-amber-400">{scenario.swr}%</span></span>
-                      <span>Contribution: <span className="text-sky-400">{formatCurrency(scenario.yearlyContribution)}/yr</span></span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => scenariosHook.selectOnly(scenario._id)}
-                    className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
-                    title="Select only this scenario"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => startEditingScenario(scenario)}
-                    className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors"
-                    title="Edit"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => scenariosHook.duplicateScenario(scenario._id)}
-                    className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors"
-                    title="Duplicate"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                  </button>
-                  {scenariosHook.scenarios.length > 1 && (
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete scenario "${scenario.name}"?`)) {
-                          scenariosHook.deleteScenario(scenario._id);
-                        }
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                      title="Delete"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-6 text-slate-500">
-            <p className="mb-2">No scenarios created yet.</p>
-            <p className="text-xs">Creating your first scenario...</p>
-          </div>
-        )}
-
-        {/* Selection hint */}
-        {scenariosHook.scenarios.length > 1 && (
-          <p className="text-xs text-slate-500 mt-4 text-center">
-            Tip: Select multiple scenarios to compare them side-by-side in Projections
-          </p>
-        )}
-      </div>
-
-      {/* Income Calculator Summary */}
-      {incomeBreakdown && (
-        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-xl p-6 mb-6 border border-emerald-500/30">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-              <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
-              Income Calculator
-            </h3>
-            <div className="text-xs text-slate-500">
-              Based on: <span style={{ color: primaryScenario?.color }}>{primaryScenario?.name}</span>
-            </div>
-          </div>
-          
-          {/* Income Flow Visualization */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-            {/* Gross Income */}
-            <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
-              <p className="text-xs text-slate-500 mb-1 uppercase tracking-wide">Gross Income</p>
-              <p className="text-2xl font-mono text-slate-200">{formatCurrency(incomeBreakdown.grossIncome)}</p>
-              <p className="text-sm text-slate-500 mt-1">{formatCurrency(incomeBreakdown.monthlyGross)}/mo</p>
-            </div>
-            
-            {/* Taxes */}
-            <div className="bg-slate-900/50 rounded-xl p-4 border border-red-500/20">
-              <p className="text-xs text-slate-500 mb-1 uppercase tracking-wide">
-                Taxes <span className="text-red-400">({formatPercent(incomeBreakdown.effectiveTaxRate)})</span>
-              </p>
-              <p className="text-2xl font-mono text-red-400">-{formatCurrency(incomeBreakdown.annualTaxes)}</p>
-              <p className="text-sm text-slate-500 mt-1">-{formatCurrency(incomeBreakdown.monthlyTaxes)}/mo</p>
-            </div>
-            
-            {/* Net Income */}
-            <div className="bg-slate-900/50 rounded-xl p-4 border border-emerald-500/30">
-              <p className="text-xs text-slate-500 mb-1 uppercase tracking-wide">Net Income (Post-Tax)</p>
-              <p className="text-2xl font-mono text-emerald-400">{formatCurrency(incomeBreakdown.netIncome)}</p>
-              <p className="text-sm text-slate-500 mt-1">{formatCurrency(incomeBreakdown.monthlyNet)}/mo</p>
-            </div>
-          </div>
-          
-          {/* Spending vs Savings Breakdown */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            {/* Spending */}
-            <div className="bg-slate-900/50 rounded-xl p-4 border border-amber-500/20">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-slate-500 uppercase tracking-wide">Annual Spending</p>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
-                  {formatPercent(incomeBreakdown.spendingToNetPercent)} of net
-                </span>
-              </div>
-              <p className="text-2xl font-mono text-amber-400">{formatCurrency(incomeBreakdown.annualSpending)}</p>
-              <p className="text-sm text-slate-500 mt-1">{formatCurrency(incomeBreakdown.monthlySpending)}/mo budget</p>
-              <div className="mt-3 pt-3 border-t border-slate-700">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">% of gross income:</span>
-                  <span className="text-slate-400 font-mono">{formatPercent(incomeBreakdown.spendingToGrossPercent)}</span>
-                </div>
-              </div>
-            </div>
-            
-            {/* Savings Potential */}
-            <div className="bg-slate-900/50 rounded-xl p-4 border border-sky-500/30">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-slate-500 uppercase tracking-wide">Savings Potential</p>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400">
-                  {formatPercent(incomeBreakdown.savingsRate)} of gross
-                </span>
-              </div>
-              <p className="text-2xl font-mono text-sky-400">{formatCurrency(incomeBreakdown.annualSavingsPotential)}</p>
-              <p className="text-sm text-slate-500 mt-1">{formatCurrency(incomeBreakdown.monthlySavingsPotential)}/mo to invest</p>
-              <div className="mt-3 pt-3 border-t border-slate-700">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">% of net income saved:</span>
-                  <span className="text-slate-400 font-mono">{formatPercent(incomeBreakdown.netSavingsRate)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Progress Bar: Income Allocation */}
-          <div className="mb-6">
-            <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide">Income Allocation</p>
-            <div className="h-6 bg-slate-700 rounded-full overflow-hidden flex">
-              <div 
-                className="h-full bg-red-500 flex items-center justify-center text-xs text-white font-medium"
-                style={{ width: `${incomeBreakdown.taxBurdenPercent}%` }}
-                title={`Taxes: ${formatPercent(incomeBreakdown.taxBurdenPercent)}`}
-              >
-                {incomeBreakdown.taxBurdenPercent >= 10 && 'Taxes'}
-              </div>
-              <div 
-                className="h-full bg-amber-500 flex items-center justify-center text-xs text-white font-medium"
-                style={{ width: `${incomeBreakdown.spendingToGrossPercent}%` }}
-                title={`Spending: ${formatPercent(incomeBreakdown.spendingToGrossPercent)}`}
-              >
-                {incomeBreakdown.spendingToGrossPercent >= 10 && 'Spending'}
-              </div>
-              <div 
-                className="h-full bg-sky-500 flex items-center justify-center text-xs text-white font-medium"
-                style={{ width: `${incomeBreakdown.savingsRate}%` }}
-                title={`Savings: ${formatPercent(incomeBreakdown.savingsRate)}`}
-              >
-                {incomeBreakdown.savingsRate >= 10 && 'Savings'}
-              </div>
-            </div>
-            <div className="flex justify-between mt-2 text-xs text-slate-500">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 bg-red-500 rounded-full"></span>
-                Taxes: {formatPercent(incomeBreakdown.taxBurdenPercent)}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
-                Spending: {formatPercent(incomeBreakdown.spendingToGrossPercent)}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 bg-sky-500 rounded-full"></span>
-                Savings: {formatPercent(incomeBreakdown.savingsRate)}
-              </span>
-            </div>
-          </div>
-          
-          {/* Net Worth Context */}
-          <div className="bg-slate-900/50 rounded-xl p-4 border border-violet-500/20">
-            <p className="text-xs text-slate-500 mb-3 uppercase tracking-wide">Net Worth Context</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-xs text-slate-500">Current Net Worth</p>
-                <p className="text-lg font-mono text-violet-400">{formatCurrency(incomeBreakdown.currentNetWorth)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Years of Expenses</p>
-                <p className="text-lg font-mono text-violet-400">{incomeBreakdown.yearsOfExpensesInNetWorth.toFixed(1)} years</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Net Worth : Income</p>
-                <p className="text-lg font-mono text-violet-400">{incomeBreakdown.netWorthToIncomeRatio.toFixed(1)}x</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Scenario Contribution</p>
-                <p className="text-lg font-mono text-sky-400">{formatCurrency(primaryScenario?.yearlyContribution || 0)}/yr</p>
-              </div>
-            </div>
-            
-            {/* Suggestion if contribution doesn't match savings potential */}
-            {primaryScenario && Math.abs(incomeBreakdown.annualSavingsPotential - primaryScenario.yearlyContribution) > 1000 && (
-              <div className="mt-4 p-3 bg-sky-500/10 rounded-lg border border-sky-500/20">
-                <p className="text-sm text-sky-400">
-                  {incomeBreakdown.annualSavingsPotential > primaryScenario.yearlyContribution ? (
-                    <>Based on your income and spending, you could potentially contribute <strong>{formatCurrency(incomeBreakdown.annualSavingsPotential)}/year</strong>. Consider updating your scenario's yearly contribution to see the impact on your projections.</>
-                  ) : (
-                    <>Your scenario contribution ({formatCurrency(primaryScenario.yearlyContribution)}/yr) exceeds your calculated savings potential ({formatCurrency(incomeBreakdown.annualSavingsPotential)}/yr). You may want to adjust either your income, spending, or contribution assumptions.</>
-                  )}
-                </p>
-              </div>
-            )}
+        {/* Personal Info */}
+        <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700">
+          <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <span className="w-2 h-2 bg-sky-400 rounded-full"></span>
+            Personal Info
+          </h3>
+          <div className="max-w-xs">
+            <label className="block text-sm font-medium text-slate-300 mb-2">Birth Date</label>
+            <input
+              type="date"
+              value={scenariosHook.profile.birthDate}
+              onChange={(e) => scenariosHook.updateProfile({ birthDate: e.target.value })}
+              className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
           </div>
         </div>
+
+        {/* Create New Scenario CTA */}
+        <div className="bg-gradient-to-br from-violet-500/20 to-purple-500/20 rounded-xl p-8 mb-6 border border-violet-500/30 text-center">
+          <h3 className="text-xl font-semibold text-slate-200 mb-2">Build a New Scenario</h3>
+          <p className="text-slate-400 mb-6 max-w-md mx-auto">
+            Answer a few questions about your income, taxes, spending, and investment assumptions to create a personalized financial projection.
+          </p>
+          <button
+            onClick={startNewScenario}
+            className="px-6 py-3 bg-violet-500 text-white rounded-lg hover:bg-violet-600 transition-colors font-medium"
+          >
+            Start Building
+          </button>
+        </div>
+
+        {/* Existing Scenarios */}
+        {scenariosHook.scenarios.length > 0 && (
+          <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4">Your Scenarios</h3>
+            <div className="space-y-2">
+              {scenariosHook.scenarios.map(scenario => (
+                <div key={scenario._id} className={`flex items-center justify-between p-4 rounded-lg border ${scenario.isSelected ? 'bg-slate-900/50 border-slate-600' : 'bg-slate-900/20 border-slate-700/50 opacity-60'}`}>
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <button onClick={() => scenariosHook.toggleSelected(scenario._id)} className={`w-5 h-5 rounded border-2 flex items-center justify-center ${scenario.isSelected ? 'border-emerald-400 bg-emerald-400/20' : 'border-slate-500'}`}>
+                      {scenario.isSelected && <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
+                    </button>
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: scenario.color }} />
+                    <div className="min-w-0">
+                      <span className="font-medium text-slate-200">{scenario.name}</span>
+                      <div className="flex gap-3 text-xs text-slate-500 mt-1">
+                        <span>Saves: <span className="text-sky-400">{formatCurrency(scenario.yearlyContribution)}/yr</span></span>
+                        {scenario.grossIncome && <span>Income: <span className="text-emerald-400">{formatCurrency(scenario.grossIncome)}</span></span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => startEditingScenario(scenario)} className="p-1.5 text-slate-400 hover:text-violet-400 rounded" title="Edit">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    </button>
+                    <button onClick={() => scenariosHook.duplicateScenario(scenario._id)} className="p-1.5 text-slate-400 hover:text-slate-200 rounded" title="Duplicate">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    </button>
+                    {scenariosHook.scenarios.length > 1 && (
+                      <button onClick={() => confirm(`Delete "${scenario.name}"?`) && scenariosHook.deleteScenario(scenario._id)} className="p-1.5 text-slate-400 hover:text-red-400 rounded" title="Delete">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Wizard Header Component
+  const WizardHeader = ({ title, subtitle, step }: { title: string; subtitle: string; step: number }) => (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={resetWizard} className="text-slate-400 hover:text-slate-200 flex items-center gap-2">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          Cancel
+        </button>
+        <div className="text-sm text-slate-500">Step {step} of 6</div>
+      </div>
+      <div className="flex gap-1 mb-6">
+        {[1,2,3,4,5,6].map(s => (
+          <div key={s} className={`h-1 flex-1 rounded-full ${s <= step ? 'bg-violet-500' : 'bg-slate-700'}`} />
+        ))}
+      </div>
+      <h2 className="text-2xl font-bold text-slate-200 mb-2">{title}</h2>
+      <p className="text-slate-400">{subtitle}</p>
+    </div>
+  );
+
+  // Navigation buttons
+  const WizardNav = ({ canContinue = true }: { canContinue?: boolean }) => (
+    <div className="flex justify-between mt-8">
+      <button onClick={goBack} disabled={!canGoBack} className="px-4 py-2 text-slate-400 hover:text-slate-200 disabled:opacity-30">
+        Back
+      </button>
+      <button onClick={goNext} disabled={!canContinue || !canGoNext} className="px-6 py-2 bg-violet-500 text-white rounded-lg hover:bg-violet-600 disabled:opacity-50">
+        Continue
+      </button>
+    </div>
+  );
+
+  // Wizard container
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-2xl">
+      {/* STEP 1: Income */}
+      {wizardStep === 'income' && (
+        <>
+          <WizardHeader title="What's your gross annual income?" subtitle="Enter your total income before any taxes or deductions." step={1} />
+          <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+            <label className="block text-sm font-medium text-slate-300 mb-2">Annual Gross Income</label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
+              <input type="number" value={wizardState.grossIncome} onChange={(e) => setWizardState(s => ({ ...s, grossIncome: e.target.value }))} placeholder="100000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+            </div>
+            {wizardState.grossIncome && (
+              <p className="mt-3 text-slate-400">That's <span className="text-emerald-400 font-mono">{formatCurrency(parseFloat(wizardState.grossIncome) / 12)}</span> per month before taxes.</p>
+            )}
+          </div>
+          <WizardNav canContinue={!!wizardState.grossIncome} />
+        </>
       )}
-      
-      {/* Prompt to add income data if not set */}
-      {primaryScenario && (!primaryScenario.grossIncome || !primaryScenario.effectiveTaxRate) && (
-        <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700 border-dashed">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center shrink-0">
-              <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+
+      {/* STEP 2: Filing Status & State */}
+      {wizardStep === 'filing' && (
+        <>
+          <WizardHeader title="How do you file your taxes?" subtitle="This helps us calculate your federal and state tax burden." step={2} />
+          <div className="space-y-4">
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <label className="block text-sm font-medium text-slate-300 mb-3">Filing Status</label>
+              <div className="grid grid-cols-2 gap-3">
+                {(['single', 'married_jointly', 'married_separately', 'head_of_household'] as FilingStatus[]).map(status => (
+                  <button key={status} onClick={() => setWizardState(s => ({ ...s, filingStatus: status }))} className={`p-4 rounded-lg border text-left ${wizardState.filingStatus === status ? 'border-violet-500 bg-violet-500/10' : 'border-slate-600 hover:border-slate-500'}`}>
+                    <span className="font-medium text-slate-200">{status === 'single' ? 'Single' : status === 'married_jointly' ? 'Married Filing Jointly' : status === 'married_separately' ? 'Married Filing Separately' : 'Head of Household'}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex-1">
-              <h4 className="text-sm font-medium text-slate-200 mb-1">Add Income Data for Better Planning</h4>
-              <p className="text-sm text-slate-400">
-                Enter your gross income and effective tax rate in your scenario to see a detailed breakdown of your savings potential and understand how your spending relates to your income.
-              </p>
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <label className="block text-sm font-medium text-slate-300 mb-2">State (for state income tax)</label>
+              <select value={wizardState.stateCode} onChange={(e) => setWizardState(s => ({ ...s, stateCode: e.target.value }))} className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-violet-500">
+                <option value="">No state income tax / Skip</option>
+                {Object.entries(STATE_TAX_RATES).map(([code, info]) => (
+                  <option key={code} value={code}>{info.name} ({info.rate}%)</option>
+                ))}
+              </select>
             </div>
-            <button
-              onClick={() => {
-                if (primaryScenario) {
-                  startEditingScenario(primaryScenario);
-                }
-              }}
-              className="px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm font-medium shrink-0"
-            >
-              Add Income
+          </div>
+          <WizardNav />
+        </>
+      )}
+
+      {/* STEP 3: Pre-tax Savings */}
+      {wizardStep === 'pretax' && (
+        <>
+          <WizardHeader title="Pre-tax retirement contributions" subtitle="These reduce your taxable income and grow tax-deferred." step={3} />
+          <div className="space-y-4">
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-sm font-medium text-slate-300">401(k) / 403(b) Contribution</label>
+                <span className="text-xs text-slate-500">Limit: {formatCurrency(CONTRIBUTION_LIMITS.traditional401k)}</span>
+              </div>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                <input type="number" value={wizardState.preTax401k} onChange={(e) => setWizardState(s => ({ ...s, preTax401k: e.target.value }))} placeholder="0" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-10 pr-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              </div>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-sm font-medium text-slate-300">Traditional IRA</label>
+                <span className="text-xs text-slate-500">Limit: {formatCurrency(CONTRIBUTION_LIMITS.traditionalIRA)}</span>
+              </div>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                <input type="number" value={wizardState.preTaxIRA} onChange={(e) => setWizardState(s => ({ ...s, preTaxIRA: e.target.value }))} placeholder="0" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-10 pr-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              </div>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-sm font-medium text-slate-300">HSA (Health Savings Account)</label>
+                <span className="text-xs text-slate-500">Limit: {formatCurrency(CONTRIBUTION_LIMITS.hsa_individual)}-{formatCurrency(CONTRIBUTION_LIMITS.hsa_family)}</span>
+              </div>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                <input type="number" value={wizardState.preTaxHSA} onChange={(e) => setWizardState(s => ({ ...s, preTaxHSA: e.target.value }))} placeholder="0" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-10 pr-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              </div>
+            </div>
+            {incomeBreakdown && (
+              <div className="bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/30">
+                <p className="text-sm text-emerald-400">Pre-tax savings reduce your taxable income by <strong>{formatCurrency(incomeBreakdown.totalPreTaxSavings)}</strong>, saving you approximately <strong>{formatCurrency(incomeBreakdown.totalPreTaxSavings * (incomeBreakdown.taxes.marginalFederalRate / 100))}</strong> in taxes.</p>
+              </div>
+            )}
+          </div>
+          <WizardNav />
+        </>
+      )}
+
+      {/* STEP 4: Spending */}
+      {wizardStep === 'spending' && (
+        <>
+          <WizardHeader title="What's your monthly spending?" subtitle="Your base budget for living expenses." step={4} />
+          <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 mb-4">
+            <label className="block text-sm font-medium text-slate-300 mb-2">Monthly Base Budget</label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
+              <input type="number" value={wizardState.baseMonthlyBudget} onChange={(e) => setWizardState(s => ({ ...s, baseMonthlyBudget: e.target.value }))} placeholder="3000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+            </div>
+            <p className="mt-2 text-sm text-slate-500">Annual: {formatCurrency((parseFloat(wizardState.baseMonthlyBudget) || 0) * 12)}</p>
+          </div>
+          {incomeBreakdown && (
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <h4 className="text-sm font-medium text-slate-300 mb-4">Your Money Flow</h4>
+              <div className="space-y-3">
+                <div className="flex justify-between"><span className="text-slate-400">Gross Income</span><span className="font-mono text-slate-200">{formatCurrency(incomeBreakdown.taxes.grossIncome)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">- Pre-tax Savings</span><span className="font-mono text-emerald-400">-{formatCurrency(incomeBreakdown.totalPreTaxSavings)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">- Total Taxes</span><span className="font-mono text-red-400">-{formatCurrency(incomeBreakdown.taxes.totalTax)}</span></div>
+                <div className="border-t border-slate-600 pt-2 flex justify-between"><span className="text-slate-300">Net Income</span><span className="font-mono text-emerald-400">{formatCurrency(incomeBreakdown.taxes.netIncome)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">- Annual Spending</span><span className="font-mono text-amber-400">-{formatCurrency(incomeBreakdown.annualSpending)}</span></div>
+                <div className="border-t border-slate-600 pt-2 flex justify-between font-medium"><span className="text-slate-200">Post-tax Savings Available</span><span className="font-mono text-sky-400">{formatCurrency(incomeBreakdown.postTaxSavingsAvailable)}</span></div>
+              </div>
+            </div>
+          )}
+          <WizardNav />
+        </>
+      )}
+
+      {/* STEP 5: Investment Assumptions */}
+      {wizardStep === 'investments' && (
+        <>
+          <WizardHeader title="Investment assumptions" subtitle="How do you expect your investments to perform?" step={5} />
+          <div className="mb-4">
+            <p className="text-sm text-slate-500 mb-2">Quick presets:</p>
+            <div className="flex gap-2">
+              {SCENARIO_TEMPLATES.map(t => (
+                <button key={t.name} onClick={() => applyInvestmentTemplate(t)} className="px-3 py-1.5 text-sm bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700">{t.name}</button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Expected Annual Return (%)</label>
+              <input type="number" value={wizardState.currentRate} onChange={(e) => setWizardState(s => ({ ...s, currentRate: e.target.value }))} placeholder="7" step="0.5" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              <p className="mt-2 text-xs text-slate-500">Historical S&P 500 average: ~7% after inflation</p>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Safe Withdrawal Rate (%)</label>
+              <input type="number" value={wizardState.swr} onChange={(e) => setWizardState(s => ({ ...s, swr: e.target.value }))} placeholder="4" step="0.5" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              <p className="mt-2 text-xs text-slate-500">Traditional: 4% (Trinity Study), Conservative: 3-3.5%</p>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Expected Inflation Rate (%)</label>
+              <input type="number" value={wizardState.inflationRate} onChange={(e) => setWizardState(s => ({ ...s, inflationRate: e.target.value }))} placeholder="3" step="0.5" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+            </div>
+          </div>
+          <WizardNav />
+        </>
+      )}
+
+      {/* STEP 6: Summary */}
+      {wizardStep === 'summary' && incomeBreakdown && (
+        <>
+          <WizardHeader title="Your Scenario Summary" subtitle="Review your numbers and save your scenario." step={6} />
+          <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 mb-4">
+            <label className="block text-sm font-medium text-slate-300 mb-2">Scenario Name</label>
+            <input type="text" value={wizardState.name} onChange={(e) => setWizardState(s => ({ ...s, name: e.target.value }))} placeholder="My Financial Plan" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-violet-500" />
+          </div>
+          
+          {/* Income Allocation Visual */}
+          <div className="bg-slate-800/50 rounded-xl p-6 border border-emerald-500/30 mb-4">
+            <h4 className="text-lg font-semibold text-slate-200 mb-4">Income Allocation</h4>
+            <div className="h-8 bg-slate-700 rounded-full overflow-hidden flex mb-3">
+              <div className="h-full bg-emerald-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationPreTaxSavings}%` }} title="Pre-tax Savings">{incomeBreakdown.allocationPreTaxSavings >= 8 && 'Pre-tax'}</div>
+              <div className="h-full bg-red-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationTaxes}%` }} title="Taxes">{incomeBreakdown.allocationTaxes >= 8 && 'Taxes'}</div>
+              <div className="h-full bg-amber-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationSpending}%` }} title="Spending">{incomeBreakdown.allocationSpending >= 8 && 'Spending'}</div>
+              <div className="h-full bg-sky-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationPostTaxSavings}%` }} title="Post-tax Savings">{incomeBreakdown.allocationPostTaxSavings >= 8 && 'Savings'}</div>
+            </div>
+            <div className="grid grid-cols-4 gap-2 text-xs">
+              <div className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span><span className="text-slate-400">Pre-tax: {formatPercent(incomeBreakdown.allocationPreTaxSavings)}</span></div>
+              <div className="flex items-center gap-1"><span className="w-2 h-2 bg-red-500 rounded-full"></span><span className="text-slate-400">Taxes: {formatPercent(incomeBreakdown.allocationTaxes)}</span></div>
+              <div className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-500 rounded-full"></span><span className="text-slate-400">Spending: {formatPercent(incomeBreakdown.allocationSpending)}</span></div>
+              <div className="flex items-center gap-1"><span className="w-2 h-2 bg-sky-500 rounded-full"></span><span className="text-slate-400">Post-tax: {formatPercent(incomeBreakdown.allocationPostTaxSavings)}</span></div>
+            </div>
+          </div>
+
+          {/* Key Numbers */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+              <p className="text-xs text-slate-500 uppercase">Total Annual Savings</p>
+              <p className="text-2xl font-mono text-sky-400">{formatCurrency(incomeBreakdown.totalAnnualSavings)}</p>
+              <p className="text-xs text-slate-500 mt-1">{formatPercent(incomeBreakdown.savingsRateOfGross)} of gross income</p>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+              <p className="text-xs text-slate-500 uppercase">Effective Tax Rate</p>
+              <p className="text-2xl font-mono text-red-400">{formatPercent(incomeBreakdown.taxes.effectiveTotalRate)}</p>
+              <p className="text-xs text-slate-500 mt-1">{formatCurrency(incomeBreakdown.taxes.totalTax)} total taxes</p>
+            </div>
+          </div>
+
+          {/* Warnings/Suggestions */}
+          {(incomeBreakdown.warnings.length > 0 || incomeBreakdown.suggestions.length > 0) && (
+            <div className="space-y-2 mb-4">
+              {incomeBreakdown.warnings.map((w, i) => (
+                <div key={i} className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">{w}</div>
+              ))}
+              {incomeBreakdown.suggestions.map((s, i) => (
+                <div key={i} className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-3 text-sm text-sky-400">{s}</div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-between mt-8">
+            <button onClick={goBack} className="px-4 py-2 text-slate-400 hover:text-slate-200">Back</button>
+            <button onClick={handleSaveScenario} className="px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 font-medium">
+              {editingScenarioId ? 'Save Changes' : 'Create Scenario'}
             </button>
           </div>
-        </div>
+        </>
       )}
-
-      {/* Help Section */}
-      <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-        <h3 className="text-lg font-semibold text-slate-200 mb-3">Understanding Scenario Settings</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-emerald-400 font-medium">Return Rate</p>
-            <p className="text-slate-400">Expected annual investment return (e.g., 7% for stock market average)</p>
-          </div>
-          <div>
-            <p className="text-amber-400 font-medium">Safe Withdrawal Rate (SWR)</p>
-            <p className="text-slate-400">Percentage you can safely withdraw annually in retirement (typically 3-4%)</p>
-          </div>
-          <div>
-            <p className="text-sky-400 font-medium">Yearly Contribution</p>
-            <p className="text-slate-400">How much you add to investments each year</p>
-          </div>
-          <div>
-            <p className="text-amber-400 font-medium">Inflation Rate</p>
-            <p className="text-slate-400">Expected annual inflation for adjusting future values</p>
-          </div>
-          <div>
-            <p className="text-violet-400 font-medium">Base Budget</p>
-            <p className="text-slate-400">Floor monthly spending regardless of net worth (adjusts for inflation)</p>
-          </div>
-          <div>
-            <p className="text-violet-400 font-medium">Spending Rate</p>
-            <p className="text-slate-400">Percentage of net worth added to monthly budget (keep below return rate!)</p>
-          </div>
-          <div>
-            <p className="text-emerald-400 font-medium">Gross Income</p>
-            <p className="text-slate-400">Your total annual income before taxes (salary, bonuses, etc.)</p>
-          </div>
-          <div>
-            <p className="text-red-400 font-medium">Effective Tax Rate</p>
-            <p className="text-slate-400">Your actual overall tax rate after all deductions (not your marginal rate)</p>
-          </div>
-        </div>
-      </div>
     </div>
-  )
+  );
 }

@@ -33,7 +33,14 @@ export interface Scenario {
   inflationRate: number;
   baseMonthlyBudget: number;
   spendingGrowthRate: number;
+  // Income & tax fields
   grossIncome?: number;
+  filingStatus?: string;
+  stateCode?: string;
+  preTax401k?: number;
+  preTaxIRA?: number;
+  preTaxHSA?: number;
+  preTaxOther?: number;
   effectiveTaxRate?: number;
   createdAt: number;
   updatedAt: number;
@@ -98,7 +105,14 @@ interface CreateScenarioData {
   baseMonthlyBudget: number;
   spendingGrowthRate: number;
   isSelected?: boolean;
+  // Income & tax fields
   grossIncome?: number;
+  filingStatus?: string;
+  stateCode?: string;
+  preTax401k?: number;
+  preTaxIRA?: number;
+  preTaxHSA?: number;
+  preTaxOther?: number;
   effectiveTaxRate?: number;
 }
 
@@ -113,7 +127,14 @@ interface UpdateScenarioData {
   inflationRate?: number;
   baseMonthlyBudget?: number;
   spendingGrowthRate?: number;
+  // Income & tax fields
   grossIncome?: number;
+  filingStatus?: string;
+  stateCode?: string;
+  preTax401k?: number;
+  preTaxIRA?: number;
+  preTaxHSA?: number;
+  preTaxOther?: number;
   effectiveTaxRate?: number;
 }
 
@@ -301,7 +322,7 @@ export function useScenarios(): UseScenariosReturn {
   };
 }
 
-// Predefined scenario templates
+// Predefined scenario templates (investment assumptions only - income is entered in wizard)
 export const SCENARIO_TEMPLATES = [
   {
     name: 'Conservative',
@@ -309,11 +330,6 @@ export const SCENARIO_TEMPLATES = [
     currentRate: 5,
     swr: 3.5,
     inflationRate: 3,
-    baseMonthlyBudget: 3000,
-    spendingGrowthRate: 1.5,
-    yearlyContribution: 0,
-    grossIncome: undefined as number | undefined,
-    effectiveTaxRate: undefined as number | undefined,
   },
   {
     name: 'Moderate',
@@ -321,11 +337,6 @@ export const SCENARIO_TEMPLATES = [
     currentRate: 7,
     swr: 4,
     inflationRate: 3,
-    baseMonthlyBudget: 3000,
-    spendingGrowthRate: 2,
-    yearlyContribution: 0,
-    grossIncome: undefined as number | undefined,
-    effectiveTaxRate: undefined as number | undefined,
   },
   {
     name: 'Aggressive',
@@ -333,11 +344,6 @@ export const SCENARIO_TEMPLATES = [
     currentRate: 9,
     swr: 4.5,
     inflationRate: 2.5,
-    baseMonthlyBudget: 3000,
-    spendingGrowthRate: 2.5,
-    yearlyContribution: 0,
-    grossIncome: undefined as number | undefined,
-    effectiveTaxRate: undefined as number | undefined,
   },
   {
     name: 'High Inflation',
@@ -345,22 +351,5 @@ export const SCENARIO_TEMPLATES = [
     currentRate: 7,
     swr: 3.5,
     inflationRate: 5,
-    baseMonthlyBudget: 3000,
-    spendingGrowthRate: 2,
-    yearlyContribution: 0,
-    grossIncome: undefined as number | undefined,
-    effectiveTaxRate: undefined as number | undefined,
-  },
-  {
-    name: 'High Saver',
-    description: 'Aggressive saving with annual contributions',
-    currentRate: 7,
-    swr: 4,
-    inflationRate: 3,
-    baseMonthlyBudget: 2500,
-    spendingGrowthRate: 1.5,
-    yearlyContribution: 50000,
-    grossIncome: 150000,
-    effectiveTaxRate: 25,
   },
 ] as const;
