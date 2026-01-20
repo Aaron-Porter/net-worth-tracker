@@ -1522,25 +1522,42 @@ function ScenariosTab({
   const getCashFlowPlan = useQuery(
     editingScenario
       ? api.cashFlowPlans.getByScenario
-      : 'skip' as any,
-    editingScenario ? { scenarioId: editingScenario._id } : undefined
+      : undefined,
+    editingScenario ? { scenarioId: editingScenario._id } : 'skip' as any
   );
 
   // Load cash flow data when editing a scenario
   useEffect(() => {
-    if (editingScenario && getCashFlowPlan) {
-      setCashFlowData({
-        grossAnnualIncome: getCashFlowPlan.grossAnnualIncome,
-        preTax401k: getCashFlowPlan.preTax401k,
-        preTaxHsa: getCashFlowPlan.preTaxHsa,
-        preTaxTraditionalIra: getCashFlowPlan.preTaxTraditionalIra,
-        preTaxOther: getCashFlowPlan.preTaxOther,
-        effectiveTaxRate: getCashFlowPlan.effectiveTaxRate,
-        postTaxRoth: getCashFlowPlan.postTaxRoth,
-        postTaxBrokerage: getCashFlowPlan.postTaxBrokerage,
-        postTaxSavings: getCashFlowPlan.postTaxSavings,
-        postTaxOther: getCashFlowPlan.postTaxOther,
-      });
+    if (editingScenario) {
+      if (getCashFlowPlan) {
+        // Load existing cash flow plan
+        setCashFlowData({
+          grossAnnualIncome: getCashFlowPlan.grossAnnualIncome,
+          preTax401k: getCashFlowPlan.preTax401k,
+          preTaxHsa: getCashFlowPlan.preTaxHsa,
+          preTaxTraditionalIra: getCashFlowPlan.preTaxTraditionalIra,
+          preTaxOther: getCashFlowPlan.preTaxOther,
+          effectiveTaxRate: getCashFlowPlan.effectiveTaxRate,
+          postTaxRoth: getCashFlowPlan.postTaxRoth,
+          postTaxBrokerage: getCashFlowPlan.postTaxBrokerage,
+          postTaxSavings: getCashFlowPlan.postTaxSavings,
+          postTaxOther: getCashFlowPlan.postTaxOther,
+        });
+      } else if (getCashFlowPlan === null) {
+        // No existing plan, reset to defaults
+        setCashFlowData({
+          grossAnnualIncome: 0,
+          preTax401k: 0,
+          preTaxHsa: 0,
+          preTaxTraditionalIra: 0,
+          preTaxOther: 0,
+          effectiveTaxRate: 22,
+          postTaxRoth: 0,
+          postTaxBrokerage: 0,
+          postTaxSavings: 0,
+          postTaxOther: 0,
+        });
+      }
     }
   }, [editingScenario, getCashFlowPlan]);
 
