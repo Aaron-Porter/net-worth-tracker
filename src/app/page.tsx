@@ -1541,11 +1541,15 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
   const currentNetWorth = scenariosHook.scenarioProjections[0]?.currentNetWorth.total || 0;
 
   // Calculate income breakdown in real-time as user fills wizard
+  // Uses total unlocked spending (base + net worth portion)
   const incomeBreakdown = useMemo((): ScenarioIncomeBreakdown | null => {
     const gross = parseFloat(wizardState.grossIncome) || 0;
     if (gross <= 0) return null;
     
-    const monthlySpend = parseFloat(wizardState.baseMonthlyBudget) || 3000;
+    const baseBudget = parseFloat(wizardState.baseMonthlyBudget) || 3000;
+    const spendingRate = parseFloat(wizardState.spendingGrowthRate) || 0;
+    const netWorthPortion = currentNetWorth * (spendingRate / 100) / 12;
+    const totalUnlockedSpending = baseBudget + netWorthPortion;
     
     return calculateScenarioIncome(
       gross,
@@ -1557,7 +1561,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
         hsa: parseFloat(wizardState.preTaxHSA) || 0,
         other: parseFloat(wizardState.preTaxOther) || 0,
       },
-      monthlySpend,
+      totalUnlockedSpending,
       currentNetWorth
     );
   }, [wizardState, currentNetWorth]);
@@ -1859,33 +1863,127 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
       )}
 
       {/* STEP 4: Spending */}
-      {wizardStep === 'spending' && (
-        <>
-          <WizardHeader title="What's your monthly spending?" subtitle="Your base budget for living expenses." step={4} />
-          <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 mb-4">
-            <label className="block text-sm font-medium text-slate-300 mb-2">Monthly Base Budget</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
-              <input type="number" value={wizardState.baseMonthlyBudget} onChange={(e) => setWizardState(s => ({ ...s, baseMonthlyBudget: e.target.value }))} placeholder="3000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            </div>
-            <p className="mt-2 text-sm text-slate-500">Annual: {formatCurrency((parseFloat(wizardState.baseMonthlyBudget) || 0) * 12)}</p>
-          </div>
-          {incomeBreakdown && (
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <h4 className="text-sm font-medium text-slate-300 mb-4">Your Money Flow</h4>
-              <div className="space-y-3">
-                <div className="flex justify-between"><span className="text-slate-400">Gross Income</span><span className="font-mono text-slate-200">{formatCurrency(incomeBreakdown.taxes.grossIncome)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">- Pre-tax Savings</span><span className="font-mono text-emerald-400">-{formatCurrency(incomeBreakdown.totalPreTaxSavings)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">- Total Taxes</span><span className="font-mono text-red-400">-{formatCurrency(incomeBreakdown.taxes.totalTax)}</span></div>
-                <div className="border-t border-slate-600 pt-2 flex justify-between"><span className="text-slate-300">Net Income</span><span className="font-mono text-emerald-400">{formatCurrency(incomeBreakdown.taxes.netIncome)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">- Annual Spending</span><span className="font-mono text-amber-400">-{formatCurrency(incomeBreakdown.annualSpending)}</span></div>
-                <div className="border-t border-slate-600 pt-2 flex justify-between font-medium"><span className="text-slate-200">Post-tax Savings Available</span><span className="font-mono text-sky-400">{formatCurrency(incomeBreakdown.postTaxSavingsAvailable)}</span></div>
+      {wizardStep === 'spending' && (() => {
+        const baseBudget = parseFloat(wizardState.baseMonthlyBudget) || 0;
+        const spendingRate = parseFloat(wizardState.spendingGrowthRate) || 0;
+        const netWorthPortion = currentNetWorth * (spendingRate / 100) / 12;
+        const totalUnlockedSpending = baseBudget + netWorthPortion;
+        
+        return (
+          <>
+            <WizardHeader title="How much do you spend?" subtitle="Set your base budget and how it grows with your net worth." step={4} />
+            
+            {/* Variable Spending Explanation */}
+            <div className="bg-violet-500/10 rounded-xl p-4 border border-violet-500/30 mb-6">
+              <h4 className="text-sm font-medium text-violet-400 mb-2">Variable Spending System</h4>
+              <p className="text-sm text-slate-400">Your monthly budget has two parts:</p>
+              <div className="mt-2 text-sm">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <span className="w-3 h-3 bg-amber-500 rounded-full"></span>
+                  <span><strong>Base Budget</strong> — Your floor spending (adjusts with inflation)</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-300 mt-1">
+                  <span className="w-3 h-3 bg-emerald-500 rounded-full"></span>
+                  <span><strong>Net Worth Portion</strong> — Extra spending unlocked as wealth grows</span>
+                </div>
               </div>
             </div>
-          )}
-          <WizardNav />
-        </>
-      )}
+
+            <div className="space-y-4">
+              {/* Base Budget */}
+              <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                <label className="block text-sm font-medium text-slate-300 mb-2">Monthly Base Budget</label>
+                <p className="text-xs text-slate-500 mb-3">Your minimum monthly spending regardless of net worth</p>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
+                  <input type="number" value={wizardState.baseMonthlyBudget} onChange={(e) => setWizardState(s => ({ ...s, baseMonthlyBudget: e.target.value }))} placeholder="3000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                </div>
+                <p className="mt-2 text-sm text-slate-500">Annual base: {formatCurrency(baseBudget * 12)}</p>
+              </div>
+
+              {/* Spending Growth Rate */}
+              <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                <label className="block text-sm font-medium text-slate-300 mb-2">Spending Growth Rate (%)</label>
+                <p className="text-xs text-slate-500 mb-3">Percentage of net worth added to your monthly budget annually</p>
+                <div className="flex gap-4 items-center">
+                  <input type="number" value={wizardState.spendingGrowthRate} onChange={(e) => setWizardState(s => ({ ...s, spendingGrowthRate: e.target.value }))} placeholder="2" step="0.5" min="0" max="10" className="w-32 bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 text-xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  <span className="text-slate-400">% of net worth / year</span>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  {[0, 1, 2, 3, 4].map(rate => (
+                    <button key={rate} onClick={() => setWizardState(s => ({ ...s, spendingGrowthRate: rate.toString() }))} className={`px-3 py-1 text-sm rounded-lg ${parseFloat(wizardState.spendingGrowthRate) === rate ? 'bg-violet-500 text-white' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}>
+                      {rate}%
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-slate-500">
+                  {spendingRate === 0 ? 'Fixed spending — budget stays constant regardless of net worth' :
+                   spendingRate <= 2 ? 'Conservative — modest lifestyle inflation as wealth grows' :
+                   spendingRate <= 3 ? 'Moderate — balanced approach to enjoying wealth growth' :
+                   'Aggressive — significant lifestyle increase with net worth (ensure this is below your return rate!)'}
+                </p>
+              </div>
+
+              {/* Current Unlocked Spending Preview */}
+              {currentNetWorth > 0 && (
+                <div className="bg-gradient-to-br from-emerald-500/10 to-violet-500/10 rounded-xl p-6 border border-emerald-500/30">
+                  <h4 className="text-sm font-medium text-slate-300 mb-4">Your Current Unlocked Spending</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 flex items-center gap-2">
+                        <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+                        Base Budget
+                      </span>
+                      <span className="font-mono text-amber-400">{formatCurrency(baseBudget)}/mo</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 flex items-center gap-2">
+                        <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                        Net Worth Portion
+                        <span className="text-xs text-slate-500">({spendingRate}% × {formatCurrency(currentNetWorth)} ÷ 12)</span>
+                      </span>
+                      <span className="font-mono text-emerald-400">+{formatCurrency(netWorthPortion)}/mo</span>
+                    </div>
+                    <div className="border-t border-slate-600 pt-3 flex justify-between items-center">
+                      <span className="text-slate-200 font-medium">Total Monthly Budget</span>
+                      <span className="text-2xl font-mono text-violet-400">{formatCurrency(totalUnlockedSpending)}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 pt-2">
+                      Annual spending: {formatCurrency(totalUnlockedSpending * 12)} • This grows automatically as your net worth increases
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Money Flow (using actual unlocked spending) */}
+              {incomeBreakdown && (
+                <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                  <h4 className="text-sm font-medium text-slate-300 mb-4">Your Money Flow</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between"><span className="text-slate-400">Gross Income</span><span className="font-mono text-slate-200">{formatCurrency(incomeBreakdown.taxes.grossIncome)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">- Pre-tax Savings</span><span className="font-mono text-emerald-400">-{formatCurrency(incomeBreakdown.totalPreTaxSavings)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">- Total Taxes</span><span className="font-mono text-red-400">-{formatCurrency(incomeBreakdown.taxes.totalTax)}</span></div>
+                    <div className="border-t border-slate-600 pt-2 flex justify-between"><span className="text-slate-300">Net Income</span><span className="font-mono text-emerald-400">{formatCurrency(incomeBreakdown.taxes.netIncome)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">- Annual Spending</span><span className="font-mono text-amber-400">-{formatCurrency(totalUnlockedSpending * 12)}</span></div>
+                    <div className="border-t border-slate-600 pt-2 flex justify-between font-medium">
+                      <span className="text-slate-200">Post-tax Savings Available</span>
+                      <span className={`font-mono ${incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12 >= 0 ? 'text-sky-400' : 'text-red-400'}`}>
+                        {formatCurrency(Math.max(0, incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12))}
+                      </span>
+                    </div>
+                  </div>
+                  {incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12 < 0 && (
+                    <div className="mt-4 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
+                      <p className="text-sm text-red-400">Your current spending exceeds your net income. Consider reducing your base budget or spending growth rate.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <WizardNav />
+          </>
+        );
+      })()}
 
       {/* STEP 5: Investment Assumptions */}
       {wizardStep === 'investments' && (
@@ -1920,65 +2018,97 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
       )}
 
       {/* STEP 6: Summary */}
-      {wizardStep === 'summary' && incomeBreakdown && (
-        <>
-          <WizardHeader title="Your Scenario Summary" subtitle="Review your numbers and save your scenario." step={6} />
-          <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 mb-4">
-            <label className="block text-sm font-medium text-slate-300 mb-2">Scenario Name</label>
-            <input type="text" value={wizardState.name} onChange={(e) => setWizardState(s => ({ ...s, name: e.target.value }))} placeholder="My Financial Plan" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-violet-500" />
-          </div>
-          
-          {/* Income Allocation Visual */}
-          <div className="bg-slate-800/50 rounded-xl p-6 border border-emerald-500/30 mb-4">
-            <h4 className="text-lg font-semibold text-slate-200 mb-4">Income Allocation</h4>
-            <div className="h-8 bg-slate-700 rounded-full overflow-hidden flex mb-3">
-              <div className="h-full bg-emerald-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationPreTaxSavings}%` }} title="Pre-tax Savings">{incomeBreakdown.allocationPreTaxSavings >= 8 && 'Pre-tax'}</div>
-              <div className="h-full bg-red-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationTaxes}%` }} title="Taxes">{incomeBreakdown.allocationTaxes >= 8 && 'Taxes'}</div>
-              <div className="h-full bg-amber-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationSpending}%` }} title="Spending">{incomeBreakdown.allocationSpending >= 8 && 'Spending'}</div>
-              <div className="h-full bg-sky-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationPostTaxSavings}%` }} title="Post-tax Savings">{incomeBreakdown.allocationPostTaxSavings >= 8 && 'Savings'}</div>
+      {wizardStep === 'summary' && incomeBreakdown && (() => {
+        const baseBudget = parseFloat(wizardState.baseMonthlyBudget) || 0;
+        const spendingRate = parseFloat(wizardState.spendingGrowthRate) || 0;
+        const netWorthPortion = currentNetWorth * (spendingRate / 100) / 12;
+        const totalUnlockedSpending = baseBudget + netWorthPortion;
+        
+        return (
+          <>
+            <WizardHeader title="Your Scenario Summary" subtitle="Review your numbers and save your scenario." step={6} />
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 mb-4">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Scenario Name</label>
+              <input type="text" value={wizardState.name} onChange={(e) => setWizardState(s => ({ ...s, name: e.target.value }))} placeholder="My Financial Plan" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-violet-500" />
             </div>
-            <div className="grid grid-cols-4 gap-2 text-xs">
-              <div className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span><span className="text-slate-400">Pre-tax: {formatPercent(incomeBreakdown.allocationPreTaxSavings)}</span></div>
-              <div className="flex items-center gap-1"><span className="w-2 h-2 bg-red-500 rounded-full"></span><span className="text-slate-400">Taxes: {formatPercent(incomeBreakdown.allocationTaxes)}</span></div>
-              <div className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-500 rounded-full"></span><span className="text-slate-400">Spending: {formatPercent(incomeBreakdown.allocationSpending)}</span></div>
-              <div className="flex items-center gap-1"><span className="w-2 h-2 bg-sky-500 rounded-full"></span><span className="text-slate-400">Post-tax: {formatPercent(incomeBreakdown.allocationPostTaxSavings)}</span></div>
+            
+            {/* Income Allocation Visual */}
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-emerald-500/30 mb-4">
+              <h4 className="text-lg font-semibold text-slate-200 mb-4">Income Allocation</h4>
+              <div className="h-8 bg-slate-700 rounded-full overflow-hidden flex mb-3">
+                <div className="h-full bg-emerald-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationPreTaxSavings}%` }} title="Pre-tax Savings">{incomeBreakdown.allocationPreTaxSavings >= 8 && 'Pre-tax'}</div>
+                <div className="h-full bg-red-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationTaxes}%` }} title="Taxes">{incomeBreakdown.allocationTaxes >= 8 && 'Taxes'}</div>
+                <div className="h-full bg-amber-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationSpending}%` }} title="Spending">{incomeBreakdown.allocationSpending >= 8 && 'Spending'}</div>
+                <div className="h-full bg-sky-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationPostTaxSavings}%` }} title="Post-tax Savings">{incomeBreakdown.allocationPostTaxSavings >= 8 && 'Savings'}</div>
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-xs">
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span><span className="text-slate-400">Pre-tax: {formatPercent(incomeBreakdown.allocationPreTaxSavings)}</span></div>
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-red-500 rounded-full"></span><span className="text-slate-400">Taxes: {formatPercent(incomeBreakdown.allocationTaxes)}</span></div>
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-500 rounded-full"></span><span className="text-slate-400">Spending: {formatPercent(incomeBreakdown.allocationSpending)}</span></div>
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-sky-500 rounded-full"></span><span className="text-slate-400">Post-tax: {formatPercent(incomeBreakdown.allocationPostTaxSavings)}</span></div>
+              </div>
             </div>
-          </div>
 
-          {/* Key Numbers */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-              <p className="text-xs text-slate-500 uppercase">Total Annual Savings</p>
-              <p className="text-2xl font-mono text-sky-400">{formatCurrency(incomeBreakdown.totalAnnualSavings)}</p>
-              <p className="text-xs text-slate-500 mt-1">{formatPercent(incomeBreakdown.savingsRateOfGross)} of gross income</p>
+            {/* Variable Spending Summary */}
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-violet-500/30 mb-4">
+              <h4 className="text-lg font-semibold text-slate-200 mb-4">Variable Spending</h4>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-xs text-slate-500 uppercase mb-1">Base Budget</p>
+                  <p className="text-xl font-mono text-amber-400">{formatCurrency(baseBudget)}/mo</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 uppercase mb-1">Growth Rate</p>
+                  <p className="text-xl font-mono text-violet-400">{spendingRate}%</p>
+                  <p className="text-xs text-slate-500">of net worth/yr</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 uppercase mb-1">Current Total</p>
+                  <p className="text-xl font-mono text-emerald-400">{formatCurrency(totalUnlockedSpending)}/mo</p>
+                </div>
+              </div>
+              {spendingRate > 0 && (
+                <p className="text-xs text-slate-500 mt-4 text-center">
+                  As your net worth grows, your monthly budget will increase. At {formatCurrency(1000000)} net worth, your budget would be {formatCurrency(baseBudget + (1000000 * spendingRate / 100 / 12))}/mo.
+                </p>
+              )}
             </div>
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-              <p className="text-xs text-slate-500 uppercase">Effective Tax Rate</p>
-              <p className="text-2xl font-mono text-red-400">{formatPercent(incomeBreakdown.taxes.effectiveTotalRate)}</p>
-              <p className="text-xs text-slate-500 mt-1">{formatCurrency(incomeBreakdown.taxes.totalTax)} total taxes</p>
-            </div>
-          </div>
 
-          {/* Warnings/Suggestions */}
-          {(incomeBreakdown.warnings.length > 0 || incomeBreakdown.suggestions.length > 0) && (
-            <div className="space-y-2 mb-4">
-              {incomeBreakdown.warnings.map((w, i) => (
-                <div key={i} className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">{w}</div>
-              ))}
-              {incomeBreakdown.suggestions.map((s, i) => (
-                <div key={i} className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-3 text-sm text-sky-400">{s}</div>
-              ))}
+            {/* Key Numbers */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                <p className="text-xs text-slate-500 uppercase">Total Annual Savings</p>
+                <p className="text-2xl font-mono text-sky-400">{formatCurrency(incomeBreakdown.totalAnnualSavings)}</p>
+                <p className="text-xs text-slate-500 mt-1">{formatPercent(incomeBreakdown.savingsRateOfGross)} of gross income</p>
+              </div>
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                <p className="text-xs text-slate-500 uppercase">Effective Tax Rate</p>
+                <p className="text-2xl font-mono text-red-400">{formatPercent(incomeBreakdown.taxes.effectiveTotalRate)}</p>
+                <p className="text-xs text-slate-500 mt-1">{formatCurrency(incomeBreakdown.taxes.totalTax)} total taxes</p>
+              </div>
             </div>
-          )}
 
-          <div className="flex justify-between mt-8">
-            <button onClick={goBack} className="px-4 py-2 text-slate-400 hover:text-slate-200">Back</button>
-            <button onClick={handleSaveScenario} className="px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 font-medium">
-              {editingScenarioId ? 'Save Changes' : 'Create Scenario'}
-            </button>
-          </div>
-        </>
-      )}
+            {/* Warnings/Suggestions */}
+            {(incomeBreakdown.warnings.length > 0 || incomeBreakdown.suggestions.length > 0) && (
+              <div className="space-y-2 mb-4">
+                {incomeBreakdown.warnings.map((w, i) => (
+                  <div key={i} className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">{w}</div>
+                ))}
+                {incomeBreakdown.suggestions.map((s, i) => (
+                  <div key={i} className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-3 text-sm text-sky-400">{s}</div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-between mt-8">
+              <button onClick={goBack} className="px-4 py-2 text-slate-400 hover:text-slate-200">Back</button>
+              <button onClick={handleSaveScenario} className="px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 font-medium">
+                {editingScenarioId ? 'Save Changes' : 'Create Scenario'}
+              </button>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }
