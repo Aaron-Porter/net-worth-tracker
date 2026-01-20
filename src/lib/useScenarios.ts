@@ -18,6 +18,9 @@ import {
   GrowthRates,
   RealTimeNetWorth,
   DEFAULT_SETTINGS,
+  generateDynamicProjections,
+  YearlyProjectedFinancials,
+  FilingStatus,
 } from './calculations';
 
 export interface Scenario {
@@ -33,6 +36,16 @@ export interface Scenario {
   inflationRate: number;
   baseMonthlyBudget: number;
   spendingGrowthRate: number;
+  // Income & tax fields
+  grossIncome?: number;
+  incomeGrowthRate?: number;
+  filingStatus?: string;
+  stateCode?: string;
+  preTax401k?: number;
+  preTaxIRA?: number;
+  preTaxHSA?: number;
+  preTaxOther?: number;
+  effectiveTaxRate?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -48,6 +61,9 @@ export interface ScenarioProjection {
   crossoverYear: number | null;
   currentFiProgress: number;
   currentMonthlySwr: number;
+  // Dynamic projections (when income data is available)
+  dynamicProjections: YearlyProjectedFinancials[] | null;
+  hasDynamicIncome: boolean;
 }
 
 export interface UserProfile {
@@ -96,6 +112,16 @@ interface CreateScenarioData {
   baseMonthlyBudget: number;
   spendingGrowthRate: number;
   isSelected?: boolean;
+  // Income & tax fields
+  grossIncome?: number;
+  incomeGrowthRate?: number;
+  filingStatus?: string;
+  stateCode?: string;
+  preTax401k?: number;
+  preTaxIRA?: number;
+  preTaxHSA?: number;
+  preTaxOther?: number;
+  effectiveTaxRate?: number;
 }
 
 interface UpdateScenarioData {
@@ -109,6 +135,16 @@ interface UpdateScenarioData {
   inflationRate?: number;
   baseMonthlyBudget?: number;
   spendingGrowthRate?: number;
+  // Income & tax fields
+  grossIncome?: number;
+  incomeGrowthRate?: number;
+  filingStatus?: string;
+  stateCode?: string;
+  preTax401k?: number;
+  preTaxIRA?: number;
+  preTaxHSA?: number;
+  preTaxOther?: number;
+  effectiveTaxRate?: number;
 }
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -227,6 +263,35 @@ export function useScenarios(): UseScenariosReturn {
       const crossoverRow = projections.find(p => p.isCrossover);
       const nowRow = projections.find(p => p.year === 'Now');
       
+      // Generate dynamic projections if income data is available
+      const hasDynamicIncome = !!(scenario.grossIncome && scenario.grossIncome > 0);
+      let dynamicProjections: YearlyProjectedFinancials[] | null = null;
+      
+      if (hasDynamicIncome && scenario.grossIncome) {
+        dynamicProjections = generateDynamicProjections(
+          currentNetWorth.total,
+          {
+            grossIncome: scenario.grossIncome,
+            incomeGrowthRate: scenario.incomeGrowthRate || 0,
+            filingStatus: (scenario.filingStatus as FilingStatus) || 'single',
+            stateCode: scenario.stateCode || null,
+            preTaxContributions: {
+              traditional401k: scenario.preTax401k || 0,
+              traditionalIRA: scenario.preTaxIRA || 0,
+              hsa: scenario.preTaxHSA || 0,
+              other: scenario.preTaxOther || 0,
+            },
+          },
+          {
+            baseMonthlyBudget: scenario.baseMonthlyBudget,
+            spendingGrowthRate: scenario.spendingGrowthRate,
+            inflationRate: scenario.inflationRate,
+          },
+          scenario.currentRate,
+          30 // 30 years of projections
+        );
+      }
+      
       return {
         scenario,
         projections,
@@ -238,6 +303,8 @@ export function useScenarios(): UseScenariosReturn {
         crossoverYear: typeof crossoverRow?.year === 'number' ? crossoverRow.year : null,
         currentFiProgress: nowRow?.fiProgress ?? 0,
         currentMonthlySwr: nowRow?.monthlySwr ?? 0,
+        dynamicProjections,
+        hasDynamicIncome,
       };
     });
   }, [latestEntry, selectedScenarios, localProfile, entries]);
@@ -295,7 +362,7 @@ export function useScenarios(): UseScenariosReturn {
   };
 }
 
-// Predefined scenario templates
+// Predefined scenario templates (investment assumptions only - income is entered in wizard)
 export const SCENARIO_TEMPLATES = [
   {
     name: 'Conservative',
@@ -303,9 +370,6 @@ export const SCENARIO_TEMPLATES = [
     currentRate: 5,
     swr: 3.5,
     inflationRate: 3,
-    baseMonthlyBudget: 3000,
-    spendingGrowthRate: 1.5,
-    yearlyContribution: 0,
   },
   {
     name: 'Moderate',
@@ -313,9 +377,6 @@ export const SCENARIO_TEMPLATES = [
     currentRate: 7,
     swr: 4,
     inflationRate: 3,
-    baseMonthlyBudget: 3000,
-    spendingGrowthRate: 2,
-    yearlyContribution: 0,
   },
   {
     name: 'Aggressive',
@@ -323,9 +384,6 @@ export const SCENARIO_TEMPLATES = [
     currentRate: 9,
     swr: 4.5,
     inflationRate: 2.5,
-    baseMonthlyBudget: 3000,
-    spendingGrowthRate: 2.5,
-    yearlyContribution: 0,
   },
   {
     name: 'High Inflation',
@@ -333,18 +391,5 @@ export const SCENARIO_TEMPLATES = [
     currentRate: 7,
     swr: 3.5,
     inflationRate: 5,
-    baseMonthlyBudget: 3000,
-    spendingGrowthRate: 2,
-    yearlyContribution: 0,
-  },
-  {
-    name: 'High Saver',
-    description: 'Aggressive saving with annual contributions',
-    currentRate: 7,
-    swr: 4,
-    inflationRate: 3,
-    baseMonthlyBudget: 2500,
-    spendingGrowthRate: 1.5,
-    yearlyContribution: 50000,
   },
 ] as const;

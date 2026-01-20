@@ -821,3 +821,666 @@ export function mergeWithDefaults(
     spendingGrowthRate: partial.spendingGrowthRate ?? DEFAULT_SETTINGS.spendingGrowthRate,
   };
 }
+
+// ============================================================================
+// INCOME & TAX CALCULATIONS
+// ============================================================================
+
+export type FilingStatus = 'single' | 'married_jointly' | 'married_separately' | 'head_of_household';
+
+// 2024 Federal Tax Brackets
+const FEDERAL_TAX_BRACKETS: Record<FilingStatus, { min: number; max: number; rate: number }[]> = {
+  single: [
+    { min: 0, max: 11600, rate: 10 },
+    { min: 11600, max: 47150, rate: 12 },
+    { min: 47150, max: 100525, rate: 22 },
+    { min: 100525, max: 191950, rate: 24 },
+    { min: 191950, max: 243725, rate: 32 },
+    { min: 243725, max: 609350, rate: 35 },
+    { min: 609350, max: Infinity, rate: 37 },
+  ],
+  married_jointly: [
+    { min: 0, max: 23200, rate: 10 },
+    { min: 23200, max: 94300, rate: 12 },
+    { min: 94300, max: 201050, rate: 22 },
+    { min: 201050, max: 383900, rate: 24 },
+    { min: 383900, max: 487450, rate: 32 },
+    { min: 487450, max: 731200, rate: 35 },
+    { min: 731200, max: Infinity, rate: 37 },
+  ],
+  married_separately: [
+    { min: 0, max: 11600, rate: 10 },
+    { min: 11600, max: 47150, rate: 12 },
+    { min: 47150, max: 100525, rate: 22 },
+    { min: 100525, max: 191950, rate: 24 },
+    { min: 191950, max: 243725, rate: 32 },
+    { min: 243725, max: 365600, rate: 35 },
+    { min: 365600, max: Infinity, rate: 37 },
+  ],
+  head_of_household: [
+    { min: 0, max: 16550, rate: 10 },
+    { min: 16550, max: 63100, rate: 12 },
+    { min: 63100, max: 100500, rate: 22 },
+    { min: 100500, max: 191950, rate: 24 },
+    { min: 191950, max: 243700, rate: 32 },
+    { min: 243700, max: 609350, rate: 35 },
+    { min: 609350, max: Infinity, rate: 37 },
+  ],
+};
+
+// 2024 Standard Deductions
+const STANDARD_DEDUCTIONS: Record<FilingStatus, number> = {
+  single: 14600,
+  married_jointly: 29200,
+  married_separately: 14600,
+  head_of_household: 21900,
+};
+
+// State tax rates (simplified - using flat effective rates for most states)
+// These are approximations; actual state taxes vary significantly
+export const STATE_TAX_RATES: Record<string, { name: string; rate: number }> = {
+  AL: { name: 'Alabama', rate: 4.0 },
+  AK: { name: 'Alaska', rate: 0 },
+  AZ: { name: 'Arizona', rate: 2.5 },
+  AR: { name: 'Arkansas', rate: 4.4 },
+  CA: { name: 'California', rate: 9.3 },
+  CO: { name: 'Colorado', rate: 4.4 },
+  CT: { name: 'Connecticut', rate: 5.0 },
+  DE: { name: 'Delaware', rate: 5.5 },
+  FL: { name: 'Florida', rate: 0 },
+  GA: { name: 'Georgia', rate: 5.49 },
+  HI: { name: 'Hawaii', rate: 8.25 },
+  ID: { name: 'Idaho', rate: 5.8 },
+  IL: { name: 'Illinois', rate: 4.95 },
+  IN: { name: 'Indiana', rate: 3.05 },
+  IA: { name: 'Iowa', rate: 5.7 },
+  KS: { name: 'Kansas', rate: 5.7 },
+  KY: { name: 'Kentucky', rate: 4.0 },
+  LA: { name: 'Louisiana', rate: 4.25 },
+  ME: { name: 'Maine', rate: 7.15 },
+  MD: { name: 'Maryland', rate: 5.0 },
+  MA: { name: 'Massachusetts', rate: 5.0 },
+  MI: { name: 'Michigan', rate: 4.25 },
+  MN: { name: 'Minnesota', rate: 7.85 },
+  MS: { name: 'Mississippi', rate: 4.7 },
+  MO: { name: 'Missouri', rate: 4.8 },
+  MT: { name: 'Montana', rate: 5.9 },
+  NE: { name: 'Nebraska', rate: 5.84 },
+  NV: { name: 'Nevada', rate: 0 },
+  NH: { name: 'New Hampshire', rate: 0 },
+  NJ: { name: 'New Jersey', rate: 6.37 },
+  NM: { name: 'New Mexico', rate: 4.9 },
+  NY: { name: 'New York', rate: 6.85 },
+  NC: { name: 'North Carolina', rate: 4.75 },
+  ND: { name: 'North Dakota', rate: 2.5 },
+  OH: { name: 'Ohio', rate: 3.75 },
+  OK: { name: 'Oklahoma', rate: 4.75 },
+  OR: { name: 'Oregon', rate: 9.0 },
+  PA: { name: 'Pennsylvania', rate: 3.07 },
+  RI: { name: 'Rhode Island', rate: 5.0 },
+  SC: { name: 'South Carolina', rate: 6.4 },
+  SD: { name: 'South Dakota', rate: 0 },
+  TN: { name: 'Tennessee', rate: 0 },
+  TX: { name: 'Texas', rate: 0 },
+  UT: { name: 'Utah', rate: 4.65 },
+  VT: { name: 'Vermont', rate: 6.6 },
+  VA: { name: 'Virginia', rate: 5.75 },
+  WA: { name: 'Washington', rate: 0 },
+  WV: { name: 'West Virginia', rate: 5.12 },
+  WI: { name: 'Wisconsin', rate: 5.3 },
+  WY: { name: 'Wyoming', rate: 0 },
+  DC: { name: 'Washington DC', rate: 8.5 },
+};
+
+// FICA rates (Social Security + Medicare)
+const SOCIAL_SECURITY_RATE = 6.2;
+const SOCIAL_SECURITY_WAGE_CAP = 168600; // 2024 cap
+const MEDICARE_RATE = 1.45;
+const MEDICARE_ADDITIONAL_RATE = 0.9; // Additional Medicare tax for high earners
+const MEDICARE_ADDITIONAL_THRESHOLD_SINGLE = 200000;
+const MEDICARE_ADDITIONAL_THRESHOLD_MARRIED = 250000;
+
+// 2024 Contribution Limits
+export const CONTRIBUTION_LIMITS = {
+  traditional401k: 23000,
+  traditional401kCatchUp: 7500, // Age 50+
+  traditionalIRA: 7000,
+  traditionalIRACatchUp: 1000, // Age 50+
+  hsa_individual: 4150,
+  hsa_family: 8300,
+  hsaCatchUp: 1000, // Age 55+
+  roth401k: 23000,
+  rothIRA: 7000,
+};
+
+export interface PreTaxContributions {
+  traditional401k: number;
+  traditionalIRA: number;
+  hsa: number;
+  other: number;
+}
+
+export interface TaxCalculation {
+  grossIncome: number;
+  filingStatus: FilingStatus;
+  stateCode: string | null;
+  
+  // Pre-tax deductions
+  preTaxContributions: PreTaxContributions;
+  totalPreTaxContributions: number;
+  standardDeduction: number;
+  
+  // Taxable incomes
+  adjustedGrossIncome: number; // Gross - pre-tax contributions
+  taxableIncome: number; // AGI - standard deduction
+  
+  // Tax breakdown
+  federalTax: number;
+  stateTax: number;
+  socialSecurityTax: number;
+  medicareTax: number;
+  ficaTax: number;
+  totalTax: number;
+  
+  // Effective rates
+  effectiveFederalRate: number;
+  effectiveStateRate: number;
+  effectiveTotalRate: number;
+  marginalFederalRate: number;
+  
+  // Net income
+  netIncome: number; // After all taxes
+  monthlyNetIncome: number;
+}
+
+export interface ScenarioIncomeBreakdown {
+  // Tax calculation
+  taxes: TaxCalculation;
+  
+  // Spending
+  monthlySpending: number;
+  annualSpending: number;
+  
+  // Savings breakdown
+  totalPreTaxSavings: number; // 401k, IRA, HSA
+  postTaxSavingsAvailable: number; // Net income - spending
+  totalAnnualSavings: number; // Pre-tax + post-tax
+  monthlySavingsAvailable: number;
+  
+  // Rates and ratios
+  savingsRateOfGross: number; // Total savings / gross income
+  savingsRateOfNet: number; // Post-tax savings / net income
+  spendingRateOfGross: number;
+  spendingRateOfNet: number;
+  
+  // Allocations (percentages of gross)
+  allocationTaxes: number;
+  allocationPreTaxSavings: number;
+  allocationSpending: number;
+  allocationPostTaxSavings: number;
+  
+  // Net worth context
+  currentNetWorth: number;
+  yearsOfExpenses: number;
+  netWorthToIncomeRatio: number;
+  
+  // Warnings/suggestions
+  warnings: string[];
+  suggestions: string[];
+}
+
+/**
+ * Calculate federal tax using progressive brackets
+ */
+export function calculateFederalTax(taxableIncome: number, filingStatus: FilingStatus): { tax: number; marginalRate: number } {
+  if (taxableIncome <= 0) return { tax: 0, marginalRate: 10 };
+  
+  const brackets = FEDERAL_TAX_BRACKETS[filingStatus];
+  let tax = 0;
+  let marginalRate = 10;
+  
+  for (const bracket of brackets) {
+    if (taxableIncome > bracket.min) {
+      const taxableInBracket = Math.min(taxableIncome, bracket.max) - bracket.min;
+      tax += taxableInBracket * (bracket.rate / 100);
+      marginalRate = bracket.rate;
+    }
+  }
+  
+  return { tax, marginalRate };
+}
+
+/**
+ * Calculate state tax (simplified flat rate)
+ */
+export function calculateStateTax(taxableIncome: number, stateCode: string | null): number {
+  if (!stateCode || taxableIncome <= 0) return 0;
+  const stateInfo = STATE_TAX_RATES[stateCode.toUpperCase()];
+  if (!stateInfo) return 0;
+  return taxableIncome * (stateInfo.rate / 100);
+}
+
+/**
+ * Calculate FICA taxes (Social Security + Medicare)
+ */
+export function calculateFICATax(grossIncome: number, filingStatus: FilingStatus): { socialSecurity: number; medicare: number; total: number } {
+  // Social Security (capped at wage base)
+  const socialSecurityWages = Math.min(grossIncome, SOCIAL_SECURITY_WAGE_CAP);
+  const socialSecurity = socialSecurityWages * (SOCIAL_SECURITY_RATE / 100);
+  
+  // Medicare (no cap, but additional tax for high earners)
+  const medicareThreshold = filingStatus === 'married_jointly' 
+    ? MEDICARE_ADDITIONAL_THRESHOLD_MARRIED 
+    : MEDICARE_ADDITIONAL_THRESHOLD_SINGLE;
+  
+  let medicare = grossIncome * (MEDICARE_RATE / 100);
+  if (grossIncome > medicareThreshold) {
+    medicare += (grossIncome - medicareThreshold) * (MEDICARE_ADDITIONAL_RATE / 100);
+  }
+  
+  return {
+    socialSecurity,
+    medicare,
+    total: socialSecurity + medicare,
+  };
+}
+
+/**
+ * Complete tax calculation
+ */
+export function calculateTaxes(
+  grossIncome: number,
+  filingStatus: FilingStatus,
+  stateCode: string | null,
+  preTaxContributions: PreTaxContributions
+): TaxCalculation {
+  const totalPreTaxContributions = 
+    preTaxContributions.traditional401k + 
+    preTaxContributions.traditionalIRA + 
+    preTaxContributions.hsa + 
+    preTaxContributions.other;
+  
+  // Adjusted Gross Income (AGI)
+  const adjustedGrossIncome = Math.max(0, grossIncome - totalPreTaxContributions);
+  
+  // Standard deduction
+  const standardDeduction = STANDARD_DEDUCTIONS[filingStatus];
+  
+  // Taxable income
+  const taxableIncome = Math.max(0, adjustedGrossIncome - standardDeduction);
+  
+  // Federal tax
+  const { tax: federalTax, marginalRate: marginalFederalRate } = calculateFederalTax(taxableIncome, filingStatus);
+  
+  // State tax (on AGI, simplified)
+  const stateTax = calculateStateTax(adjustedGrossIncome, stateCode);
+  
+  // FICA (on gross income, not reduced by pre-tax contributions except HSA doesn't reduce FICA in reality, but simplifying)
+  const fica = calculateFICATax(grossIncome, filingStatus);
+  
+  const totalTax = federalTax + stateTax + fica.total;
+  const netIncome = grossIncome - totalTax - totalPreTaxContributions;
+  
+  return {
+    grossIncome,
+    filingStatus,
+    stateCode,
+    preTaxContributions,
+    totalPreTaxContributions,
+    standardDeduction,
+    adjustedGrossIncome,
+    taxableIncome,
+    federalTax,
+    stateTax,
+    socialSecurityTax: fica.socialSecurity,
+    medicareTax: fica.medicare,
+    ficaTax: fica.total,
+    totalTax,
+    effectiveFederalRate: grossIncome > 0 ? (federalTax / grossIncome) * 100 : 0,
+    effectiveStateRate: grossIncome > 0 ? (stateTax / grossIncome) * 100 : 0,
+    effectiveTotalRate: grossIncome > 0 ? (totalTax / grossIncome) * 100 : 0,
+    marginalFederalRate,
+    netIncome,
+    monthlyNetIncome: netIncome / 12,
+  };
+}
+
+/**
+ * Calculate complete scenario income breakdown
+ */
+export function calculateScenarioIncome(
+  grossIncome: number,
+  filingStatus: FilingStatus,
+  stateCode: string | null,
+  preTaxContributions: PreTaxContributions,
+  monthlySpending: number,
+  currentNetWorth: number
+): ScenarioIncomeBreakdown {
+  const taxes = calculateTaxes(grossIncome, filingStatus, stateCode, preTaxContributions);
+  
+  const annualSpending = monthlySpending * 12;
+  const totalPreTaxSavings = taxes.totalPreTaxContributions;
+  const postTaxSavingsAvailable = Math.max(0, taxes.netIncome - annualSpending);
+  const totalAnnualSavings = totalPreTaxSavings + postTaxSavingsAvailable;
+  
+  // Calculate rates
+  const savingsRateOfGross = grossIncome > 0 ? (totalAnnualSavings / grossIncome) * 100 : 0;
+  const savingsRateOfNet = taxes.netIncome > 0 ? (postTaxSavingsAvailable / taxes.netIncome) * 100 : 0;
+  const spendingRateOfGross = grossIncome > 0 ? (annualSpending / grossIncome) * 100 : 0;
+  const spendingRateOfNet = taxes.netIncome > 0 ? (annualSpending / taxes.netIncome) * 100 : 0;
+  
+  // Allocations as percentage of gross
+  const allocationTaxes = taxes.effectiveTotalRate;
+  const allocationPreTaxSavings = grossIncome > 0 ? (totalPreTaxSavings / grossIncome) * 100 : 0;
+  const allocationSpending = spendingRateOfGross;
+  const allocationPostTaxSavings = grossIncome > 0 ? (postTaxSavingsAvailable / grossIncome) * 100 : 0;
+  
+  // Net worth context
+  const yearsOfExpenses = annualSpending > 0 ? currentNetWorth / annualSpending : 0;
+  const netWorthToIncomeRatio = grossIncome > 0 ? currentNetWorth / grossIncome : 0;
+  
+  // Generate warnings and suggestions
+  const warnings: string[] = [];
+  const suggestions: string[] = [];
+  
+  if (annualSpending > taxes.netIncome) {
+    warnings.push('Your annual spending exceeds your net income after taxes.');
+  }
+  
+  if (preTaxContributions.traditional401k > CONTRIBUTION_LIMITS.traditional401k) {
+    warnings.push(`401k contribution exceeds the ${new Date().getFullYear()} limit of ${formatCurrency(CONTRIBUTION_LIMITS.traditional401k)}.`);
+  }
+  
+  if (preTaxContributions.traditionalIRA > CONTRIBUTION_LIMITS.traditionalIRA) {
+    warnings.push(`Traditional IRA contribution exceeds the ${new Date().getFullYear()} limit of ${formatCurrency(CONTRIBUTION_LIMITS.traditionalIRA)}.`);
+  }
+  
+  if (savingsRateOfGross < 15 && grossIncome > 50000) {
+    suggestions.push('Consider increasing your savings rate to at least 15% of gross income for long-term financial security.');
+  }
+  
+  if (preTaxContributions.traditional401k < CONTRIBUTION_LIMITS.traditional401k && postTaxSavingsAvailable > 0) {
+    const room = CONTRIBUTION_LIMITS.traditional401k - preTaxContributions.traditional401k;
+    suggestions.push(`You have ${formatCurrency(room)} of unused 401k contribution room which could reduce your tax burden.`);
+  }
+  
+  if (!preTaxContributions.hsa && grossIncome > 0) {
+    suggestions.push('If you have a high-deductible health plan, consider contributing to an HSA for triple tax benefits.');
+  }
+  
+  return {
+    taxes,
+    monthlySpending,
+    annualSpending,
+    totalPreTaxSavings,
+    postTaxSavingsAvailable,
+    totalAnnualSavings,
+    monthlySavingsAvailable: postTaxSavingsAvailable / 12,
+    savingsRateOfGross,
+    savingsRateOfNet,
+    spendingRateOfGross,
+    spendingRateOfNet,
+    allocationTaxes,
+    allocationPreTaxSavings,
+    allocationSpending,
+    allocationPostTaxSavings,
+    currentNetWorth,
+    yearsOfExpenses,
+    netWorthToIncomeRatio,
+    warnings,
+    suggestions,
+  };
+}
+
+// Keep legacy interface for backwards compatibility
+export interface IncomeBreakdown {
+  grossIncome: number;
+  effectiveTaxRate: number;
+  annualTaxes: number;
+  netIncome: number;
+  monthlyGross: number;
+  monthlyTaxes: number;
+  monthlyNet: number;
+  annualSpending: number;
+  monthlySpending: number;
+  annualSavingsPotential: number;
+  monthlySavingsPotential: number;
+  savingsRate: number;
+  netSavingsRate: number;
+  taxBurdenPercent: number;
+  spendingToGrossPercent: number;
+  spendingToNetPercent: number;
+  currentNetWorth: number;
+  yearsOfExpensesInNetWorth: number;
+  netWorthToIncomeRatio: number;
+}
+
+// Legacy function - kept for backwards compatibility
+export const TAX_RATE_PRESETS = [
+  { label: 'Very Low (~10%)', rate: 10, description: 'Under $50k single / $100k married' },
+  { label: 'Low (~15%)', rate: 15, description: '$50k-$90k single / $100k-$180k married' },
+  { label: 'Moderate (~20%)', rate: 20, description: '$90k-$170k single / $180k-$340k married' },
+  { label: 'Medium (~25%)', rate: 25, description: '$170k-$215k single / $340k-$430k married' },
+  { label: 'Higher (~30%)', rate: 30, description: '$215k-$540k single / $430k+ married' },
+  { label: 'High (~35%)', rate: 35, description: '$540k+ single / High income with state taxes' },
+] as const;
+
+// Legacy function
+export function calculateIncomeBreakdown(
+  grossIncome: number,
+  effectiveTaxRate: number,
+  monthlySpending: number,
+  currentNetWorth: number
+): IncomeBreakdown {
+  const taxRateDecimal = effectiveTaxRate / 100;
+  const annualTaxes = grossIncome * taxRateDecimal;
+  const netIncome = grossIncome - annualTaxes;
+  const monthlyGross = grossIncome / 12;
+  const monthlyTaxes = annualTaxes / 12;
+  const monthlyNet = netIncome / 12;
+  const annualSpending = monthlySpending * 12;
+  const annualSavingsPotential = Math.max(0, netIncome - annualSpending);
+  const monthlySavingsPotential = annualSavingsPotential / 12;
+  const savingsRate = grossIncome > 0 ? (annualSavingsPotential / grossIncome) * 100 : 0;
+  const netSavingsRate = netIncome > 0 ? (annualSavingsPotential / netIncome) * 100 : 0;
+  const taxBurdenPercent = grossIncome > 0 ? (annualTaxes / grossIncome) * 100 : 0;
+  const spendingToGrossPercent = grossIncome > 0 ? (annualSpending / grossIncome) * 100 : 0;
+  const spendingToNetPercent = netIncome > 0 ? (annualSpending / netIncome) * 100 : 0;
+  const yearsOfExpensesInNetWorth = annualSpending > 0 ? currentNetWorth / annualSpending : 0;
+  const netWorthToIncomeRatio = grossIncome > 0 ? currentNetWorth / grossIncome : 0;
+  
+  return {
+    grossIncome, effectiveTaxRate, annualTaxes, netIncome, monthlyGross, monthlyTaxes,
+    monthlyNet, annualSpending, monthlySpending, annualSavingsPotential, monthlySavingsPotential,
+    savingsRate, netSavingsRate, taxBurdenPercent, spendingToGrossPercent, spendingToNetPercent,
+    currentNetWorth, yearsOfExpensesInNetWorth, netWorthToIncomeRatio,
+  };
+}
+
+/**
+ * Format a percentage with specified decimals
+ */
+export function formatPercent(value: number, decimals: number = 1): string {
+  return `${value.toFixed(decimals)}%`;
+}
+
+// ============================================================================
+// DYNAMIC PROJECTION CALCULATIONS
+// ============================================================================
+
+export interface DynamicIncomeParams {
+  grossIncome: number;
+  incomeGrowthRate: number; // % per year
+  filingStatus: FilingStatus;
+  stateCode: string | null;
+  preTaxContributions: PreTaxContributions;
+  preTaxGrowthRate?: number; // % increase in pre-tax contributions per year (default matches income growth)
+}
+
+export interface DynamicSpendingParams {
+  baseMonthlyBudget: number;
+  spendingGrowthRate: number; // % of net worth added to monthly budget
+  inflationRate: number; // % per year for base budget
+}
+
+export interface YearlyProjectedFinancials {
+  year: number;
+  yearsFromNow: number;
+  
+  // Income
+  grossIncome: number;
+  preTaxContributions: number;
+  
+  // Taxes
+  federalTax: number;
+  stateTax: number;
+  ficaTax: number;
+  totalTax: number;
+  effectiveTaxRate: number;
+  
+  // Net Income
+  netIncome: number;
+  
+  // Spending (variable based on net worth)
+  baseMonthlyBudget: number; // Inflation-adjusted
+  netWorthSpendingPortion: number;
+  totalMonthlySpending: number;
+  annualSpending: number;
+  
+  // Savings
+  postTaxSavings: number;
+  totalSavings: number; // Pre-tax + post-tax
+  savingsRate: number; // % of gross
+  
+  // Net Worth (projected)
+  startOfYearNetWorth: number;
+  endOfYearNetWorth: number;
+  investmentGrowth: number;
+}
+
+/**
+ * Calculate projected financials for a specific year in the future
+ * Accounts for income growth, tax bracket changes, and variable spending
+ */
+export function calculateYearProjection(
+  yearsFromNow: number,
+  startNetWorth: number,
+  incomeParams: DynamicIncomeParams,
+  spendingParams: DynamicSpendingParams,
+  investmentReturnRate: number
+): YearlyProjectedFinancials {
+  const currentYear = new Date().getFullYear();
+  const year = currentYear + yearsFromNow;
+  
+  // Project income with growth
+  const incomeGrowthMultiplier = Math.pow(1 + incomeParams.incomeGrowthRate / 100, yearsFromNow);
+  const grossIncome = incomeParams.grossIncome * incomeGrowthMultiplier;
+  
+  // Project pre-tax contributions (grow with income, capped at limits)
+  const preTaxGrowthRate = incomeParams.preTaxGrowthRate ?? incomeParams.incomeGrowthRate;
+  const preTaxGrowthMultiplier = Math.pow(1 + preTaxGrowthRate / 100, yearsFromNow);
+  
+  // Apply growth but cap at contribution limits (which we'll assume grow with inflation)
+  const inflationMultiplier = Math.pow(1 + spendingParams.inflationRate / 100, yearsFromNow);
+  const adjusted401kLimit = CONTRIBUTION_LIMITS.traditional401k * inflationMultiplier;
+  const adjustedIRALimit = CONTRIBUTION_LIMITS.traditionalIRA * inflationMultiplier;
+  const adjustedHSALimit = CONTRIBUTION_LIMITS.hsa_family * inflationMultiplier;
+  
+  const projected401k = Math.min(
+    incomeParams.preTaxContributions.traditional401k * preTaxGrowthMultiplier,
+    adjusted401kLimit
+  );
+  const projectedIRA = Math.min(
+    incomeParams.preTaxContributions.traditionalIRA * preTaxGrowthMultiplier,
+    adjustedIRALimit
+  );
+  const projectedHSA = Math.min(
+    incomeParams.preTaxContributions.hsa * preTaxGrowthMultiplier,
+    adjustedHSALimit
+  );
+  const projectedOther = incomeParams.preTaxContributions.other * preTaxGrowthMultiplier;
+  
+  const totalPreTax = projected401k + projectedIRA + projectedHSA + projectedOther;
+  
+  // Calculate taxes on projected income
+  const taxCalc = calculateTaxes(
+    grossIncome,
+    incomeParams.filingStatus,
+    incomeParams.stateCode,
+    {
+      traditional401k: projected401k,
+      traditionalIRA: projectedIRA,
+      hsa: projectedHSA,
+      other: projectedOther,
+    }
+  );
+  
+  // Calculate spending based on start-of-year net worth
+  const inflationAdjustedBaseBudget = spendingParams.baseMonthlyBudget * inflationMultiplier;
+  const netWorthPortion = startNetWorth * (spendingParams.spendingGrowthRate / 100) / 12;
+  const totalMonthlySpending = inflationAdjustedBaseBudget + netWorthPortion;
+  const annualSpending = totalMonthlySpending * 12;
+  
+  // Calculate post-tax savings
+  const postTaxSavings = Math.max(0, taxCalc.netIncome - annualSpending);
+  const totalSavings = totalPreTax + postTaxSavings;
+  const savingsRate = grossIncome > 0 ? (totalSavings / grossIncome) * 100 : 0;
+  
+  // Calculate end-of-year net worth
+  // Net worth grows by: investment returns + total savings
+  const investmentGrowth = startNetWorth * (investmentReturnRate / 100);
+  const endOfYearNetWorth = startNetWorth + investmentGrowth + totalSavings;
+  
+  return {
+    year,
+    yearsFromNow,
+    grossIncome,
+    preTaxContributions: totalPreTax,
+    federalTax: taxCalc.federalTax,
+    stateTax: taxCalc.stateTax,
+    ficaTax: taxCalc.ficaTax,
+    totalTax: taxCalc.totalTax,
+    effectiveTaxRate: taxCalc.effectiveTotalRate,
+    netIncome: taxCalc.netIncome,
+    baseMonthlyBudget: inflationAdjustedBaseBudget,
+    netWorthSpendingPortion: netWorthPortion,
+    totalMonthlySpending,
+    annualSpending,
+    postTaxSavings,
+    totalSavings,
+    savingsRate,
+    startOfYearNetWorth: startNetWorth,
+    endOfYearNetWorth,
+    investmentGrowth,
+  };
+}
+
+/**
+ * Generate multi-year projection with dynamic income, taxes, and spending
+ */
+export function generateDynamicProjections(
+  startingNetWorth: number,
+  incomeParams: DynamicIncomeParams,
+  spendingParams: DynamicSpendingParams,
+  investmentReturnRate: number,
+  years: number = 30
+): YearlyProjectedFinancials[] {
+  const projections: YearlyProjectedFinancials[] = [];
+  let currentNetWorth = startingNetWorth;
+  
+  for (let i = 0; i <= years; i++) {
+    const yearProjection = calculateYearProjection(
+      i,
+      currentNetWorth,
+      incomeParams,
+      spendingParams,
+      investmentReturnRate
+    );
+    projections.push(yearProjection);
+    
+    // Next year starts with this year's ending net worth
+    currentNetWorth = yearProjection.endOfYearNetWorth;
+  }
+  
+  return projections;
+}
