@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as cashFlowPlans from "../cashFlowPlans.js";
 import type * as entries from "../entries.js";
 import type * as http from "../http.js";
 import type * as scenarios from "../scenarios.js";
@@ -17,6 +18,7 @@ import type * as settings from "../settings.js";
 // Note: The scenarios and settings modules have been updated.
 // scenarios: list, getSelected, get, create, createDefault, update, remove, duplicate, toggleSelected, selectOnly, setSelected
 // settings: getProfile, saveProfile, get (legacy), save (legacy)
+// cashFlowPlans: getByScenario, upsert, remove, syncToScenario
 
 import type {
   ApiFromModules,
@@ -26,6 +28,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  cashFlowPlans: typeof cashFlowPlans;
   entries: typeof entries;
   http: typeof http;
   scenarios: typeof scenarios;
