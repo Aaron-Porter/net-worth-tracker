@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { useMutation, useConvexAuth } from 'convex/react'
+import { useMutation, useConvexAuth, useQuery } from 'convex/react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { api } from '../../convex/_generated/api'
 import { Id } from '../../convex/_generated/dataModel'
 import { SignIn } from './components/SignIn'
 import { useScenarios, Scenario, ScenarioProjection, SCENARIO_TEMPLATES } from '../lib/useScenarios'
 import { formatCurrency, formatDate, getTimeSinceEntry, LEVEL_THRESHOLDS } from '../lib/calculations'
+import CashFlowBuilder, { CashFlowData } from './components/CashFlowBuilder'
 import {
   LineChart,
   Line,
@@ -1503,6 +1504,63 @@ function ScenariosTab({
     spendingGrowthRate: '2',
   });
 
+  // Cash flow state
+  const [cashFlowData, setCashFlowData] = useState<CashFlowData>({
+    grossAnnualIncome: 0,
+    preTax401k: 0,
+    preTaxHsa: 0,
+    preTaxTraditionalIra: 0,
+    preTaxOther: 0,
+    effectiveTaxRate: 22,
+    postTaxRoth: 0,
+    postTaxBrokerage: 0,
+    postTaxSavings: 0,
+    postTaxOther: 0,
+  });
+
+  const upsertCashFlowPlan = useMutation(api.cashFlowPlans.upsert);
+  const getCashFlowPlan = useQuery(
+    editingScenario
+      ? api.cashFlowPlans.getByScenario
+      : undefined,
+    editingScenario ? { scenarioId: editingScenario._id } : 'skip' as any
+  );
+
+  // Load cash flow data when editing a scenario
+  useEffect(() => {
+    if (editingScenario) {
+      if (getCashFlowPlan) {
+        // Load existing cash flow plan
+        setCashFlowData({
+          grossAnnualIncome: getCashFlowPlan.grossAnnualIncome,
+          preTax401k: getCashFlowPlan.preTax401k,
+          preTaxHsa: getCashFlowPlan.preTaxHsa,
+          preTaxTraditionalIra: getCashFlowPlan.preTaxTraditionalIra,
+          preTaxOther: getCashFlowPlan.preTaxOther,
+          effectiveTaxRate: getCashFlowPlan.effectiveTaxRate,
+          postTaxRoth: getCashFlowPlan.postTaxRoth,
+          postTaxBrokerage: getCashFlowPlan.postTaxBrokerage,
+          postTaxSavings: getCashFlowPlan.postTaxSavings,
+          postTaxOther: getCashFlowPlan.postTaxOther,
+        });
+      } else if (getCashFlowPlan === null) {
+        // No existing plan, reset to defaults
+        setCashFlowData({
+          grossAnnualIncome: 0,
+          preTax401k: 0,
+          preTaxHsa: 0,
+          preTaxTraditionalIra: 0,
+          preTaxOther: 0,
+          effectiveTaxRate: 22,
+          postTaxRoth: 0,
+          postTaxBrokerage: 0,
+          postTaxSavings: 0,
+          postTaxOther: 0,
+        });
+      }
+    }
+  }, [editingScenario, getCashFlowPlan]);
+
   const resetScenarioForm = () => {
     setScenarioForm({
       name: '',
@@ -1514,12 +1572,24 @@ function ScenariosTab({
       baseMonthlyBudget: '3000',
       spendingGrowthRate: '2',
     });
+    setCashFlowData({
+      grossAnnualIncome: 0,
+      preTax401k: 0,
+      preTaxHsa: 0,
+      preTaxTraditionalIra: 0,
+      preTaxOther: 0,
+      effectiveTaxRate: 22,
+      postTaxRoth: 0,
+      postTaxBrokerage: 0,
+      postTaxSavings: 0,
+      postTaxOther: 0,
+    });
   };
 
   const handleCreateScenario = async () => {
     if (!scenarioForm.name.trim()) return;
-    
-    await scenariosHook.createScenario({
+
+    const scenarioId = await scenariosHook.createScenario({
       name: scenarioForm.name.trim(),
       description: scenarioForm.description.trim() || undefined,
       currentRate: parseFloat(scenarioForm.currentRate) || 7,
@@ -1529,14 +1599,22 @@ function ScenariosTab({
       baseMonthlyBudget: parseFloat(scenarioForm.baseMonthlyBudget) || 3000,
       spendingGrowthRate: parseFloat(scenarioForm.spendingGrowthRate) || 2,
     });
-    
+
+    // Save cash flow plan if any income is entered
+    if (scenarioId && cashFlowData.grossAnnualIncome > 0) {
+      await upsertCashFlowPlan({
+        scenarioId,
+        ...cashFlowData,
+      });
+    }
+
     resetScenarioForm();
     setShowCreateScenario(false);
   };
 
   const handleUpdateScenario = async () => {
     if (!editingScenario || !scenarioForm.name.trim()) return;
-    
+
     await scenariosHook.updateScenario(editingScenario._id, {
       name: scenarioForm.name.trim(),
       description: scenarioForm.description.trim() || undefined,
@@ -1547,7 +1625,15 @@ function ScenariosTab({
       baseMonthlyBudget: parseFloat(scenarioForm.baseMonthlyBudget) || 3000,
       spendingGrowthRate: parseFloat(scenarioForm.spendingGrowthRate) || 2,
     });
-    
+
+    // Save cash flow plan if any income is entered
+    if (cashFlowData.grossAnnualIncome > 0) {
+      await upsertCashFlowPlan({
+        scenarioId: editingScenario._id,
+        ...cashFlowData,
+      });
+    }
+
     setEditingScenario(null);
     resetScenarioForm();
   };
@@ -1755,7 +1841,22 @@ function ScenariosTab({
                 />
               </div>
             </div>
-            
+
+            {/* Cash Flow Builder */}
+            <div className="mb-4">
+              <CashFlowBuilder
+                data={cashFlowData}
+                onChange={setCashFlowData}
+                onApply={(totalSavings, monthlyBudget) => {
+                  setScenarioForm(prev => ({
+                    ...prev,
+                    yearlyContribution: totalSavings.toString(),
+                    baseMonthlyBudget: monthlyBudget.toString(),
+                  }));
+                }}
+              />
+            </div>
+
             <div className="flex gap-2">
               {editingScenario ? (
                 <>

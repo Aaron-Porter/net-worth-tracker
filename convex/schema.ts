@@ -34,4 +34,37 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  // Cash flow plans - detailed breakdown of income, taxes, and savings for scenarios
+  cashFlowPlans: defineTable({
+    scenarioId: v.id("scenarios"),
+    userId: v.id("users"),
+    // Income
+    grossAnnualIncome: v.number(),
+    // Pre-tax savings
+    preTax401k: v.number(),
+    preTaxHsa: v.number(),
+    preTaxTraditionalIra: v.number(),
+    preTaxOther: v.number(),
+    // Tax calculation
+    effectiveTaxRate: v.number(),
+    estimatedAnnualTax: v.number(),
+    // Post-tax savings
+    postTaxRoth: v.number(),
+    postTaxBrokerage: v.number(),
+    postTaxSavings: v.number(),
+    postTaxOther: v.number(),
+    // Calculated fields
+    totalPreTaxSavings: v.number(),
+    totalPostTaxSavings: v.number(),
+    totalSavings: v.number(),
+    taxableIncome: v.number(),
+    takeHomePay: v.number(),
+    annualSpending: v.number(),
+    monthlyBudget: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_scenario", ["scenarioId"])
+    .index("by_user", ["userId"]),
 });
