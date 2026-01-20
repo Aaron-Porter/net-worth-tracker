@@ -1303,3 +1303,184 @@ export function calculateIncomeBreakdown(
 export function formatPercent(value: number, decimals: number = 1): string {
   return `${value.toFixed(decimals)}%`;
 }
+
+// ============================================================================
+// DYNAMIC PROJECTION CALCULATIONS
+// ============================================================================
+
+export interface DynamicIncomeParams {
+  grossIncome: number;
+  incomeGrowthRate: number; // % per year
+  filingStatus: FilingStatus;
+  stateCode: string | null;
+  preTaxContributions: PreTaxContributions;
+  preTaxGrowthRate?: number; // % increase in pre-tax contributions per year (default matches income growth)
+}
+
+export interface DynamicSpendingParams {
+  baseMonthlyBudget: number;
+  spendingGrowthRate: number; // % of net worth added to monthly budget
+  inflationRate: number; // % per year for base budget
+}
+
+export interface YearlyProjectedFinancials {
+  year: number;
+  yearsFromNow: number;
+  
+  // Income
+  grossIncome: number;
+  preTaxContributions: number;
+  
+  // Taxes
+  federalTax: number;
+  stateTax: number;
+  ficaTax: number;
+  totalTax: number;
+  effectiveTaxRate: number;
+  
+  // Net Income
+  netIncome: number;
+  
+  // Spending (variable based on net worth)
+  baseMonthlyBudget: number; // Inflation-adjusted
+  netWorthSpendingPortion: number;
+  totalMonthlySpending: number;
+  annualSpending: number;
+  
+  // Savings
+  postTaxSavings: number;
+  totalSavings: number; // Pre-tax + post-tax
+  savingsRate: number; // % of gross
+  
+  // Net Worth (projected)
+  startOfYearNetWorth: number;
+  endOfYearNetWorth: number;
+  investmentGrowth: number;
+}
+
+/**
+ * Calculate projected financials for a specific year in the future
+ * Accounts for income growth, tax bracket changes, and variable spending
+ */
+export function calculateYearProjection(
+  yearsFromNow: number,
+  startNetWorth: number,
+  incomeParams: DynamicIncomeParams,
+  spendingParams: DynamicSpendingParams,
+  investmentReturnRate: number
+): YearlyProjectedFinancials {
+  const currentYear = new Date().getFullYear();
+  const year = currentYear + yearsFromNow;
+  
+  // Project income with growth
+  const incomeGrowthMultiplier = Math.pow(1 + incomeParams.incomeGrowthRate / 100, yearsFromNow);
+  const grossIncome = incomeParams.grossIncome * incomeGrowthMultiplier;
+  
+  // Project pre-tax contributions (grow with income, capped at limits)
+  const preTaxGrowthRate = incomeParams.preTaxGrowthRate ?? incomeParams.incomeGrowthRate;
+  const preTaxGrowthMultiplier = Math.pow(1 + preTaxGrowthRate / 100, yearsFromNow);
+  
+  // Apply growth but cap at contribution limits (which we'll assume grow with inflation)
+  const inflationMultiplier = Math.pow(1 + spendingParams.inflationRate / 100, yearsFromNow);
+  const adjusted401kLimit = CONTRIBUTION_LIMITS.traditional401k * inflationMultiplier;
+  const adjustedIRALimit = CONTRIBUTION_LIMITS.traditionalIRA * inflationMultiplier;
+  const adjustedHSALimit = CONTRIBUTION_LIMITS.hsa_family * inflationMultiplier;
+  
+  const projected401k = Math.min(
+    incomeParams.preTaxContributions.traditional401k * preTaxGrowthMultiplier,
+    adjusted401kLimit
+  );
+  const projectedIRA = Math.min(
+    incomeParams.preTaxContributions.traditionalIRA * preTaxGrowthMultiplier,
+    adjustedIRALimit
+  );
+  const projectedHSA = Math.min(
+    incomeParams.preTaxContributions.hsa * preTaxGrowthMultiplier,
+    adjustedHSALimit
+  );
+  const projectedOther = incomeParams.preTaxContributions.other * preTaxGrowthMultiplier;
+  
+  const totalPreTax = projected401k + projectedIRA + projectedHSA + projectedOther;
+  
+  // Calculate taxes on projected income
+  const taxCalc = calculateTaxes(
+    grossIncome,
+    incomeParams.filingStatus,
+    incomeParams.stateCode,
+    {
+      traditional401k: projected401k,
+      traditionalIRA: projectedIRA,
+      hsa: projectedHSA,
+      other: projectedOther,
+    }
+  );
+  
+  // Calculate spending based on start-of-year net worth
+  const inflationAdjustedBaseBudget = spendingParams.baseMonthlyBudget * inflationMultiplier;
+  const netWorthPortion = startNetWorth * (spendingParams.spendingGrowthRate / 100) / 12;
+  const totalMonthlySpending = inflationAdjustedBaseBudget + netWorthPortion;
+  const annualSpending = totalMonthlySpending * 12;
+  
+  // Calculate post-tax savings
+  const postTaxSavings = Math.max(0, taxCalc.netIncome - annualSpending);
+  const totalSavings = totalPreTax + postTaxSavings;
+  const savingsRate = grossIncome > 0 ? (totalSavings / grossIncome) * 100 : 0;
+  
+  // Calculate end-of-year net worth
+  // Net worth grows by: investment returns + total savings
+  const investmentGrowth = startNetWorth * (investmentReturnRate / 100);
+  const endOfYearNetWorth = startNetWorth + investmentGrowth + totalSavings;
+  
+  return {
+    year,
+    yearsFromNow,
+    grossIncome,
+    preTaxContributions: totalPreTax,
+    federalTax: taxCalc.federalTax,
+    stateTax: taxCalc.stateTax,
+    ficaTax: taxCalc.ficaTax,
+    totalTax: taxCalc.totalTax,
+    effectiveTaxRate: taxCalc.effectiveTotalRate,
+    netIncome: taxCalc.netIncome,
+    baseMonthlyBudget: inflationAdjustedBaseBudget,
+    netWorthSpendingPortion: netWorthPortion,
+    totalMonthlySpending,
+    annualSpending,
+    postTaxSavings,
+    totalSavings,
+    savingsRate,
+    startOfYearNetWorth: startNetWorth,
+    endOfYearNetWorth,
+    investmentGrowth,
+  };
+}
+
+/**
+ * Generate multi-year projection with dynamic income, taxes, and spending
+ */
+export function generateDynamicProjections(
+  startingNetWorth: number,
+  incomeParams: DynamicIncomeParams,
+  spendingParams: DynamicSpendingParams,
+  investmentReturnRate: number,
+  years: number = 30
+): YearlyProjectedFinancials[] {
+  const projections: YearlyProjectedFinancials[] = [];
+  let currentNetWorth = startingNetWorth;
+  
+  for (let i = 0; i <= years; i++) {
+    const yearProjection = calculateYearProjection(
+      i,
+      currentNetWorth,
+      incomeParams,
+      spendingParams,
+      investmentReturnRate
+    );
+    projections.push(yearProjection);
+    
+    // Next year starts with this year's ending net worth
+    currentNetWorth = yearProjection.endOfYearNetWorth;
+  }
+  
+  return projections;
+}

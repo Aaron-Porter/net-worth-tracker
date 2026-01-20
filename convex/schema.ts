@@ -36,6 +36,7 @@ export default defineSchema({
     
     // Income & Tax (for guided scenario builder)
     grossIncome: v.optional(v.number()), // Annual gross income
+    incomeGrowthRate: v.optional(v.number()), // Expected annual income growth rate (e.g., 3 for 3%)
     filingStatus: v.optional(v.string()), // "single", "married_jointly", "married_separately", "head_of_household"
     stateCode: v.optional(v.string()), // Two-letter state code for state tax calculation
     

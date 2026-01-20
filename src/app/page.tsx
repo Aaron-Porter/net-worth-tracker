@@ -1499,6 +1499,7 @@ type WizardStep = 'list' | 'income' | 'filing' | 'pretax' | 'spending' | 'invest
 interface ScenarioWizardState {
   name: string;
   grossIncome: string;
+  incomeGrowthRate: string;
   filingStatus: FilingStatus;
   stateCode: string;
   preTax401k: string;
@@ -1515,6 +1516,7 @@ interface ScenarioWizardState {
 const DEFAULT_WIZARD_STATE: ScenarioWizardState = {
   name: '',
   grossIncome: '',
+  incomeGrowthRate: '3',
   filingStatus: 'single',
   stateCode: '',
   preTax401k: '',
@@ -1582,6 +1584,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
     setWizardState({
       name: scenario.name,
       grossIncome: scenario.grossIncome?.toString() || '',
+      incomeGrowthRate: scenario.incomeGrowthRate?.toString() || '3',
       filingStatus: (scenario.filingStatus as FilingStatus) || 'single',
       stateCode: scenario.stateCode || '',
       preTax401k: scenario.preTax401k?.toString() || '',
@@ -1600,6 +1603,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
 
   const handleSaveScenario = async () => {
     // Calculate total yearly contribution from pre-tax + post-tax savings
+    // This is the INITIAL contribution - projections will recalculate dynamically
     const totalPreTax = (parseFloat(wizardState.preTax401k) || 0) +
                         (parseFloat(wizardState.preTaxIRA) || 0) +
                         (parseFloat(wizardState.preTaxHSA) || 0) +
@@ -1616,6 +1620,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
       baseMonthlyBudget: parseFloat(wizardState.baseMonthlyBudget) || 3000,
       spendingGrowthRate: parseFloat(wizardState.spendingGrowthRate) || 2,
       grossIncome: parseFloat(wizardState.grossIncome) || undefined,
+      incomeGrowthRate: parseFloat(wizardState.incomeGrowthRate) || undefined,
       filingStatus: wizardState.filingStatus,
       stateCode: wizardState.stateCode || undefined,
       preTax401k: parseFloat(wizardState.preTax401k) || undefined,
@@ -1774,15 +1779,40 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
       {wizardStep === 'income' && (
         <>
           <WizardHeader title="What's your gross annual income?" subtitle="Enter your total income before any taxes or deductions." step={1} />
-          <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-            <label className="block text-sm font-medium text-slate-300 mb-2">Annual Gross Income</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
-              <input type="number" value={wizardState.grossIncome} onChange={(e) => setWizardState(s => ({ ...s, grossIncome: e.target.value }))} placeholder="100000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+          <div className="space-y-4">
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Annual Gross Income</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
+                <input type="number" value={wizardState.grossIncome} onChange={(e) => setWizardState(s => ({ ...s, grossIncome: e.target.value }))} placeholder="100000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              </div>
+              {wizardState.grossIncome && (
+                <p className="mt-3 text-slate-400">That's <span className="text-emerald-400 font-mono">{formatCurrency(parseFloat(wizardState.grossIncome) / 12)}</span> per month before taxes.</p>
+              )}
             </div>
-            {wizardState.grossIncome && (
-              <p className="mt-3 text-slate-400">That's <span className="text-emerald-400 font-mono">{formatCurrency(parseFloat(wizardState.grossIncome) / 12)}</span> per month before taxes.</p>
-            )}
+            
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Expected Annual Income Growth (%)</label>
+              <p className="text-xs text-slate-500 mb-3">How much do you expect your income to increase each year? (raises, promotions, etc.)</p>
+              <div className="flex gap-4 items-center">
+                <input type="number" value={wizardState.incomeGrowthRate} onChange={(e) => setWizardState(s => ({ ...s, incomeGrowthRate: e.target.value }))} placeholder="3" step="0.5" min="0" max="20" className="w-32 bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 text-xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                <span className="text-slate-400">% per year</span>
+              </div>
+              <div className="mt-3 flex gap-2">
+                {[0, 2, 3, 5, 7].map(rate => (
+                  <button key={rate} onClick={() => setWizardState(s => ({ ...s, incomeGrowthRate: rate.toString() }))} className={`px-3 py-1 text-sm rounded-lg ${parseFloat(wizardState.incomeGrowthRate) === rate ? 'bg-violet-500 text-white' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}>
+                    {rate}%
+                  </button>
+                ))}
+              </div>
+              {wizardState.grossIncome && parseFloat(wizardState.incomeGrowthRate) > 0 && (
+                <div className="mt-4 p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
+                  <p className="text-sm text-emerald-400">
+                    In 10 years, your income would grow to approximately <strong>{formatCurrency(parseFloat(wizardState.grossIncome) * Math.pow(1 + parseFloat(wizardState.incomeGrowthRate) / 100, 10))}</strong>
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
           <WizardNav canContinue={!!wizardState.grossIncome} />
         </>
@@ -2077,7 +2107,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             {/* Key Numbers */}
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-                <p className="text-xs text-slate-500 uppercase">Total Annual Savings</p>
+                <p className="text-xs text-slate-500 uppercase">Total Annual Savings (Year 1)</p>
                 <p className="text-2xl font-mono text-sky-400">{formatCurrency(incomeBreakdown.totalAnnualSavings)}</p>
                 <p className="text-xs text-slate-500 mt-1">{formatPercent(incomeBreakdown.savingsRateOfGross)} of gross income</p>
               </div>
@@ -2087,6 +2117,97 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 <p className="text-xs text-slate-500 mt-1">{formatCurrency(incomeBreakdown.taxes.totalTax)} total taxes</p>
               </div>
             </div>
+
+            {/* Dynamic Projections Preview */}
+            {(() => {
+              const incomeGrowth = parseFloat(wizardState.incomeGrowthRate) || 0;
+              const returnRate = parseFloat(wizardState.currentRate) || 7;
+              const inflation = parseFloat(wizardState.inflationRate) || 3;
+              const gross = parseFloat(wizardState.grossIncome) || 0;
+              
+              // Simple projections for years 1, 5, 10, 20
+              const projectYear = (years: number) => {
+                const projectedGross = gross * Math.pow(1 + incomeGrowth / 100, years);
+                const inflationMult = Math.pow(1 + inflation / 100, years);
+                const projectedBaseBudget = baseBudget * inflationMult;
+                
+                // Estimate net worth growth (compound growth)
+                const estimatedNetWorth = currentNetWorth * Math.pow(1 + returnRate / 100, years) + 
+                  incomeBreakdown.totalAnnualSavings * ((Math.pow(1 + returnRate / 100, years) - 1) / (returnRate / 100));
+                
+                const projectedNetWorthPortion = estimatedNetWorth * (spendingRate / 100) / 12;
+                const projectedTotalSpending = (projectedBaseBudget + projectedNetWorthPortion) * 12;
+                
+                // Rough tax estimate (simplified)
+                const estimatedTaxRate = incomeBreakdown.taxes.effectiveTotalRate + (incomeGrowth * years * 0.1); // Tax rate creep
+                const projectedTax = projectedGross * Math.min(estimatedTaxRate, 45) / 100;
+                const projectedNet = projectedGross - projectedTax - incomeBreakdown.totalPreTaxSavings * inflationMult;
+                const projectedSavings = Math.max(0, projectedNet - projectedTotalSpending) + incomeBreakdown.totalPreTaxSavings * inflationMult;
+                
+                return {
+                  income: projectedGross,
+                  spending: projectedTotalSpending,
+                  savings: projectedSavings,
+                  netWorth: estimatedNetWorth,
+                };
+              };
+              
+              const years = [0, 5, 10, 20];
+              const projections = years.map(y => ({ year: y, ...projectYear(y) }));
+              
+              // Check if savings decreases over time
+              const savingsDecreasing = projections[3].savings < projections[0].savings;
+              
+              return (
+                <div className="bg-slate-800/50 rounded-xl p-6 border border-sky-500/30 mb-4">
+                  <h4 className="text-lg font-semibold text-slate-200 mb-2">How Your Finances Evolve</h4>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Your savings will change over time as income grows ({incomeGrowth}%/yr) and spending increases with net worth ({spendingRate}%/yr).
+                  </p>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-slate-500 text-xs uppercase">
+                          <th className="text-left py-2">Year</th>
+                          <th className="text-right py-2">Income</th>
+                          <th className="text-right py-2">Spending</th>
+                          <th className="text-right py-2">Savings</th>
+                          <th className="text-right py-2">Net Worth</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {projections.map(p => (
+                          <tr key={p.year} className="border-t border-slate-700">
+                            <td className="py-2 text-slate-300">{p.year === 0 ? 'Now' : `Year ${p.year}`}</td>
+                            <td className="py-2 text-right font-mono text-emerald-400">{formatCurrency(p.income)}</td>
+                            <td className="py-2 text-right font-mono text-amber-400">{formatCurrency(p.spending)}</td>
+                            <td className={`py-2 text-right font-mono ${p.savings > 0 ? 'text-sky-400' : 'text-red-400'}`}>{formatCurrency(p.savings)}</td>
+                            <td className="py-2 text-right font-mono text-violet-400">{formatCurrency(p.netWorth)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {savingsDecreasing && spendingRate > 0 && (
+                    <div className="mt-4 p-3 bg-amber-500/10 rounded-lg border border-amber-500/30">
+                      <p className="text-sm text-amber-400">
+                        <strong>Note:</strong> Your spending rate ({spendingRate}%) may cause savings to decrease over time as your net worth grows. This is by design if you want to enjoy your wealth, but consider if this aligns with your long-term goals.
+                      </p>
+                    </div>
+                  )}
+                  
+                  {incomeGrowth === 0 && spendingRate > 0 && (
+                    <div className="mt-4 p-3 bg-amber-500/10 rounded-lg border border-amber-500/30">
+                      <p className="text-sm text-amber-400">
+                        <strong>Note:</strong> With no income growth but variable spending, your savings rate will decrease over time. Consider adding expected raises or promotions.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Warnings/Suggestions */}
             {(incomeBreakdown.warnings.length > 0 || incomeBreakdown.suggestions.length > 0) && (
