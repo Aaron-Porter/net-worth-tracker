@@ -31,6 +31,9 @@ export default defineSchema({
     inflationRate: v.number(), // Expected inflation rate
     baseMonthlyBudget: v.number(), // Floor spending for levels system
     spendingGrowthRate: v.number(), // % of net worth per year for additional spending
+    // Income & Tax assumptions (optional - for income calculator)
+    grossIncome: v.optional(v.number()), // Annual gross income
+    effectiveTaxRate: v.optional(v.number()), // Effective tax rate as percentage (e.g., 22 for 22%)
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),

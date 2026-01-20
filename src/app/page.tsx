@@ -7,7 +7,7 @@ import { api } from '../../convex/_generated/api'
 import { Id } from '../../convex/_generated/dataModel'
 import { SignIn } from './components/SignIn'
 import { useScenarios, Scenario, ScenarioProjection, SCENARIO_TEMPLATES } from '../lib/useScenarios'
-import { formatCurrency, formatDate, getTimeSinceEntry, LEVEL_THRESHOLDS } from '../lib/calculations'
+import { formatCurrency, formatDate, getTimeSinceEntry, LEVEL_THRESHOLDS, calculateIncomeBreakdown, TAX_RATE_PRESETS, formatPercent, IncomeBreakdown } from '../lib/calculations'
 import {
   LineChart,
   Line,
@@ -1501,6 +1501,8 @@ function ScenariosTab({
     inflationRate: '3',
     baseMonthlyBudget: '3000',
     spendingGrowthRate: '2',
+    grossIncome: '',
+    effectiveTaxRate: '',
   });
 
   const resetScenarioForm = () => {
@@ -1513,6 +1515,8 @@ function ScenariosTab({
       inflationRate: '3',
       baseMonthlyBudget: '3000',
       spendingGrowthRate: '2',
+      grossIncome: '',
+      effectiveTaxRate: '',
     });
   };
 
@@ -1528,6 +1532,8 @@ function ScenariosTab({
       inflationRate: parseFloat(scenarioForm.inflationRate) || 3,
       baseMonthlyBudget: parseFloat(scenarioForm.baseMonthlyBudget) || 3000,
       spendingGrowthRate: parseFloat(scenarioForm.spendingGrowthRate) || 2,
+      grossIncome: scenarioForm.grossIncome ? parseFloat(scenarioForm.grossIncome) : undefined,
+      effectiveTaxRate: scenarioForm.effectiveTaxRate ? parseFloat(scenarioForm.effectiveTaxRate) : undefined,
     });
     
     resetScenarioForm();
@@ -1546,6 +1552,8 @@ function ScenariosTab({
       inflationRate: parseFloat(scenarioForm.inflationRate) || 3,
       baseMonthlyBudget: parseFloat(scenarioForm.baseMonthlyBudget) || 3000,
       spendingGrowthRate: parseFloat(scenarioForm.spendingGrowthRate) || 2,
+      grossIncome: scenarioForm.grossIncome ? parseFloat(scenarioForm.grossIncome) : undefined,
+      effectiveTaxRate: scenarioForm.effectiveTaxRate ? parseFloat(scenarioForm.effectiveTaxRate) : undefined,
     });
     
     setEditingScenario(null);
@@ -1562,6 +1570,8 @@ function ScenariosTab({
       inflationRate: scenario.inflationRate.toString(),
       baseMonthlyBudget: scenario.baseMonthlyBudget.toString(),
       spendingGrowthRate: scenario.spendingGrowthRate.toString(),
+      grossIncome: scenario.grossIncome?.toString() || '',
+      effectiveTaxRate: scenario.effectiveTaxRate?.toString() || '',
     });
     setEditingScenario(scenario);
     setShowCreateScenario(false);
@@ -1577,8 +1587,25 @@ function ScenariosTab({
       yearlyContribution: template.yearlyContribution.toString(),
       baseMonthlyBudget: template.baseMonthlyBudget.toString(),
       spendingGrowthRate: template.spendingGrowthRate.toString(),
+      grossIncome: template.grossIncome?.toString() || '',
+      effectiveTaxRate: template.effectiveTaxRate?.toString() || '',
     });
   };
+  
+  // Calculate income breakdown for the primary selected scenario
+  const primaryScenario = scenariosHook.selectedScenarios[0];
+  const primaryProjection = scenariosHook.scenarioProjections[0];
+  const incomeBreakdown = useMemo((): IncomeBreakdown | null => {
+    if (!primaryScenario || !primaryProjection) return null;
+    if (!primaryScenario.grossIncome || !primaryScenario.effectiveTaxRate) return null;
+    
+    return calculateIncomeBreakdown(
+      primaryScenario.grossIncome,
+      primaryScenario.effectiveTaxRate,
+      primaryProjection.levelInfo.unlockedAtNetWorth,
+      primaryProjection.currentNetWorth.total
+    );
+  }, [primaryScenario, primaryProjection]);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -1687,73 +1714,132 @@ function ScenariosTab({
               </div>
             </div>
             
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Return Rate %</label>
-                <input
-                  type="number"
-                  value={scenarioForm.currentRate}
-                  onChange={(e) => setScenarioForm(prev => ({ ...prev, currentRate: e.target.value }))}
-                  placeholder="7"
-                  step="0.1"
-                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                />
+            {/* Investment Settings */}
+            <div className="mb-4">
+              <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide font-medium">Investment Settings</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Return Rate %</label>
+                  <input
+                    type="number"
+                    value={scenarioForm.currentRate}
+                    onChange={(e) => setScenarioForm(prev => ({ ...prev, currentRate: e.target.value }))}
+                    placeholder="7"
+                    step="0.1"
+                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">SWR %</label>
+                  <input
+                    type="number"
+                    value={scenarioForm.swr}
+                    onChange={(e) => setScenarioForm(prev => ({ ...prev, swr: e.target.value }))}
+                    placeholder="4"
+                    step="0.1"
+                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Inflation %</label>
+                  <input
+                    type="number"
+                    value={scenarioForm.inflationRate}
+                    onChange={(e) => setScenarioForm(prev => ({ ...prev, inflationRate: e.target.value }))}
+                    placeholder="3"
+                    step="0.1"
+                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">SWR %</label>
-                <input
-                  type="number"
-                  value={scenarioForm.swr}
-                  onChange={(e) => setScenarioForm(prev => ({ ...prev, swr: e.target.value }))}
-                  placeholder="4"
-                  step="0.1"
-                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                />
+            </div>
+            
+            {/* Spending Settings */}
+            <div className="mb-4">
+              <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide font-medium">Spending Settings</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Base Budget (Monthly)</label>
+                  <input
+                    type="number"
+                    value={scenarioForm.baseMonthlyBudget}
+                    onChange={(e) => setScenarioForm(prev => ({ ...prev, baseMonthlyBudget: e.target.value }))}
+                    placeholder="3000"
+                    step="100"
+                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Spending Rate %</label>
+                  <input
+                    type="number"
+                    value={scenarioForm.spendingGrowthRate}
+                    onChange={(e) => setScenarioForm(prev => ({ ...prev, spendingGrowthRate: e.target.value }))}
+                    placeholder="2"
+                    step="0.1"
+                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Yearly Contribution</label>
+                  <input
+                    type="number"
+                    value={scenarioForm.yearlyContribution}
+                    onChange={(e) => setScenarioForm(prev => ({ ...prev, yearlyContribution: e.target.value }))}
+                    placeholder="0"
+                    step="1000"
+                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Inflation %</label>
-                <input
-                  type="number"
-                  value={scenarioForm.inflationRate}
-                  onChange={(e) => setScenarioForm(prev => ({ ...prev, inflationRate: e.target.value }))}
-                  placeholder="3"
-                  step="0.1"
-                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                />
+            </div>
+            
+            {/* Income & Tax Settings */}
+            <div className="mb-4">
+              <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide font-medium">Income & Taxes (Optional)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Gross Annual Income</label>
+                  <input
+                    type="number"
+                    value={scenarioForm.grossIncome}
+                    onChange={(e) => setScenarioForm(prev => ({ ...prev, grossIncome: e.target.value }))}
+                    placeholder="100000"
+                    step="1000"
+                    className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Effective Tax Rate %</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={scenarioForm.effectiveTaxRate}
+                      onChange={(e) => setScenarioForm(prev => ({ ...prev, effectiveTaxRate: e.target.value }))}
+                      placeholder="22"
+                      step="1"
+                      className="flex-1 bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                    />
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setScenarioForm(prev => ({ ...prev, effectiveTaxRate: e.target.value }));
+                        }
+                      }}
+                      className="bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-2 text-xs text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    >
+                      <option value="">Presets</option>
+                      {TAX_RATE_PRESETS.map(preset => (
+                        <option key={preset.rate} value={preset.rate}>{preset.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Yearly Contribution</label>
-                <input
-                  type="number"
-                  value={scenarioForm.yearlyContribution}
-                  onChange={(e) => setScenarioForm(prev => ({ ...prev, yearlyContribution: e.target.value }))}
-                  placeholder="0"
-                  step="1000"
-                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Base Budget</label>
-                <input
-                  type="number"
-                  value={scenarioForm.baseMonthlyBudget}
-                  onChange={(e) => setScenarioForm(prev => ({ ...prev, baseMonthlyBudget: e.target.value }))}
-                  placeholder="3000"
-                  step="100"
-                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Spending Rate %</label>
-                <input
-                  type="number"
-                  value={scenarioForm.spendingGrowthRate}
-                  onChange={(e) => setScenarioForm(prev => ({ ...prev, spendingGrowthRate: e.target.value }))}
-                  placeholder="2"
-                  step="0.1"
-                  className="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                />
-              </div>
+              <p className="text-xs text-slate-600 mt-2">
+                Adding income data enables the Income Calculator below to help determine realistic contribution amounts.
+              </p>
             </div>
             
             <div className="flex gap-2">
@@ -1896,6 +1982,193 @@ function ScenariosTab({
         )}
       </div>
 
+      {/* Income Calculator Summary */}
+      {incomeBreakdown && (
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-xl p-6 mb-6 border border-emerald-500/30">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+              <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
+              Income Calculator
+            </h3>
+            <div className="text-xs text-slate-500">
+              Based on: <span style={{ color: primaryScenario?.color }}>{primaryScenario?.name}</span>
+            </div>
+          </div>
+          
+          {/* Income Flow Visualization */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            {/* Gross Income */}
+            <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+              <p className="text-xs text-slate-500 mb-1 uppercase tracking-wide">Gross Income</p>
+              <p className="text-2xl font-mono text-slate-200">{formatCurrency(incomeBreakdown.grossIncome)}</p>
+              <p className="text-sm text-slate-500 mt-1">{formatCurrency(incomeBreakdown.monthlyGross)}/mo</p>
+            </div>
+            
+            {/* Taxes */}
+            <div className="bg-slate-900/50 rounded-xl p-4 border border-red-500/20">
+              <p className="text-xs text-slate-500 mb-1 uppercase tracking-wide">
+                Taxes <span className="text-red-400">({formatPercent(incomeBreakdown.effectiveTaxRate)})</span>
+              </p>
+              <p className="text-2xl font-mono text-red-400">-{formatCurrency(incomeBreakdown.annualTaxes)}</p>
+              <p className="text-sm text-slate-500 mt-1">-{formatCurrency(incomeBreakdown.monthlyTaxes)}/mo</p>
+            </div>
+            
+            {/* Net Income */}
+            <div className="bg-slate-900/50 rounded-xl p-4 border border-emerald-500/30">
+              <p className="text-xs text-slate-500 mb-1 uppercase tracking-wide">Net Income (Post-Tax)</p>
+              <p className="text-2xl font-mono text-emerald-400">{formatCurrency(incomeBreakdown.netIncome)}</p>
+              <p className="text-sm text-slate-500 mt-1">{formatCurrency(incomeBreakdown.monthlyNet)}/mo</p>
+            </div>
+          </div>
+          
+          {/* Spending vs Savings Breakdown */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            {/* Spending */}
+            <div className="bg-slate-900/50 rounded-xl p-4 border border-amber-500/20">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-slate-500 uppercase tracking-wide">Annual Spending</p>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
+                  {formatPercent(incomeBreakdown.spendingToNetPercent)} of net
+                </span>
+              </div>
+              <p className="text-2xl font-mono text-amber-400">{formatCurrency(incomeBreakdown.annualSpending)}</p>
+              <p className="text-sm text-slate-500 mt-1">{formatCurrency(incomeBreakdown.monthlySpending)}/mo budget</p>
+              <div className="mt-3 pt-3 border-t border-slate-700">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">% of gross income:</span>
+                  <span className="text-slate-400 font-mono">{formatPercent(incomeBreakdown.spendingToGrossPercent)}</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Savings Potential */}
+            <div className="bg-slate-900/50 rounded-xl p-4 border border-sky-500/30">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-slate-500 uppercase tracking-wide">Savings Potential</p>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400">
+                  {formatPercent(incomeBreakdown.savingsRate)} of gross
+                </span>
+              </div>
+              <p className="text-2xl font-mono text-sky-400">{formatCurrency(incomeBreakdown.annualSavingsPotential)}</p>
+              <p className="text-sm text-slate-500 mt-1">{formatCurrency(incomeBreakdown.monthlySavingsPotential)}/mo to invest</p>
+              <div className="mt-3 pt-3 border-t border-slate-700">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">% of net income saved:</span>
+                  <span className="text-slate-400 font-mono">{formatPercent(incomeBreakdown.netSavingsRate)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Progress Bar: Income Allocation */}
+          <div className="mb-6">
+            <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide">Income Allocation</p>
+            <div className="h-6 bg-slate-700 rounded-full overflow-hidden flex">
+              <div 
+                className="h-full bg-red-500 flex items-center justify-center text-xs text-white font-medium"
+                style={{ width: `${incomeBreakdown.taxBurdenPercent}%` }}
+                title={`Taxes: ${formatPercent(incomeBreakdown.taxBurdenPercent)}`}
+              >
+                {incomeBreakdown.taxBurdenPercent >= 10 && 'Taxes'}
+              </div>
+              <div 
+                className="h-full bg-amber-500 flex items-center justify-center text-xs text-white font-medium"
+                style={{ width: `${incomeBreakdown.spendingToGrossPercent}%` }}
+                title={`Spending: ${formatPercent(incomeBreakdown.spendingToGrossPercent)}`}
+              >
+                {incomeBreakdown.spendingToGrossPercent >= 10 && 'Spending'}
+              </div>
+              <div 
+                className="h-full bg-sky-500 flex items-center justify-center text-xs text-white font-medium"
+                style={{ width: `${incomeBreakdown.savingsRate}%` }}
+                title={`Savings: ${formatPercent(incomeBreakdown.savingsRate)}`}
+              >
+                {incomeBreakdown.savingsRate >= 10 && 'Savings'}
+              </div>
+            </div>
+            <div className="flex justify-between mt-2 text-xs text-slate-500">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                Taxes: {formatPercent(incomeBreakdown.taxBurdenPercent)}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+                Spending: {formatPercent(incomeBreakdown.spendingToGrossPercent)}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 bg-sky-500 rounded-full"></span>
+                Savings: {formatPercent(incomeBreakdown.savingsRate)}
+              </span>
+            </div>
+          </div>
+          
+          {/* Net Worth Context */}
+          <div className="bg-slate-900/50 rounded-xl p-4 border border-violet-500/20">
+            <p className="text-xs text-slate-500 mb-3 uppercase tracking-wide">Net Worth Context</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-xs text-slate-500">Current Net Worth</p>
+                <p className="text-lg font-mono text-violet-400">{formatCurrency(incomeBreakdown.currentNetWorth)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Years of Expenses</p>
+                <p className="text-lg font-mono text-violet-400">{incomeBreakdown.yearsOfExpensesInNetWorth.toFixed(1)} years</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Net Worth : Income</p>
+                <p className="text-lg font-mono text-violet-400">{incomeBreakdown.netWorthToIncomeRatio.toFixed(1)}x</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Scenario Contribution</p>
+                <p className="text-lg font-mono text-sky-400">{formatCurrency(primaryScenario?.yearlyContribution || 0)}/yr</p>
+              </div>
+            </div>
+            
+            {/* Suggestion if contribution doesn't match savings potential */}
+            {primaryScenario && Math.abs(incomeBreakdown.annualSavingsPotential - primaryScenario.yearlyContribution) > 1000 && (
+              <div className="mt-4 p-3 bg-sky-500/10 rounded-lg border border-sky-500/20">
+                <p className="text-sm text-sky-400">
+                  {incomeBreakdown.annualSavingsPotential > primaryScenario.yearlyContribution ? (
+                    <>Based on your income and spending, you could potentially contribute <strong>{formatCurrency(incomeBreakdown.annualSavingsPotential)}/year</strong>. Consider updating your scenario's yearly contribution to see the impact on your projections.</>
+                  ) : (
+                    <>Your scenario contribution ({formatCurrency(primaryScenario.yearlyContribution)}/yr) exceeds your calculated savings potential ({formatCurrency(incomeBreakdown.annualSavingsPotential)}/yr). You may want to adjust either your income, spending, or contribution assumptions.</>
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Prompt to add income data if not set */}
+      {primaryScenario && (!primaryScenario.grossIncome || !primaryScenario.effectiveTaxRate) && (
+        <div className="bg-slate-800/50 rounded-xl p-6 mb-6 border border-slate-700 border-dashed">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-slate-200 mb-1">Add Income Data for Better Planning</h4>
+              <p className="text-sm text-slate-400">
+                Enter your gross income and effective tax rate in your scenario to see a detailed breakdown of your savings potential and understand how your spending relates to your income.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                if (primaryScenario) {
+                  startEditingScenario(primaryScenario);
+                }
+              }}
+              className="px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm font-medium shrink-0"
+            >
+              Add Income
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Help Section */}
       <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
         <h3 className="text-lg font-semibold text-slate-200 mb-3">Understanding Scenario Settings</h3>
@@ -1923,6 +2196,14 @@ function ScenariosTab({
           <div>
             <p className="text-violet-400 font-medium">Spending Rate</p>
             <p className="text-slate-400">Percentage of net worth added to monthly budget (keep below return rate!)</p>
+          </div>
+          <div>
+            <p className="text-emerald-400 font-medium">Gross Income</p>
+            <p className="text-slate-400">Your total annual income before taxes (salary, bonuses, etc.)</p>
+          </div>
+          <div>
+            <p className="text-red-400 font-medium">Effective Tax Rate</p>
+            <p className="text-slate-400">Your actual overall tax rate after all deductions (not your marginal rate)</p>
           </div>
         </div>
       </div>

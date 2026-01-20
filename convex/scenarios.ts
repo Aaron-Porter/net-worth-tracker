@@ -24,6 +24,8 @@ const DEFAULT_SCENARIO = {
   inflationRate: 3,
   baseMonthlyBudget: 3000,
   spendingGrowthRate: 2,
+  grossIncome: undefined as number | undefined,
+  effectiveTaxRate: undefined as number | undefined,
 };
 
 export const list = query({
@@ -81,6 +83,8 @@ export const create = mutation({
     baseMonthlyBudget: v.number(),
     spendingGrowthRate: v.number(),
     isSelected: v.optional(v.boolean()),
+    grossIncome: v.optional(v.number()),
+    effectiveTaxRate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -111,6 +115,8 @@ export const create = mutation({
       inflationRate: args.inflationRate,
       baseMonthlyBudget: args.baseMonthlyBudget,
       spendingGrowthRate: args.spendingGrowthRate,
+      grossIncome: args.grossIncome,
+      effectiveTaxRate: args.effectiveTaxRate,
       createdAt: now,
       updatedAt: now,
     });
@@ -149,6 +155,8 @@ export const createDefault = mutation({
       inflationRate: DEFAULT_SCENARIO.inflationRate,
       baseMonthlyBudget: DEFAULT_SCENARIO.baseMonthlyBudget,
       spendingGrowthRate: DEFAULT_SCENARIO.spendingGrowthRate,
+      grossIncome: DEFAULT_SCENARIO.grossIncome,
+      effectiveTaxRate: DEFAULT_SCENARIO.effectiveTaxRate,
       createdAt: now,
       updatedAt: now,
     });
@@ -168,6 +176,8 @@ export const update = mutation({
     inflationRate: v.optional(v.number()),
     baseMonthlyBudget: v.optional(v.number()),
     spendingGrowthRate: v.optional(v.number()),
+    grossIncome: v.optional(v.number()),
+    effectiveTaxRate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -261,6 +271,8 @@ export const duplicate = mutation({
       inflationRate: scenario.inflationRate,
       baseMonthlyBudget: scenario.baseMonthlyBudget,
       spendingGrowthRate: scenario.spendingGrowthRate,
+      grossIncome: scenario.grossIncome,
+      effectiveTaxRate: scenario.effectiveTaxRate,
       createdAt: now,
       updatedAt: now,
     });

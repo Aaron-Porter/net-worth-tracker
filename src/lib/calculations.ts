@@ -821,3 +821,124 @@ export function mergeWithDefaults(
     spendingGrowthRate: partial.spendingGrowthRate ?? DEFAULT_SETTINGS.spendingGrowthRate,
   };
 }
+
+// ============================================================================
+// INCOME & TAX CALCULATIONS
+// ============================================================================
+
+export interface IncomeBreakdown {
+  // Input values
+  grossIncome: number;
+  effectiveTaxRate: number;
+  
+  // Calculated values
+  annualTaxes: number;
+  netIncome: number;
+  
+  // Monthly equivalents
+  monthlyGross: number;
+  monthlyTaxes: number;
+  monthlyNet: number;
+  
+  // Spending analysis (based on monthly budget from scenario)
+  annualSpending: number;
+  monthlySpending: number;
+  
+  // Savings potential
+  annualSavingsPotential: number;
+  monthlySavingsPotential: number;
+  savingsRate: number; // % of gross income saved
+  netSavingsRate: number; // % of net income saved
+  
+  // Ratios
+  taxBurdenPercent: number;
+  spendingToGrossPercent: number;
+  spendingToNetPercent: number;
+  
+  // Net worth context
+  currentNetWorth: number;
+  yearsOfExpensesInNetWorth: number;
+  netWorthToIncomeRatio: number;
+}
+
+/**
+ * Common effective tax rate brackets for quick reference
+ * These are US federal estimates and will vary by state and individual circumstances
+ */
+export const TAX_RATE_PRESETS = [
+  { label: 'Very Low (~10%)', rate: 10, description: 'Under $50k single / $100k married' },
+  { label: 'Low (~15%)', rate: 15, description: '$50k-$90k single / $100k-$180k married' },
+  { label: 'Moderate (~20%)', rate: 20, description: '$90k-$170k single / $180k-$340k married' },
+  { label: 'Medium (~25%)', rate: 25, description: '$170k-$215k single / $340k-$430k married' },
+  { label: 'Higher (~30%)', rate: 30, description: '$215k-$540k single / $430k+ married' },
+  { label: 'High (~35%)', rate: 35, description: '$540k+ single / High income with state taxes' },
+] as const;
+
+/**
+ * Calculate comprehensive income breakdown
+ */
+export function calculateIncomeBreakdown(
+  grossIncome: number,
+  effectiveTaxRate: number,
+  monthlySpending: number,
+  currentNetWorth: number
+): IncomeBreakdown {
+  // Basic tax calculations
+  const taxRateDecimal = effectiveTaxRate / 100;
+  const annualTaxes = grossIncome * taxRateDecimal;
+  const netIncome = grossIncome - annualTaxes;
+  
+  // Monthly equivalents
+  const monthlyGross = grossIncome / 12;
+  const monthlyTaxes = annualTaxes / 12;
+  const monthlyNet = netIncome / 12;
+  
+  // Annual spending
+  const annualSpending = monthlySpending * 12;
+  
+  // Savings potential (what's left after taxes and spending)
+  const annualSavingsPotential = Math.max(0, netIncome - annualSpending);
+  const monthlySavingsPotential = annualSavingsPotential / 12;
+  
+  // Savings rates
+  const savingsRate = grossIncome > 0 ? (annualSavingsPotential / grossIncome) * 100 : 0;
+  const netSavingsRate = netIncome > 0 ? (annualSavingsPotential / netIncome) * 100 : 0;
+  
+  // Ratios
+  const taxBurdenPercent = grossIncome > 0 ? (annualTaxes / grossIncome) * 100 : 0;
+  const spendingToGrossPercent = grossIncome > 0 ? (annualSpending / grossIncome) * 100 : 0;
+  const spendingToNetPercent = netIncome > 0 ? (annualSpending / netIncome) * 100 : 0;
+  
+  // Net worth context
+  const yearsOfExpensesInNetWorth = annualSpending > 0 ? currentNetWorth / annualSpending : 0;
+  const netWorthToIncomeRatio = grossIncome > 0 ? currentNetWorth / grossIncome : 0;
+  
+  return {
+    grossIncome,
+    effectiveTaxRate,
+    annualTaxes,
+    netIncome,
+    monthlyGross,
+    monthlyTaxes,
+    monthlyNet,
+    annualSpending,
+    monthlySpending,
+    annualSavingsPotential,
+    monthlySavingsPotential,
+    savingsRate,
+    netSavingsRate,
+    taxBurdenPercent,
+    spendingToGrossPercent,
+    spendingToNetPercent,
+    currentNetWorth,
+    yearsOfExpensesInNetWorth,
+    netWorthToIncomeRatio,
+  };
+}
+
+/**
+ * Format a percentage with specified decimals
+ */
+export function formatPercent(value: number, decimals: number = 1): string {
+  return `${value.toFixed(decimals)}%`;
+}

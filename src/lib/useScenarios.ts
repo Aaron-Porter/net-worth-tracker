@@ -33,6 +33,8 @@ export interface Scenario {
   inflationRate: number;
   baseMonthlyBudget: number;
   spendingGrowthRate: number;
+  grossIncome?: number;
+  effectiveTaxRate?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -96,6 +98,8 @@ interface CreateScenarioData {
   baseMonthlyBudget: number;
   spendingGrowthRate: number;
   isSelected?: boolean;
+  grossIncome?: number;
+  effectiveTaxRate?: number;
 }
 
 interface UpdateScenarioData {
@@ -109,6 +113,8 @@ interface UpdateScenarioData {
   inflationRate?: number;
   baseMonthlyBudget?: number;
   spendingGrowthRate?: number;
+  grossIncome?: number;
+  effectiveTaxRate?: number;
 }
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -306,6 +312,8 @@ export const SCENARIO_TEMPLATES = [
     baseMonthlyBudget: 3000,
     spendingGrowthRate: 1.5,
     yearlyContribution: 0,
+    grossIncome: undefined as number | undefined,
+    effectiveTaxRate: undefined as number | undefined,
   },
   {
     name: 'Moderate',
@@ -316,6 +324,8 @@ export const SCENARIO_TEMPLATES = [
     baseMonthlyBudget: 3000,
     spendingGrowthRate: 2,
     yearlyContribution: 0,
+    grossIncome: undefined as number | undefined,
+    effectiveTaxRate: undefined as number | undefined,
   },
   {
     name: 'Aggressive',
@@ -326,6 +336,8 @@ export const SCENARIO_TEMPLATES = [
     baseMonthlyBudget: 3000,
     spendingGrowthRate: 2.5,
     yearlyContribution: 0,
+    grossIncome: undefined as number | undefined,
+    effectiveTaxRate: undefined as number | undefined,
   },
   {
     name: 'High Inflation',
@@ -336,6 +348,8 @@ export const SCENARIO_TEMPLATES = [
     baseMonthlyBudget: 3000,
     spendingGrowthRate: 2,
     yearlyContribution: 0,
+    grossIncome: undefined as number | undefined,
+    effectiveTaxRate: undefined as number | undefined,
   },
   {
     name: 'High Saver',
@@ -346,5 +360,7 @@ export const SCENARIO_TEMPLATES = [
     baseMonthlyBudget: 2500,
     spendingGrowthRate: 1.5,
     yearlyContribution: 50000,
+    grossIncome: 150000,
+    effectiveTaxRate: 25,
   },
 ] as const;
