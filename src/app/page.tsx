@@ -1538,6 +1538,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
   const [wizardStep, setWizardStep] = useState<WizardStep>('list');
   const [wizardState, setWizardState] = useState<ScenarioWizardState>(DEFAULT_WIZARD_STATE);
   const [editingScenarioId, setEditingScenarioId] = useState<string | null>(null);
+  const [quickEditScenario, setQuickEditScenario] = useState<Scenario | null>(null);
 
   // Get current net worth for context
   const currentNetWorth = scenariosHook.scenarioProjections[0]?.currentNetWorth.total || 0;
@@ -1719,7 +1720,10 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => startEditingScenario(scenario)} className="p-1.5 text-slate-400 hover:text-violet-400 rounded" title="Edit">
+                    <button onClick={() => setQuickEditScenario(scenario)} className="p-1.5 text-slate-400 hover:text-emerald-400 rounded" title="Quick Edit">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+                    </button>
+                    <button onClick={() => startEditingScenario(scenario)} className="p-1.5 text-slate-400 hover:text-violet-400 rounded" title="Full Wizard">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                     </button>
                     <button onClick={() => scenariosHook.duplicateScenario(scenario._id)} className="p-1.5 text-slate-400 hover:text-slate-200 rounded" title="Duplicate">
@@ -1736,6 +1740,265 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             </div>
           </div>
         )}
+
+        {/* Quick Edit Panel */}
+        {quickEditScenario && (
+          <QuickEditPanel
+            scenario={quickEditScenario}
+            onClose={() => setQuickEditScenario(null)}
+            onSave={async (updates) => {
+              await scenariosHook.updateScenario(quickEditScenario._id, updates);
+              setQuickEditScenario(null);
+            }}
+            currentNetWorth={currentNetWorth}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Quick Edit Panel Component
+  function QuickEditPanel({ 
+    scenario, 
+    onClose, 
+    onSave,
+    currentNetWorth 
+  }: { 
+    scenario: Scenario; 
+    onClose: () => void; 
+    onSave: (updates: any) => Promise<void>;
+    currentNetWorth: number;
+  }) {
+    const [form, setForm] = useState({
+      name: scenario.name,
+      grossIncome: scenario.grossIncome?.toString() || '',
+      incomeGrowthRate: scenario.incomeGrowthRate?.toString() || '3',
+      filingStatus: scenario.filingStatus || 'single',
+      stateCode: scenario.stateCode || '',
+      preTax401k: scenario.preTax401k?.toString() || '',
+      preTaxIRA: scenario.preTaxIRA?.toString() || '',
+      preTaxHSA: scenario.preTaxHSA?.toString() || '',
+      baseMonthlyBudget: scenario.baseMonthlyBudget.toString(),
+      spendingGrowthRate: scenario.spendingGrowthRate.toString(),
+      currentRate: scenario.currentRate.toString(),
+      swr: scenario.swr.toString(),
+      inflationRate: scenario.inflationRate.toString(),
+    });
+    const [saving, setSaving] = useState(false);
+
+    // Calculate live income breakdown
+    const liveBreakdown = useMemo(() => {
+      const gross = parseFloat(form.grossIncome) || 0;
+      if (gross <= 0) return null;
+      
+      const baseBudget = parseFloat(form.baseMonthlyBudget) || 3000;
+      const spendingRate = parseFloat(form.spendingGrowthRate) || 0;
+      const netWorthPortion = currentNetWorth * (spendingRate / 100) / 12;
+      const totalSpending = baseBudget + netWorthPortion;
+      
+      return calculateScenarioIncome(
+        gross,
+        form.filingStatus as FilingStatus,
+        form.stateCode || null,
+        {
+          traditional401k: parseFloat(form.preTax401k) || 0,
+          traditionalIRA: parseFloat(form.preTaxIRA) || 0,
+          hsa: parseFloat(form.preTaxHSA) || 0,
+          other: 0,
+        },
+        totalSpending,
+        currentNetWorth
+      );
+    }, [form, currentNetWorth]);
+
+    const handleSave = async () => {
+      setSaving(true);
+      try {
+        const totalPreTax = (parseFloat(form.preTax401k) || 0) +
+                            (parseFloat(form.preTaxIRA) || 0) +
+                            (parseFloat(form.preTaxHSA) || 0);
+        const postTaxSavings = liveBreakdown?.postTaxSavingsAvailable || 0;
+        
+        await onSave({
+          name: form.name,
+          grossIncome: parseFloat(form.grossIncome) || undefined,
+          incomeGrowthRate: parseFloat(form.incomeGrowthRate) || undefined,
+          filingStatus: form.filingStatus,
+          stateCode: form.stateCode || undefined,
+          preTax401k: parseFloat(form.preTax401k) || undefined,
+          preTaxIRA: parseFloat(form.preTaxIRA) || undefined,
+          preTaxHSA: parseFloat(form.preTaxHSA) || undefined,
+          baseMonthlyBudget: parseFloat(form.baseMonthlyBudget) || 3000,
+          spendingGrowthRate: parseFloat(form.spendingGrowthRate) || 0,
+          currentRate: parseFloat(form.currentRate) || 7,
+          swr: parseFloat(form.swr) || 4,
+          inflationRate: parseFloat(form.inflationRate) || 3,
+          yearlyContribution: totalPreTax + postTaxSavings,
+          effectiveTaxRate: liveBreakdown?.taxes.effectiveTotalRate,
+        });
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+          {/* Header */}
+          <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: scenario.color }} />
+              <h2 className="text-xl font-semibold text-slate-200">Quick Edit: {scenario.name}</h2>
+            </div>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-200 p-2">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Scenario Name */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Scenario Name</label>
+              <input type="text" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            </div>
+
+            {/* Income Section */}
+            <div className="bg-slate-900/30 rounded-xl p-4 border border-slate-700">
+              <h3 className="text-sm font-semibold text-emerald-400 mb-4 uppercase tracking-wide">Income & Taxes</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Gross Income</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                    <input type="number" value={form.grossIncome} onChange={(e) => setForm(f => ({ ...f, grossIncome: e.target.value }))} placeholder="100000" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 pl-7 pr-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Income Growth %</label>
+                  <input type="number" value={form.incomeGrowthRate} onChange={(e) => setForm(f => ({ ...f, incomeGrowthRate: e.target.value }))} placeholder="3" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Filing Status</label>
+                  <select value={form.filingStatus} onChange={(e) => setForm(f => ({ ...f, filingStatus: e.target.value }))} className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="single">Single</option>
+                    <option value="married_jointly">Married Jointly</option>
+                    <option value="married_separately">Married Separately</option>
+                    <option value="head_of_household">Head of Household</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">State</label>
+                  <select value={form.stateCode} onChange={(e) => setForm(f => ({ ...f, stateCode: e.target.value }))} className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">No state tax</option>
+                    {Object.entries(STATE_TAX_RATES).map(([code, info]) => (
+                      <option key={code} value={code}>{code} - {info.rate}%</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Pre-tax Savings Section */}
+            <div className="bg-slate-900/30 rounded-xl p-4 border border-slate-700">
+              <h3 className="text-sm font-semibold text-violet-400 mb-4 uppercase tracking-wide">Pre-tax Savings</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">401(k)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                    <input type="number" value={form.preTax401k} onChange={(e) => setForm(f => ({ ...f, preTax401k: e.target.value }))} placeholder="0" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 pl-7 pr-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Traditional IRA</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                    <input type="number" value={form.preTaxIRA} onChange={(e) => setForm(f => ({ ...f, preTaxIRA: e.target.value }))} placeholder="0" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 pl-7 pr-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">HSA</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                    <input type="number" value={form.preTaxHSA} onChange={(e) => setForm(f => ({ ...f, preTaxHSA: e.target.value }))} placeholder="0" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 pl-7 pr-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Spending Section */}
+            <div className="bg-slate-900/30 rounded-xl p-4 border border-slate-700">
+              <h3 className="text-sm font-semibold text-amber-400 mb-4 uppercase tracking-wide">Spending</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Base Monthly Budget</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                    <input type="number" value={form.baseMonthlyBudget} onChange={(e) => setForm(f => ({ ...f, baseMonthlyBudget: e.target.value }))} placeholder="3000" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 pl-7 pr-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Spending Growth Rate %</label>
+                  <input type="number" value={form.spendingGrowthRate} onChange={(e) => setForm(f => ({ ...f, spendingGrowthRate: e.target.value }))} placeholder="2" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                </div>
+              </div>
+            </div>
+
+            {/* Investment Section */}
+            <div className="bg-slate-900/30 rounded-xl p-4 border border-slate-700">
+              <h3 className="text-sm font-semibold text-sky-400 mb-4 uppercase tracking-wide">Investment Assumptions</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Expected Return %</label>
+                  <input type="number" value={form.currentRate} onChange={(e) => setForm(f => ({ ...f, currentRate: e.target.value }))} placeholder="7" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Safe Withdrawal %</label>
+                  <input type="number" value={form.swr} onChange={(e) => setForm(f => ({ ...f, swr: e.target.value }))} placeholder="4" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Inflation %</label>
+                  <input type="number" value={form.inflationRate} onChange={(e) => setForm(f => ({ ...f, inflationRate: e.target.value }))} placeholder="3" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                </div>
+              </div>
+            </div>
+
+            {/* Live Summary */}
+            {liveBreakdown && (
+              <div className="bg-gradient-to-br from-emerald-500/10 to-sky-500/10 rounded-xl p-4 border border-emerald-500/30">
+                <h3 className="text-sm font-semibold text-slate-200 mb-3">Live Calculation</h3>
+                <div className="grid grid-cols-4 gap-4 text-center">
+                  <div>
+                    <p className="text-xs text-slate-500">Net Income</p>
+                    <p className="text-lg font-mono text-emerald-400">{formatCurrency(liveBreakdown.taxes.netIncome)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Tax Rate</p>
+                    <p className="text-lg font-mono text-red-400">{formatPercent(liveBreakdown.taxes.effectiveTotalRate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Annual Spending</p>
+                    <p className="text-lg font-mono text-amber-400">{formatCurrency(liveBreakdown.annualSpending)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Total Savings</p>
+                    <p className="text-lg font-mono text-sky-400">{formatCurrency(liveBreakdown.totalAnnualSavings)}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="sticky bottom-0 bg-slate-800 border-t border-slate-700 p-4 flex justify-between">
+            <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-slate-200">
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 font-medium">
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
