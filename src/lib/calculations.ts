@@ -823,133 +823,816 @@ export function mergeWithDefaults(
 }
 
 // ============================================================================
-// INCOME & TAX CALCULATIONS
+// INCOME & TAX CALCULATIONS - Ultra-Precise with Marginal Brackets
 // ============================================================================
 
 export type FilingStatus = 'single' | 'married_jointly' | 'married_separately' | 'head_of_household';
 
-// 2024 Federal Tax Brackets
-const FEDERAL_TAX_BRACKETS: Record<FilingStatus, { min: number; max: number; rate: number }[]> = {
+// Tax bracket interface for precise marginal calculations
+interface TaxBracket {
+  min: number;
+  max: number;
+  rate: number; // Percentage (e.g., 10 for 10%)
+}
+
+// ============================================================================
+// 2025 FEDERAL TAX BRACKETS (IRS Rev. Proc. 2024-40)
+// ============================================================================
+const FEDERAL_TAX_BRACKETS: Record<FilingStatus, TaxBracket[]> = {
   single: [
-    { min: 0, max: 11600, rate: 10 },
-    { min: 11600, max: 47150, rate: 12 },
-    { min: 47150, max: 100525, rate: 22 },
-    { min: 100525, max: 191950, rate: 24 },
-    { min: 191950, max: 243725, rate: 32 },
-    { min: 243725, max: 609350, rate: 35 },
-    { min: 609350, max: Infinity, rate: 37 },
+    { min: 0, max: 11925, rate: 10 },
+    { min: 11925, max: 48475, rate: 12 },
+    { min: 48475, max: 103350, rate: 22 },
+    { min: 103350, max: 197300, rate: 24 },
+    { min: 197300, max: 250525, rate: 32 },
+    { min: 250525, max: 626350, rate: 35 },
+    { min: 626350, max: Infinity, rate: 37 },
   ],
   married_jointly: [
-    { min: 0, max: 23200, rate: 10 },
-    { min: 23200, max: 94300, rate: 12 },
-    { min: 94300, max: 201050, rate: 22 },
-    { min: 201050, max: 383900, rate: 24 },
-    { min: 383900, max: 487450, rate: 32 },
-    { min: 487450, max: 731200, rate: 35 },
-    { min: 731200, max: Infinity, rate: 37 },
+    { min: 0, max: 23850, rate: 10 },
+    { min: 23850, max: 96950, rate: 12 },
+    { min: 96950, max: 206700, rate: 22 },
+    { min: 206700, max: 394600, rate: 24 },
+    { min: 394600, max: 501050, rate: 32 },
+    { min: 501050, max: 751600, rate: 35 },
+    { min: 751600, max: Infinity, rate: 37 },
   ],
   married_separately: [
-    { min: 0, max: 11600, rate: 10 },
-    { min: 11600, max: 47150, rate: 12 },
-    { min: 47150, max: 100525, rate: 22 },
-    { min: 100525, max: 191950, rate: 24 },
-    { min: 191950, max: 243725, rate: 32 },
-    { min: 243725, max: 365600, rate: 35 },
-    { min: 365600, max: Infinity, rate: 37 },
+    { min: 0, max: 11925, rate: 10 },
+    { min: 11925, max: 48475, rate: 12 },
+    { min: 48475, max: 103350, rate: 22 },
+    { min: 103350, max: 197300, rate: 24 },
+    { min: 197300, max: 250525, rate: 32 },
+    { min: 250525, max: 375800, rate: 35 },
+    { min: 375800, max: Infinity, rate: 37 },
   ],
   head_of_household: [
-    { min: 0, max: 16550, rate: 10 },
-    { min: 16550, max: 63100, rate: 12 },
-    { min: 63100, max: 100500, rate: 22 },
-    { min: 100500, max: 191950, rate: 24 },
-    { min: 191950, max: 243700, rate: 32 },
-    { min: 243700, max: 609350, rate: 35 },
-    { min: 609350, max: Infinity, rate: 37 },
+    { min: 0, max: 17000, rate: 10 },
+    { min: 17000, max: 64850, rate: 12 },
+    { min: 64850, max: 103350, rate: 22 },
+    { min: 103350, max: 197300, rate: 24 },
+    { min: 197300, max: 250500, rate: 32 },
+    { min: 250500, max: 626350, rate: 35 },
+    { min: 626350, max: Infinity, rate: 37 },
   ],
 };
 
-// 2024 Standard Deductions
+// 2025 Standard Deductions
 const STANDARD_DEDUCTIONS: Record<FilingStatus, number> = {
-  single: 14600,
-  married_jointly: 29200,
-  married_separately: 14600,
-  head_of_household: 21900,
+  single: 15000,
+  married_jointly: 30000,
+  married_separately: 15000,
+  head_of_household: 22500,
 };
 
-// State tax rates (simplified - using flat effective rates for most states)
-// These are approximations; actual state taxes vary significantly
-export const STATE_TAX_RATES: Record<string, { name: string; rate: number }> = {
-  AL: { name: 'Alabama', rate: 4.0 },
-  AK: { name: 'Alaska', rate: 0 },
-  AZ: { name: 'Arizona', rate: 2.5 },
-  AR: { name: 'Arkansas', rate: 4.4 },
-  CA: { name: 'California', rate: 9.3 },
-  CO: { name: 'Colorado', rate: 4.4 },
-  CT: { name: 'Connecticut', rate: 5.0 },
-  DE: { name: 'Delaware', rate: 5.5 },
-  FL: { name: 'Florida', rate: 0 },
-  GA: { name: 'Georgia', rate: 5.49 },
-  HI: { name: 'Hawaii', rate: 8.25 },
-  ID: { name: 'Idaho', rate: 5.8 },
-  IL: { name: 'Illinois', rate: 4.95 },
-  IN: { name: 'Indiana', rate: 3.05 },
-  IA: { name: 'Iowa', rate: 5.7 },
-  KS: { name: 'Kansas', rate: 5.7 },
-  KY: { name: 'Kentucky', rate: 4.0 },
-  LA: { name: 'Louisiana', rate: 4.25 },
-  ME: { name: 'Maine', rate: 7.15 },
-  MD: { name: 'Maryland', rate: 5.0 },
-  MA: { name: 'Massachusetts', rate: 5.0 },
-  MI: { name: 'Michigan', rate: 4.25 },
-  MN: { name: 'Minnesota', rate: 7.85 },
-  MS: { name: 'Mississippi', rate: 4.7 },
-  MO: { name: 'Missouri', rate: 4.8 },
-  MT: { name: 'Montana', rate: 5.9 },
-  NE: { name: 'Nebraska', rate: 5.84 },
-  NV: { name: 'Nevada', rate: 0 },
-  NH: { name: 'New Hampshire', rate: 0 },
-  NJ: { name: 'New Jersey', rate: 6.37 },
-  NM: { name: 'New Mexico', rate: 4.9 },
-  NY: { name: 'New York', rate: 6.85 },
-  NC: { name: 'North Carolina', rate: 4.75 },
-  ND: { name: 'North Dakota', rate: 2.5 },
-  OH: { name: 'Ohio', rate: 3.75 },
-  OK: { name: 'Oklahoma', rate: 4.75 },
-  OR: { name: 'Oregon', rate: 9.0 },
-  PA: { name: 'Pennsylvania', rate: 3.07 },
-  RI: { name: 'Rhode Island', rate: 5.0 },
-  SC: { name: 'South Carolina', rate: 6.4 },
-  SD: { name: 'South Dakota', rate: 0 },
-  TN: { name: 'Tennessee', rate: 0 },
-  TX: { name: 'Texas', rate: 0 },
-  UT: { name: 'Utah', rate: 4.65 },
-  VT: { name: 'Vermont', rate: 6.6 },
-  VA: { name: 'Virginia', rate: 5.75 },
-  WA: { name: 'Washington', rate: 0 },
-  WV: { name: 'West Virginia', rate: 5.12 },
-  WI: { name: 'Wisconsin', rate: 5.3 },
-  WY: { name: 'Wyoming', rate: 0 },
-  DC: { name: 'Washington DC', rate: 8.5 },
+// ============================================================================
+// STATE TAX BRACKETS - Full Progressive Brackets for All States
+// Based on 2025 tax year data (or latest available)
+// ============================================================================
+
+interface StateTaxInfo {
+  name: string;
+  type: 'none' | 'flat' | 'progressive';
+  flatRate?: number; // For flat-rate states
+  brackets?: {
+    single: TaxBracket[];
+    married_jointly: TaxBracket[];
+    married_separately?: TaxBracket[];
+    head_of_household?: TaxBracket[];
+  };
+  standardDeduction?: {
+    single: number;
+    married_jointly: number;
+    married_separately?: number;
+    head_of_household?: number;
+  };
+  personalExemption?: {
+    single: number;
+    married_jointly: number;
+    dependent?: number;
+  };
+}
+
+export const STATE_TAX_INFO: Record<string, StateTaxInfo> = {
+  // NO STATE INCOME TAX
+  AK: { name: 'Alaska', type: 'none' },
+  FL: { name: 'Florida', type: 'none' },
+  NV: { name: 'Nevada', type: 'none' },
+  NH: { name: 'New Hampshire', type: 'none' }, // No tax on wages (interest/dividends only)
+  SD: { name: 'South Dakota', type: 'none' },
+  TN: { name: 'Tennessee', type: 'none' },
+  TX: { name: 'Texas', type: 'none' },
+  WA: { name: 'Washington', type: 'none' },
+  WY: { name: 'Wyoming', type: 'none' },
+
+  // FLAT RATE STATES
+  AZ: { name: 'Arizona', type: 'flat', flatRate: 2.5 },
+  CO: { name: 'Colorado', type: 'flat', flatRate: 4.4 },
+  GA: { name: 'Georgia', type: 'flat', flatRate: 5.49 },
+  ID: { name: 'Idaho', type: 'flat', flatRate: 5.8 },
+  IL: { name: 'Illinois', type: 'flat', flatRate: 4.95 },
+  IN: { name: 'Indiana', type: 'flat', flatRate: 3.05 },
+  KY: { name: 'Kentucky', type: 'flat', flatRate: 4.0 },
+  MA: { name: 'Massachusetts', type: 'flat', flatRate: 5.0 }, // Plus 4% surtax on income > $1M
+  MI: { name: 'Michigan', type: 'flat', flatRate: 4.25 },
+  MS: { name: 'Mississippi', type: 'flat', flatRate: 4.7 },
+  NC: { name: 'North Carolina', type: 'flat', flatRate: 4.5 },
+  PA: { name: 'Pennsylvania', type: 'flat', flatRate: 3.07 },
+  UT: { name: 'Utah', type: 'flat', flatRate: 4.65 },
+
+  // PROGRESSIVE STATES - Full Bracket Details
+
+  AL: {
+    name: 'Alabama',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 500, rate: 2 },
+        { min: 500, max: 3000, rate: 4 },
+        { min: 3000, max: Infinity, rate: 5 },
+      ],
+      married_jointly: [
+        { min: 0, max: 1000, rate: 2 },
+        { min: 1000, max: 6000, rate: 4 },
+        { min: 6000, max: Infinity, rate: 5 },
+      ],
+    },
+    standardDeduction: { single: 2500, married_jointly: 7500 },
+    personalExemption: { single: 1500, married_jointly: 3000, dependent: 1000 },
+  },
+
+  AR: {
+    name: 'Arkansas',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 4400, rate: 0 },
+        { min: 4400, max: 8800, rate: 2 },
+        { min: 8800, max: 13200, rate: 3 },
+        { min: 13200, max: 22000, rate: 3.4 },
+        { min: 22000, max: 87000, rate: 4.4 },
+        { min: 87000, max: Infinity, rate: 4.4 },
+      ],
+      married_jointly: [
+        { min: 0, max: 4400, rate: 0 },
+        { min: 4400, max: 8800, rate: 2 },
+        { min: 8800, max: 13200, rate: 3 },
+        { min: 13200, max: 22000, rate: 3.4 },
+        { min: 22000, max: 87000, rate: 4.4 },
+        { min: 87000, max: Infinity, rate: 4.4 },
+      ],
+    },
+  },
+
+  CA: {
+    name: 'California',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 10412, rate: 1 },
+        { min: 10412, max: 24684, rate: 2 },
+        { min: 24684, max: 38959, rate: 4 },
+        { min: 38959, max: 54081, rate: 6 },
+        { min: 54081, max: 68350, rate: 8 },
+        { min: 68350, max: 349137, rate: 9.3 },
+        { min: 349137, max: 418961, rate: 10.3 },
+        { min: 418961, max: 698271, rate: 11.3 },
+        { min: 698271, max: 1000000, rate: 12.3 },
+        { min: 1000000, max: Infinity, rate: 13.3 }, // Mental Health Services Tax
+      ],
+      married_jointly: [
+        { min: 0, max: 20824, rate: 1 },
+        { min: 20824, max: 49368, rate: 2 },
+        { min: 49368, max: 77918, rate: 4 },
+        { min: 77918, max: 108162, rate: 6 },
+        { min: 108162, max: 136700, rate: 8 },
+        { min: 136700, max: 698274, rate: 9.3 },
+        { min: 698274, max: 837922, rate: 10.3 },
+        { min: 837922, max: 1396542, rate: 11.3 },
+        { min: 1396542, max: 2000000, rate: 12.3 },
+        { min: 2000000, max: Infinity, rate: 13.3 },
+      ],
+    },
+    standardDeduction: { single: 5363, married_jointly: 10726 },
+  },
+
+  CT: {
+    name: 'Connecticut',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 10000, rate: 2 },
+        { min: 10000, max: 50000, rate: 4.5 },
+        { min: 50000, max: 100000, rate: 5.5 },
+        { min: 100000, max: 200000, rate: 6 },
+        { min: 200000, max: 250000, rate: 6.5 },
+        { min: 250000, max: 500000, rate: 6.9 },
+        { min: 500000, max: Infinity, rate: 6.99 },
+      ],
+      married_jointly: [
+        { min: 0, max: 20000, rate: 2 },
+        { min: 20000, max: 100000, rate: 4.5 },
+        { min: 100000, max: 200000, rate: 5.5 },
+        { min: 200000, max: 400000, rate: 6 },
+        { min: 400000, max: 500000, rate: 6.5 },
+        { min: 500000, max: 1000000, rate: 6.9 },
+        { min: 1000000, max: Infinity, rate: 6.99 },
+      ],
+    },
+    personalExemption: { single: 15000, married_jointly: 24000 },
+  },
+
+  DE: {
+    name: 'Delaware',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 2000, rate: 0 },
+        { min: 2000, max: 5000, rate: 2.2 },
+        { min: 5000, max: 10000, rate: 3.9 },
+        { min: 10000, max: 20000, rate: 4.8 },
+        { min: 20000, max: 25000, rate: 5.2 },
+        { min: 25000, max: 60000, rate: 5.55 },
+        { min: 60000, max: Infinity, rate: 6.6 },
+      ],
+      married_jointly: [
+        { min: 0, max: 2000, rate: 0 },
+        { min: 2000, max: 5000, rate: 2.2 },
+        { min: 5000, max: 10000, rate: 3.9 },
+        { min: 10000, max: 20000, rate: 4.8 },
+        { min: 20000, max: 25000, rate: 5.2 },
+        { min: 25000, max: 60000, rate: 5.55 },
+        { min: 60000, max: Infinity, rate: 6.6 },
+      ],
+    },
+    standardDeduction: { single: 3250, married_jointly: 6500 },
+    personalExemption: { single: 110, married_jointly: 220, dependent: 110 },
+  },
+
+  DC: {
+    name: 'Washington DC',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 10000, rate: 4 },
+        { min: 10000, max: 40000, rate: 6 },
+        { min: 40000, max: 60000, rate: 6.5 },
+        { min: 60000, max: 250000, rate: 8.5 },
+        { min: 250000, max: 500000, rate: 9.25 },
+        { min: 500000, max: 1000000, rate: 9.75 },
+        { min: 1000000, max: Infinity, rate: 10.75 },
+      ],
+      married_jointly: [
+        { min: 0, max: 10000, rate: 4 },
+        { min: 10000, max: 40000, rate: 6 },
+        { min: 40000, max: 60000, rate: 6.5 },
+        { min: 60000, max: 250000, rate: 8.5 },
+        { min: 250000, max: 500000, rate: 9.25 },
+        { min: 500000, max: 1000000, rate: 9.75 },
+        { min: 1000000, max: Infinity, rate: 10.75 },
+      ],
+    },
+    standardDeduction: { single: 12950, married_jointly: 25900 },
+  },
+
+  HI: {
+    name: 'Hawaii',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 2400, rate: 1.4 },
+        { min: 2400, max: 4800, rate: 3.2 },
+        { min: 4800, max: 9600, rate: 5.5 },
+        { min: 9600, max: 14400, rate: 6.4 },
+        { min: 14400, max: 19200, rate: 6.8 },
+        { min: 19200, max: 24000, rate: 7.2 },
+        { min: 24000, max: 36000, rate: 7.6 },
+        { min: 36000, max: 48000, rate: 7.9 },
+        { min: 48000, max: 150000, rate: 8.25 },
+        { min: 150000, max: 175000, rate: 9 },
+        { min: 175000, max: 200000, rate: 10 },
+        { min: 200000, max: Infinity, rate: 11 },
+      ],
+      married_jointly: [
+        { min: 0, max: 4800, rate: 1.4 },
+        { min: 4800, max: 9600, rate: 3.2 },
+        { min: 9600, max: 19200, rate: 5.5 },
+        { min: 19200, max: 28800, rate: 6.4 },
+        { min: 28800, max: 38400, rate: 6.8 },
+        { min: 38400, max: 48000, rate: 7.2 },
+        { min: 48000, max: 72000, rate: 7.6 },
+        { min: 72000, max: 96000, rate: 7.9 },
+        { min: 96000, max: 300000, rate: 8.25 },
+        { min: 300000, max: 350000, rate: 9 },
+        { min: 350000, max: 400000, rate: 10 },
+        { min: 400000, max: Infinity, rate: 11 },
+      ],
+    },
+    standardDeduction: { single: 2200, married_jointly: 4400 },
+  },
+
+  IA: {
+    name: 'Iowa',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 6210, rate: 4.4 },
+        { min: 6210, max: 31050, rate: 4.82 },
+        { min: 31050, max: Infinity, rate: 5.7 },
+      ],
+      married_jointly: [
+        { min: 0, max: 12420, rate: 4.4 },
+        { min: 12420, max: 62100, rate: 4.82 },
+        { min: 62100, max: Infinity, rate: 5.7 },
+      ],
+    },
+  },
+
+  KS: {
+    name: 'Kansas',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 15000, rate: 3.1 },
+        { min: 15000, max: 30000, rate: 5.25 },
+        { min: 30000, max: Infinity, rate: 5.7 },
+      ],
+      married_jointly: [
+        { min: 0, max: 30000, rate: 3.1 },
+        { min: 30000, max: 60000, rate: 5.25 },
+        { min: 60000, max: Infinity, rate: 5.7 },
+      ],
+    },
+    standardDeduction: { single: 3500, married_jointly: 8000 },
+  },
+
+  LA: {
+    name: 'Louisiana',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 12500, rate: 1.85 },
+        { min: 12500, max: 50000, rate: 3.5 },
+        { min: 50000, max: Infinity, rate: 4.25 },
+      ],
+      married_jointly: [
+        { min: 0, max: 25000, rate: 1.85 },
+        { min: 25000, max: 100000, rate: 3.5 },
+        { min: 100000, max: Infinity, rate: 4.25 },
+      ],
+    },
+  },
+
+  ME: {
+    name: 'Maine',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 24500, rate: 5.8 },
+        { min: 24500, max: 58050, rate: 6.75 },
+        { min: 58050, max: Infinity, rate: 7.15 },
+      ],
+      married_jointly: [
+        { min: 0, max: 49050, rate: 5.8 },
+        { min: 49050, max: 116100, rate: 6.75 },
+        { min: 116100, max: Infinity, rate: 7.15 },
+      ],
+    },
+    standardDeduction: { single: 14600, married_jointly: 29200 },
+    personalExemption: { single: 4700, married_jointly: 9400, dependent: 4700 },
+  },
+
+  MD: {
+    name: 'Maryland',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 1000, rate: 2 },
+        { min: 1000, max: 2000, rate: 3 },
+        { min: 2000, max: 3000, rate: 4 },
+        { min: 3000, max: 100000, rate: 4.75 },
+        { min: 100000, max: 125000, rate: 5 },
+        { min: 125000, max: 150000, rate: 5.25 },
+        { min: 150000, max: 250000, rate: 5.5 },
+        { min: 250000, max: Infinity, rate: 5.75 },
+      ],
+      married_jointly: [
+        { min: 0, max: 1000, rate: 2 },
+        { min: 1000, max: 2000, rate: 3 },
+        { min: 2000, max: 3000, rate: 4 },
+        { min: 3000, max: 150000, rate: 4.75 },
+        { min: 150000, max: 175000, rate: 5 },
+        { min: 175000, max: 225000, rate: 5.25 },
+        { min: 225000, max: 300000, rate: 5.5 },
+        { min: 300000, max: Infinity, rate: 5.75 },
+      ],
+    },
+    standardDeduction: { single: 2550, married_jointly: 5100 },
+    personalExemption: { single: 3200, married_jointly: 6400, dependent: 3200 },
+  },
+
+  MN: {
+    name: 'Minnesota',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 31690, rate: 5.35 },
+        { min: 31690, max: 104090, rate: 6.8 },
+        { min: 104090, max: 183340, rate: 7.85 },
+        { min: 183340, max: Infinity, rate: 9.85 },
+      ],
+      married_jointly: [
+        { min: 0, max: 46330, rate: 5.35 },
+        { min: 46330, max: 184040, rate: 6.8 },
+        { min: 184040, max: 321450, rate: 7.85 },
+        { min: 321450, max: Infinity, rate: 9.85 },
+      ],
+    },
+    standardDeduction: { single: 14575, married_jointly: 29150 },
+  },
+
+  MO: {
+    name: 'Missouri',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 1207, rate: 0 },
+        { min: 1207, max: 2414, rate: 2 },
+        { min: 2414, max: 3621, rate: 2.5 },
+        { min: 3621, max: 4828, rate: 3 },
+        { min: 4828, max: 6035, rate: 3.5 },
+        { min: 6035, max: 7242, rate: 4 },
+        { min: 7242, max: 8449, rate: 4.5 },
+        { min: 8449, max: Infinity, rate: 4.8 },
+      ],
+      married_jointly: [
+        { min: 0, max: 1207, rate: 0 },
+        { min: 1207, max: 2414, rate: 2 },
+        { min: 2414, max: 3621, rate: 2.5 },
+        { min: 3621, max: 4828, rate: 3 },
+        { min: 4828, max: 6035, rate: 3.5 },
+        { min: 6035, max: 7242, rate: 4 },
+        { min: 7242, max: 8449, rate: 4.5 },
+        { min: 8449, max: Infinity, rate: 4.8 },
+      ],
+    },
+    standardDeduction: { single: 14600, married_jointly: 29200 },
+  },
+
+  MT: {
+    name: 'Montana',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 20500, rate: 4.7 },
+        { min: 20500, max: Infinity, rate: 5.9 },
+      ],
+      married_jointly: [
+        { min: 0, max: 41000, rate: 4.7 },
+        { min: 41000, max: Infinity, rate: 5.9 },
+      ],
+    },
+    standardDeduction: { single: 14600, married_jointly: 29200 },
+  },
+
+  NE: {
+    name: 'Nebraska',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 3700, rate: 2.46 },
+        { min: 3700, max: 22170, rate: 3.51 },
+        { min: 22170, max: 35730, rate: 5.01 },
+        { min: 35730, max: Infinity, rate: 5.84 },
+      ],
+      married_jointly: [
+        { min: 0, max: 7390, rate: 2.46 },
+        { min: 7390, max: 44350, rate: 3.51 },
+        { min: 44350, max: 71460, rate: 5.01 },
+        { min: 71460, max: Infinity, rate: 5.84 },
+      ],
+    },
+    standardDeduction: { single: 7900, married_jointly: 15800 },
+  },
+
+  NJ: {
+    name: 'New Jersey',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 20000, rate: 1.4 },
+        { min: 20000, max: 35000, rate: 1.75 },
+        { min: 35000, max: 40000, rate: 3.5 },
+        { min: 40000, max: 75000, rate: 5.525 },
+        { min: 75000, max: 500000, rate: 6.37 },
+        { min: 500000, max: 1000000, rate: 8.97 },
+        { min: 1000000, max: Infinity, rate: 10.75 },
+      ],
+      married_jointly: [
+        { min: 0, max: 20000, rate: 1.4 },
+        { min: 20000, max: 50000, rate: 1.75 },
+        { min: 50000, max: 70000, rate: 2.45 },
+        { min: 70000, max: 80000, rate: 3.5 },
+        { min: 80000, max: 150000, rate: 5.525 },
+        { min: 150000, max: 500000, rate: 6.37 },
+        { min: 500000, max: 1000000, rate: 8.97 },
+        { min: 1000000, max: Infinity, rate: 10.75 },
+      ],
+    },
+  },
+
+  NM: {
+    name: 'New Mexico',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 5500, rate: 1.7 },
+        { min: 5500, max: 11000, rate: 3.2 },
+        { min: 11000, max: 16000, rate: 4.7 },
+        { min: 16000, max: 210000, rate: 4.9 },
+        { min: 210000, max: Infinity, rate: 5.9 },
+      ],
+      married_jointly: [
+        { min: 0, max: 8000, rate: 1.7 },
+        { min: 8000, max: 16000, rate: 3.2 },
+        { min: 16000, max: 24000, rate: 4.7 },
+        { min: 24000, max: 315000, rate: 4.9 },
+        { min: 315000, max: Infinity, rate: 5.9 },
+      ],
+    },
+    standardDeduction: { single: 14600, married_jointly: 29200 },
+  },
+
+  NY: {
+    name: 'New York',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 8500, rate: 4 },
+        { min: 8500, max: 11700, rate: 4.5 },
+        { min: 11700, max: 13900, rate: 5.25 },
+        { min: 13900, max: 80650, rate: 5.5 },
+        { min: 80650, max: 215400, rate: 6 },
+        { min: 215400, max: 1077550, rate: 6.85 },
+        { min: 1077550, max: 5000000, rate: 9.65 },
+        { min: 5000000, max: 25000000, rate: 10.3 },
+        { min: 25000000, max: Infinity, rate: 10.9 },
+      ],
+      married_jointly: [
+        { min: 0, max: 17150, rate: 4 },
+        { min: 17150, max: 23600, rate: 4.5 },
+        { min: 23600, max: 27900, rate: 5.25 },
+        { min: 27900, max: 161550, rate: 5.5 },
+        { min: 161550, max: 323200, rate: 6 },
+        { min: 323200, max: 2155350, rate: 6.85 },
+        { min: 2155350, max: 5000000, rate: 9.65 },
+        { min: 5000000, max: 25000000, rate: 10.3 },
+        { min: 25000000, max: Infinity, rate: 10.9 },
+      ],
+    },
+    standardDeduction: { single: 8000, married_jointly: 16050 },
+  },
+
+  ND: {
+    name: 'North Dakota',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 44725, rate: 0 },
+        { min: 44725, max: 225975, rate: 1.95 },
+        { min: 225975, max: Infinity, rate: 2.5 },
+      ],
+      married_jointly: [
+        { min: 0, max: 74750, rate: 0 },
+        { min: 74750, max: 275100, rate: 1.95 },
+        { min: 275100, max: Infinity, rate: 2.5 },
+      ],
+    },
+  },
+
+  OH: {
+    name: 'Ohio',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 26050, rate: 0 },
+        { min: 26050, max: 100000, rate: 2.75 },
+        { min: 100000, max: Infinity, rate: 3.5 },
+      ],
+      married_jointly: [
+        { min: 0, max: 26050, rate: 0 },
+        { min: 26050, max: 100000, rate: 2.75 },
+        { min: 100000, max: Infinity, rate: 3.5 },
+      ],
+    },
+  },
+
+  OK: {
+    name: 'Oklahoma',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 1000, rate: 0.25 },
+        { min: 1000, max: 2500, rate: 0.75 },
+        { min: 2500, max: 3750, rate: 1.75 },
+        { min: 3750, max: 4900, rate: 2.75 },
+        { min: 4900, max: 7200, rate: 3.75 },
+        { min: 7200, max: Infinity, rate: 4.75 },
+      ],
+      married_jointly: [
+        { min: 0, max: 2000, rate: 0.25 },
+        { min: 2000, max: 5000, rate: 0.75 },
+        { min: 5000, max: 7500, rate: 1.75 },
+        { min: 7500, max: 9800, rate: 2.75 },
+        { min: 9800, max: 12200, rate: 3.75 },
+        { min: 12200, max: Infinity, rate: 4.75 },
+      ],
+    },
+    standardDeduction: { single: 6350, married_jointly: 12700 },
+  },
+
+  OR: {
+    name: 'Oregon',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 4050, rate: 4.75 },
+        { min: 4050, max: 10200, rate: 6.75 },
+        { min: 10200, max: 125000, rate: 8.75 },
+        { min: 125000, max: Infinity, rate: 9.9 },
+      ],
+      married_jointly: [
+        { min: 0, max: 8100, rate: 4.75 },
+        { min: 8100, max: 20400, rate: 6.75 },
+        { min: 20400, max: 250000, rate: 8.75 },
+        { min: 250000, max: Infinity, rate: 9.9 },
+      ],
+    },
+    standardDeduction: { single: 2605, married_jointly: 5210 },
+  },
+
+  RI: {
+    name: 'Rhode Island',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 73450, rate: 3.75 },
+        { min: 73450, max: 166950, rate: 4.75 },
+        { min: 166950, max: Infinity, rate: 5.99 },
+      ],
+      married_jointly: [
+        { min: 0, max: 73450, rate: 3.75 },
+        { min: 73450, max: 166950, rate: 4.75 },
+        { min: 166950, max: Infinity, rate: 5.99 },
+      ],
+    },
+    standardDeduction: { single: 10550, married_jointly: 21150 },
+  },
+
+  SC: {
+    name: 'South Carolina',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 3460, rate: 0 },
+        { min: 3460, max: 17330, rate: 3 },
+        { min: 17330, max: Infinity, rate: 6.2 },
+      ],
+      married_jointly: [
+        { min: 0, max: 3460, rate: 0 },
+        { min: 3460, max: 17330, rate: 3 },
+        { min: 17330, max: Infinity, rate: 6.2 },
+      ],
+    },
+    standardDeduction: { single: 14600, married_jointly: 29200 },
+  },
+
+  VT: {
+    name: 'Vermont',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 45400, rate: 3.35 },
+        { min: 45400, max: 110050, rate: 6.6 },
+        { min: 110050, max: 229550, rate: 7.6 },
+        { min: 229550, max: Infinity, rate: 8.75 },
+      ],
+      married_jointly: [
+        { min: 0, max: 75850, rate: 3.35 },
+        { min: 75850, max: 183400, rate: 6.6 },
+        { min: 183400, max: 279450, rate: 7.6 },
+        { min: 279450, max: Infinity, rate: 8.75 },
+      ],
+    },
+    standardDeduction: { single: 7000, married_jointly: 14350 },
+  },
+
+  VA: {
+    name: 'Virginia',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 3000, rate: 2 },
+        { min: 3000, max: 5000, rate: 3 },
+        { min: 5000, max: 17000, rate: 5 },
+        { min: 17000, max: Infinity, rate: 5.75 },
+      ],
+      married_jointly: [
+        { min: 0, max: 3000, rate: 2 },
+        { min: 3000, max: 5000, rate: 3 },
+        { min: 5000, max: 17000, rate: 5 },
+        { min: 17000, max: Infinity, rate: 5.75 },
+      ],
+    },
+    standardDeduction: { single: 8500, married_jointly: 17000 },
+  },
+
+  WV: {
+    name: 'West Virginia',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 10000, rate: 2.36 },
+        { min: 10000, max: 25000, rate: 3.15 },
+        { min: 25000, max: 40000, rate: 3.54 },
+        { min: 40000, max: 60000, rate: 4.72 },
+        { min: 60000, max: Infinity, rate: 5.12 },
+      ],
+      married_jointly: [
+        { min: 0, max: 10000, rate: 2.36 },
+        { min: 10000, max: 25000, rate: 3.15 },
+        { min: 25000, max: 40000, rate: 3.54 },
+        { min: 40000, max: 60000, rate: 4.72 },
+        { min: 60000, max: Infinity, rate: 5.12 },
+      ],
+    },
+  },
+
+  WI: {
+    name: 'Wisconsin',
+    type: 'progressive',
+    brackets: {
+      single: [
+        { min: 0, max: 14320, rate: 3.5 },
+        { min: 14320, max: 28640, rate: 4.4 },
+        { min: 28640, max: 315310, rate: 5.3 },
+        { min: 315310, max: Infinity, rate: 7.65 },
+      ],
+      married_jointly: [
+        { min: 0, max: 19090, rate: 3.5 },
+        { min: 19090, max: 38190, rate: 4.4 },
+        { min: 38190, max: 420420, rate: 5.3 },
+        { min: 420420, max: Infinity, rate: 7.65 },
+      ],
+    },
+    standardDeduction: { single: 13230, married_jointly: 24500 },
+  },
 };
 
-// FICA rates (Social Security + Medicare)
-const SOCIAL_SECURITY_RATE = 6.2;
-const SOCIAL_SECURITY_WAGE_CAP = 168600; // 2024 cap
-const MEDICARE_RATE = 1.45;
-const MEDICARE_ADDITIONAL_RATE = 0.9; // Additional Medicare tax for high earners
+// Legacy flat rate mapping for backwards compatibility
+export const STATE_TAX_RATES: Record<string, { name: string; rate: number }> = Object.fromEntries(
+  Object.entries(STATE_TAX_INFO).map(([code, info]) => {
+    let rate = 0;
+    if (info.type === 'flat' && info.flatRate) {
+      rate = info.flatRate;
+    } else if (info.type === 'progressive' && info.brackets) {
+      // Use top marginal rate as approximation
+      const topBracket = info.brackets.single[info.brackets.single.length - 1];
+      rate = topBracket.rate;
+    }
+    return [code, { name: info.name, rate }];
+  })
+);
+
+// ============================================================================
+// FICA TAXES - Social Security & Medicare (2025 rates)
+// ============================================================================
+
+// Social Security
+const SOCIAL_SECURITY_RATE = 6.2; // Employee portion
+const SOCIAL_SECURITY_WAGE_CAP = 176100; // 2025 cap (increased from 168,600 in 2024)
+
+// Medicare
+const MEDICARE_RATE = 1.45; // Base rate
+const MEDICARE_ADDITIONAL_RATE = 0.9; // Additional Medicare tax for high earners (ACA)
 const MEDICARE_ADDITIONAL_THRESHOLD_SINGLE = 200000;
-const MEDICARE_ADDITIONAL_THRESHOLD_MARRIED = 250000;
+const MEDICARE_ADDITIONAL_THRESHOLD_MARRIED_JOINTLY = 250000;
+const MEDICARE_ADDITIONAL_THRESHOLD_MARRIED_SEPARATELY = 125000;
 
-// 2024 Contribution Limits
+// ============================================================================
+// 2025 Contribution Limits
+// ============================================================================
+
 export const CONTRIBUTION_LIMITS = {
-  traditional401k: 23000,
-  traditional401kCatchUp: 7500, // Age 50+
+  traditional401k: 23500, // Increased from $23,000 in 2024
+  traditional401kCatchUp: 7500, // Age 50-59 and 64+
+  traditional401kSuperCatchUp: 11250, // Age 60-63 (new for 2025 under SECURE 2.0)
   traditionalIRA: 7000,
   traditionalIRACatchUp: 1000, // Age 50+
-  hsa_individual: 4150,
-  hsa_family: 8300,
+  hsa_individual: 4300, // Increased from $4,150 in 2024
+  hsa_family: 8550, // Increased from $8,300 in 2024
   hsaCatchUp: 1000, // Age 55+
-  roth401k: 23000,
+  roth401k: 23500,
   rothIRA: 7000,
 };
 
@@ -960,6 +1643,41 @@ export interface PreTaxContributions {
   other: number;
 }
 
+// Detailed bracket breakdown for transparency
+export interface BracketBreakdown {
+  bracketMin: number;
+  bracketMax: number;
+  rate: number;           // Percentage rate for this bracket
+  taxableInBracket: number; // Amount of income taxed at this rate
+  taxFromBracket: number;   // Tax amount from this bracket
+}
+
+// Detailed FICA breakdown
+export interface FICABreakdown {
+  // Social Security
+  socialSecurityWages: number;        // Wages subject to SS (capped)
+  socialSecurityRate: number;         // 6.2%
+  socialSecurityTax: number;
+  socialSecurityWageCap: number;      // 2025: $176,100
+  wagesAboveSsCap: number;            // Income not subject to SS
+  
+  // Medicare
+  medicareWages: number;              // All wages (no cap)
+  medicareBaseRate: number;           // 1.45%
+  medicareBaseTax: number;
+  
+  // Additional Medicare Tax (0.9% above threshold)
+  additionalMedicareThreshold: number;
+  additionalMedicareWages: number;    // Wages above threshold
+  additionalMedicareRate: number;     // 0.9%
+  additionalMedicareTax: number;
+  
+  // Totals
+  totalMedicareTax: number;
+  totalFicaTax: number;
+  effectiveFicaRate: number;
+}
+
 export interface TaxCalculation {
   grossIncome: number;
   filingStatus: FilingStatus;
@@ -968,29 +1686,50 @@ export interface TaxCalculation {
   // Pre-tax deductions
   preTaxContributions: PreTaxContributions;
   totalPreTaxContributions: number;
-  standardDeduction: number;
+  
+  // Deductions
+  federalStandardDeduction: number;
+  stateStandardDeduction: number;
+  statePersonalExemption: number;
   
   // Taxable incomes
-  adjustedGrossIncome: number; // Gross - pre-tax contributions
-  taxableIncome: number; // AGI - standard deduction
+  adjustedGrossIncome: number;        // Gross - pre-tax contributions (for federal)
+  federalTaxableIncome: number;       // AGI - federal standard deduction
+  stateTaxableIncome: number;         // AGI - state deductions (varies by state)
   
-  // Tax breakdown
+  // Federal Tax Details
   federalTax: number;
+  federalBracketBreakdown: BracketBreakdown[];
+  marginalFederalRate: number;
+  effectiveFederalRate: number;
+  
+  // State Tax Details
   stateTax: number;
+  stateTaxType: 'none' | 'flat' | 'progressive';
+  stateBracketBreakdown: BracketBreakdown[];
+  marginalStateRate: number;
+  effectiveStateRate: number;
+  
+  // FICA Details (Social Security + Medicare)
+  fica: FICABreakdown;
+  
+  // Summary
+  totalIncomeTax: number;             // Federal + State
+  totalTax: number;                   // Federal + State + FICA
+  
+  // Legacy fields for compatibility
   socialSecurityTax: number;
   medicareTax: number;
   ficaTax: number;
-  totalTax: number;
   
-  // Effective rates
-  effectiveFederalRate: number;
-  effectiveStateRate: number;
+  // Effective rates (as percentage of gross income)
   effectiveTotalRate: number;
-  marginalFederalRate: number;
+  effectiveFicaRate: number;
   
   // Net income
-  netIncome: number; // After all taxes
+  netIncome: number;                  // Gross - all taxes - pre-tax contributions
   monthlyNetIncome: number;
+  monthlyGrossIncome: number;
 }
 
 export interface ScenarioIncomeBreakdown {
@@ -1030,63 +1769,343 @@ export interface ScenarioIncomeBreakdown {
 }
 
 /**
- * Calculate federal tax using progressive brackets
+ * Calculate tax using progressive brackets with detailed breakdown
+ * This is a generic function used for both federal and state calculations
  */
-export function calculateFederalTax(taxableIncome: number, filingStatus: FilingStatus): { tax: number; marginalRate: number } {
-  if (taxableIncome <= 0) return { tax: 0, marginalRate: 10 };
+function calculateProgressiveTax(
+  taxableIncome: number,
+  brackets: { min: number; max: number; rate: number }[]
+): { tax: number; marginalRate: number; breakdown: BracketBreakdown[] } {
+  if (taxableIncome <= 0) {
+    return { 
+      tax: 0, 
+      marginalRate: brackets[0]?.rate || 0, 
+      breakdown: [] 
+    };
+  }
   
-  const brackets = FEDERAL_TAX_BRACKETS[filingStatus];
-  let tax = 0;
-  let marginalRate = 10;
+  let totalTax = 0;
+  let marginalRate = brackets[0]?.rate || 0;
+  const breakdown: BracketBreakdown[] = [];
   
   for (const bracket of brackets) {
     if (taxableIncome > bracket.min) {
       const taxableInBracket = Math.min(taxableIncome, bracket.max) - bracket.min;
-      tax += taxableInBracket * (bracket.rate / 100);
+      const taxFromBracket = taxableInBracket * (bracket.rate / 100);
+      
+      totalTax += taxFromBracket;
       marginalRate = bracket.rate;
+      
+      if (taxableInBracket > 0) {
+        breakdown.push({
+          bracketMin: bracket.min,
+          bracketMax: bracket.max,
+          rate: bracket.rate,
+          taxableInBracket,
+          taxFromBracket,
+        });
+      }
     }
   }
   
-  return { tax, marginalRate };
+  return { tax: totalTax, marginalRate, breakdown };
 }
 
 /**
- * Calculate state tax (simplified flat rate)
+ * Calculate federal tax using 2025 progressive brackets with detailed breakdown
  */
-export function calculateStateTax(taxableIncome: number, stateCode: string | null): number {
-  if (!stateCode || taxableIncome <= 0) return 0;
-  const stateInfo = STATE_TAX_RATES[stateCode.toUpperCase()];
-  if (!stateInfo) return 0;
-  return taxableIncome * (stateInfo.rate / 100);
+export function calculateFederalTax(
+  taxableIncome: number, 
+  filingStatus: FilingStatus
+): { tax: number; marginalRate: number; breakdown: BracketBreakdown[] } {
+  const brackets = FEDERAL_TAX_BRACKETS[filingStatus];
+  return calculateProgressiveTax(taxableIncome, brackets);
 }
 
 /**
- * Calculate FICA taxes (Social Security + Medicare)
+ * Get the appropriate state tax brackets for filing status
  */
-export function calculateFICATax(grossIncome: number, filingStatus: FilingStatus): { socialSecurity: number; medicare: number; total: number } {
-  // Social Security (capped at wage base)
-  const socialSecurityWages = Math.min(grossIncome, SOCIAL_SECURITY_WAGE_CAP);
-  const socialSecurity = socialSecurityWages * (SOCIAL_SECURITY_RATE / 100);
+function getStateBrackets(
+  stateInfo: StateTaxInfo, 
+  filingStatus: FilingStatus
+): { min: number; max: number; rate: number }[] | null {
+  if (!stateInfo.brackets) return null;
   
-  // Medicare (no cap, but additional tax for high earners)
-  const medicareThreshold = filingStatus === 'married_jointly' 
-    ? MEDICARE_ADDITIONAL_THRESHOLD_MARRIED 
-    : MEDICARE_ADDITIONAL_THRESHOLD_SINGLE;
-  
-  let medicare = grossIncome * (MEDICARE_RATE / 100);
-  if (grossIncome > medicareThreshold) {
-    medicare += (grossIncome - medicareThreshold) * (MEDICARE_ADDITIONAL_RATE / 100);
+  // Try exact match first
+  if (filingStatus === 'single' && stateInfo.brackets.single) {
+    return stateInfo.brackets.single;
+  }
+  if (filingStatus === 'married_jointly' && stateInfo.brackets.married_jointly) {
+    return stateInfo.brackets.married_jointly;
+  }
+  if (filingStatus === 'married_separately') {
+    return stateInfo.brackets.married_separately || stateInfo.brackets.single;
+  }
+  if (filingStatus === 'head_of_household') {
+    return stateInfo.brackets.head_of_household || stateInfo.brackets.single;
   }
   
-  return {
-    socialSecurity,
-    medicare,
-    total: socialSecurity + medicare,
+  return stateInfo.brackets.single;
+}
+
+/**
+ * Get state standard deduction
+ */
+function getStateStandardDeduction(
+  stateInfo: StateTaxInfo,
+  filingStatus: FilingStatus
+): number {
+  if (!stateInfo.standardDeduction) return 0;
+  
+  if (filingStatus === 'single') {
+    return stateInfo.standardDeduction.single || 0;
+  }
+  if (filingStatus === 'married_jointly') {
+    return stateInfo.standardDeduction.married_jointly || 0;
+  }
+  if (filingStatus === 'married_separately') {
+    return stateInfo.standardDeduction.married_separately || 
+           (stateInfo.standardDeduction.married_jointly ? stateInfo.standardDeduction.married_jointly / 2 : 0);
+  }
+  if (filingStatus === 'head_of_household') {
+    return stateInfo.standardDeduction.head_of_household || stateInfo.standardDeduction.single || 0;
+  }
+  
+  return 0;
+}
+
+/**
+ * Get state personal exemption
+ */
+function getStatePersonalExemption(
+  stateInfo: StateTaxInfo,
+  filingStatus: FilingStatus
+): number {
+  if (!stateInfo.personalExemption) return 0;
+  
+  if (filingStatus === 'single' || filingStatus === 'head_of_household') {
+    return stateInfo.personalExemption.single || 0;
+  }
+  if (filingStatus === 'married_jointly') {
+    return stateInfo.personalExemption.married_jointly || 0;
+  }
+  if (filingStatus === 'married_separately') {
+    return (stateInfo.personalExemption.married_jointly || 0) / 2;
+  }
+  
+  return 0;
+}
+
+/**
+ * Calculate state tax with full progressive bracket support
+ */
+export function calculateStateTax(
+  adjustedGrossIncome: number,
+  stateCode: string | null,
+  filingStatus: FilingStatus
+): { 
+  tax: number; 
+  marginalRate: number; 
+  breakdown: BracketBreakdown[]; 
+  type: 'none' | 'flat' | 'progressive';
+  standardDeduction: number;
+  personalExemption: number;
+  taxableIncome: number;
+} {
+  if (!stateCode || adjustedGrossIncome <= 0) {
+    return { 
+      tax: 0, 
+      marginalRate: 0, 
+      breakdown: [], 
+      type: 'none',
+      standardDeduction: 0,
+      personalExemption: 0,
+      taxableIncome: 0,
+    };
+  }
+  
+  const stateInfo = STATE_TAX_INFO[stateCode.toUpperCase()];
+  if (!stateInfo) {
+    return { 
+      tax: 0, 
+      marginalRate: 0, 
+      breakdown: [], 
+      type: 'none',
+      standardDeduction: 0,
+      personalExemption: 0,
+      taxableIncome: 0,
+    };
+  }
+  
+  // No state income tax
+  if (stateInfo.type === 'none') {
+    return { 
+      tax: 0, 
+      marginalRate: 0, 
+      breakdown: [], 
+      type: 'none',
+      standardDeduction: 0,
+      personalExemption: 0,
+      taxableIncome: 0,
+    };
+  }
+  
+  // Get state deductions
+  const standardDeduction = getStateStandardDeduction(stateInfo, filingStatus);
+  const personalExemption = getStatePersonalExemption(stateInfo, filingStatus);
+  const taxableIncome = Math.max(0, adjustedGrossIncome - standardDeduction - personalExemption);
+  
+  // Flat rate state
+  if (stateInfo.type === 'flat' && stateInfo.flatRate !== undefined) {
+    const tax = taxableIncome * (stateInfo.flatRate / 100);
+    
+    // Handle Massachusetts millionaire's tax
+    if (stateCode.toUpperCase() === 'MA' && taxableIncome > 1000000) {
+      const baseAmount = 1000000;
+      const excessAmount = taxableIncome - baseAmount;
+      const regularTax = baseAmount * (stateInfo.flatRate / 100);
+      const surtax = excessAmount * 4 / 100; // 4% surtax on income over $1M
+      const totalTax = regularTax + surtax;
+      
+      return {
+        tax: totalTax,
+        marginalRate: stateInfo.flatRate + 4,
+        breakdown: [
+          {
+            bracketMin: 0,
+            bracketMax: 1000000,
+            rate: stateInfo.flatRate,
+            taxableInBracket: baseAmount,
+            taxFromBracket: regularTax,
+          },
+          {
+            bracketMin: 1000000,
+            bracketMax: Infinity,
+            rate: stateInfo.flatRate + 4,
+            taxableInBracket: excessAmount,
+            taxFromBracket: surtax,
+          },
+        ],
+        type: 'flat',
+        standardDeduction,
+        personalExemption,
+        taxableIncome,
+      };
+    }
+    
+    return {
+      tax,
+      marginalRate: stateInfo.flatRate,
+      breakdown: taxableIncome > 0 ? [{
+        bracketMin: 0,
+        bracketMax: Infinity,
+        rate: stateInfo.flatRate,
+        taxableInBracket: taxableIncome,
+        taxFromBracket: tax,
+      }] : [],
+      type: 'flat',
+      standardDeduction,
+      personalExemption,
+      taxableIncome,
+    };
+  }
+  
+  // Progressive state
+  if (stateInfo.type === 'progressive') {
+    const brackets = getStateBrackets(stateInfo, filingStatus);
+    if (!brackets) {
+      return { 
+        tax: 0, 
+        marginalRate: 0, 
+        breakdown: [], 
+        type: 'progressive',
+        standardDeduction,
+        personalExemption,
+        taxableIncome,
+      };
+    }
+    
+    const result = calculateProgressiveTax(taxableIncome, brackets);
+    return {
+      ...result,
+      type: 'progressive',
+      standardDeduction,
+      personalExemption,
+      taxableIncome,
+    };
+  }
+  
+  return { 
+    tax: 0, 
+    marginalRate: 0, 
+    breakdown: [], 
+    type: 'none',
+    standardDeduction: 0,
+    personalExemption: 0,
+    taxableIncome: 0,
   };
 }
 
 /**
- * Complete tax calculation
+ * Calculate FICA taxes (Social Security + Medicare) with detailed breakdown
+ */
+export function calculateFICATax(
+  grossIncome: number, 
+  filingStatus: FilingStatus
+): FICABreakdown {
+  // Social Security (capped at wage base)
+  const socialSecurityWages = Math.min(grossIncome, SOCIAL_SECURITY_WAGE_CAP);
+  const socialSecurityTax = socialSecurityWages * (SOCIAL_SECURITY_RATE / 100);
+  const wagesAboveSsCap = Math.max(0, grossIncome - SOCIAL_SECURITY_WAGE_CAP);
+  
+  // Medicare base tax (no cap)
+  const medicareBaseTax = grossIncome * (MEDICARE_RATE / 100);
+  
+  // Additional Medicare Tax threshold depends on filing status
+  let additionalMedicareThreshold: number;
+  switch (filingStatus) {
+    case 'married_jointly':
+      additionalMedicareThreshold = MEDICARE_ADDITIONAL_THRESHOLD_MARRIED_JOINTLY;
+      break;
+    case 'married_separately':
+      additionalMedicareThreshold = MEDICARE_ADDITIONAL_THRESHOLD_MARRIED_SEPARATELY;
+      break;
+    default:
+      additionalMedicareThreshold = MEDICARE_ADDITIONAL_THRESHOLD_SINGLE;
+  }
+  
+  // Additional Medicare Tax (0.9% on wages above threshold)
+  const additionalMedicareWages = Math.max(0, grossIncome - additionalMedicareThreshold);
+  const additionalMedicareTax = additionalMedicareWages * (MEDICARE_ADDITIONAL_RATE / 100);
+  
+  const totalMedicareTax = medicareBaseTax + additionalMedicareTax;
+  const totalFicaTax = socialSecurityTax + totalMedicareTax;
+  
+  return {
+    socialSecurityWages,
+    socialSecurityRate: SOCIAL_SECURITY_RATE,
+    socialSecurityTax,
+    socialSecurityWageCap: SOCIAL_SECURITY_WAGE_CAP,
+    wagesAboveSsCap,
+    
+    medicareWages: grossIncome,
+    medicareBaseRate: MEDICARE_RATE,
+    medicareBaseTax,
+    
+    additionalMedicareThreshold,
+    additionalMedicareWages,
+    additionalMedicareRate: MEDICARE_ADDITIONAL_RATE,
+    additionalMedicareTax,
+    
+    totalMedicareTax,
+    totalFicaTax,
+    effectiveFicaRate: grossIncome > 0 ? (totalFicaTax / grossIncome) * 100 : 0,
+  };
+}
+
+/**
+ * Complete tax calculation with ultra-precise marginal bracket calculations
+ * for federal, state, Social Security, and Medicare taxes.
  */
 export function calculateTaxes(
   grossIncome: number,
@@ -1094,54 +2113,94 @@ export function calculateTaxes(
   stateCode: string | null,
   preTaxContributions: PreTaxContributions
 ): TaxCalculation {
+  // Calculate total pre-tax contributions
   const totalPreTaxContributions = 
     preTaxContributions.traditional401k + 
     preTaxContributions.traditionalIRA + 
     preTaxContributions.hsa + 
     preTaxContributions.other;
   
-  // Adjusted Gross Income (AGI)
+  // Adjusted Gross Income (AGI) - Gross minus pre-tax contributions
   const adjustedGrossIncome = Math.max(0, grossIncome - totalPreTaxContributions);
   
-  // Standard deduction
-  const standardDeduction = STANDARD_DEDUCTIONS[filingStatus];
+  // Federal Standard Deduction (2025)
+  const federalStandardDeduction = STANDARD_DEDUCTIONS[filingStatus];
   
-  // Taxable income
-  const taxableIncome = Math.max(0, adjustedGrossIncome - standardDeduction);
+  // Federal Taxable Income
+  const federalTaxableIncome = Math.max(0, adjustedGrossIncome - federalStandardDeduction);
   
-  // Federal tax
-  const { tax: federalTax, marginalRate: marginalFederalRate } = calculateFederalTax(taxableIncome, filingStatus);
+  // Calculate Federal Tax with detailed bracket breakdown
+  const federalResult = calculateFederalTax(federalTaxableIncome, filingStatus);
   
-  // State tax (on AGI, simplified)
-  const stateTax = calculateStateTax(adjustedGrossIncome, stateCode);
+  // Calculate State Tax with detailed bracket breakdown
+  // Note: State taxes are typically calculated on AGI with state-specific deductions
+  const stateResult = calculateStateTax(adjustedGrossIncome, stateCode, filingStatus);
   
-  // FICA (on gross income, not reduced by pre-tax contributions except HSA doesn't reduce FICA in reality, but simplifying)
-  const fica = calculateFICATax(grossIncome, filingStatus);
+  // Calculate FICA with detailed breakdown
+  // Note: FICA is calculated on gross wages, NOT reduced by 401k/IRA contributions
+  // However, HSA contributions through payroll DO reduce FICA taxes
+  // For simplicity, we're applying FICA to gross income
+  const ficaResult = calculateFICATax(grossIncome, filingStatus);
   
-  const totalTax = federalTax + stateTax + fica.total;
+  // Calculate totals
+  const totalIncomeTax = federalResult.tax + stateResult.tax;
+  const totalTax = totalIncomeTax + ficaResult.totalFicaTax;
+  
+  // Net income after all taxes and pre-tax contributions
   const netIncome = grossIncome - totalTax - totalPreTaxContributions;
   
   return {
     grossIncome,
     filingStatus,
     stateCode,
+    
+    // Pre-tax deductions
     preTaxContributions,
     totalPreTaxContributions,
-    standardDeduction,
+    
+    // Deductions
+    federalStandardDeduction,
+    stateStandardDeduction: stateResult.standardDeduction,
+    statePersonalExemption: stateResult.personalExemption,
+    
+    // Taxable incomes
     adjustedGrossIncome,
-    taxableIncome,
-    federalTax,
-    stateTax,
-    socialSecurityTax: fica.socialSecurity,
-    medicareTax: fica.medicare,
-    ficaTax: fica.total,
+    federalTaxableIncome,
+    stateTaxableIncome: stateResult.taxableIncome,
+    
+    // Federal Tax Details
+    federalTax: federalResult.tax,
+    federalBracketBreakdown: federalResult.breakdown,
+    marginalFederalRate: federalResult.marginalRate,
+    effectiveFederalRate: grossIncome > 0 ? (federalResult.tax / grossIncome) * 100 : 0,
+    
+    // State Tax Details
+    stateTax: stateResult.tax,
+    stateTaxType: stateResult.type,
+    stateBracketBreakdown: stateResult.breakdown,
+    marginalStateRate: stateResult.marginalRate,
+    effectiveStateRate: grossIncome > 0 ? (stateResult.tax / grossIncome) * 100 : 0,
+    
+    // FICA Details
+    fica: ficaResult,
+    
+    // Summary
+    totalIncomeTax,
     totalTax,
-    effectiveFederalRate: grossIncome > 0 ? (federalTax / grossIncome) * 100 : 0,
-    effectiveStateRate: grossIncome > 0 ? (stateTax / grossIncome) * 100 : 0,
+    
+    // Legacy fields for compatibility
+    socialSecurityTax: ficaResult.socialSecurityTax,
+    medicareTax: ficaResult.totalMedicareTax,
+    ficaTax: ficaResult.totalFicaTax,
+    
+    // Effective rates
     effectiveTotalRate: grossIncome > 0 ? (totalTax / grossIncome) * 100 : 0,
-    marginalFederalRate,
+    effectiveFicaRate: ficaResult.effectiveFicaRate,
+    
+    // Net income
     netIncome,
     monthlyNetIncome: netIncome / 12,
+    monthlyGrossIncome: grossIncome / 12,
   };
 }
 
