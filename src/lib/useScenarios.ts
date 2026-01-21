@@ -245,29 +245,12 @@ export function useScenarios(): UseScenariosReturn {
       
       // Calculate growth rates
       const growthRates = calculateGrowthRates(currentNetWorth.total, scenarioSettings, false);
-      
-      // Generate projections for this scenario
-      const projections = generateProjections(
-        latestEntry,
-        currentNetWorth.total,
-        currentNetWorth.appreciation,
-        scenarioSettings,
-        false, // applyInflation - not needed, inflation is built into level-based spending
-        true   // useSpendingLevels - always use level-based spending
-      );
-      
-      // Calculate level info
-      const levelInfo = calculateLevelInfo(currentNetWorth.total, scenarioSettings, entries);
-      
-      // Find milestones
-      const fiRow = projections.find(p => p.isFiYear);
-      const crossoverRow = projections.find(p => p.isCrossover);
-      const nowRow = projections.find(p => p.year === 'Now');
-      
-      // Generate dynamic projections if income data is available
+
+      // Generate dynamic projections first if income data is available
+      // These will be used to provide tax-aware savings calculations
       const hasDynamicIncome = !!(scenario.grossIncome && scenario.grossIncome > 0);
       let dynamicProjections: YearlyProjectedFinancials[] | null = null;
-      
+
       if (hasDynamicIncome && scenario.grossIncome) {
         dynamicProjections = generateDynamicProjections(
           currentNetWorth.total,
@@ -292,6 +275,26 @@ export function useScenarios(): UseScenariosReturn {
           30 // 30 years of projections
         );
       }
+
+      // Generate projections for this scenario
+      // Pass dynamic projections to use tax-aware savings when available
+      const projections = generateProjections(
+        latestEntry,
+        currentNetWorth.total,
+        currentNetWorth.appreciation,
+        scenarioSettings,
+        false, // applyInflation - not needed, inflation is built into level-based spending
+        true,  // useSpendingLevels - always use level-based spending
+        dynamicProjections // Use tax-aware savings from dynamic projections when available
+      );
+
+      // Calculate level info
+      const levelInfo = calculateLevelInfo(currentNetWorth.total, scenarioSettings, entries);
+
+      // Find milestones
+      const fiRow = projections.find(p => p.isFiYear);
+      const crossoverRow = projections.find(p => p.isCrossover);
+      const nowRow = projections.find(p => p.year === 'Now');
       
       return {
         scenario,

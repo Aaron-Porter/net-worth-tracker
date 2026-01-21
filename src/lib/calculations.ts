@@ -622,7 +622,8 @@ export function generateProjections(
   currentAppreciation: number,
   settings: UserSettings,
   applyInflation: boolean = false,
-  useSpendingLevels: boolean = false
+  useSpendingLevels: boolean = false,
+  dynamicProjections?: YearlyProjectedFinancials[] | null
 ): ProjectionRow[] {
   if (!latestEntry) return [];
   
@@ -714,18 +715,28 @@ export function generateProjections(
     const yearMonthlySpend = getSpendingForYear(i, previousNetWorth);
     const yearAnnualSpending = yearMonthlySpend * 12;
 
-    // Calculate contribution for this year, applying income growth if specified
-    const growthMultiplier = incomeGrowthRate ? Math.pow(1 + incomeGrowthRate / 100, i) : 1;
-    const yearlyContributionGrown = yearlyContribution * growthMultiplier;
+    // Determine savings for this year
+    // If dynamic projections are available, use their tax-aware savings calculations
+    // Otherwise, use basic income-growth-adjusted calculation
+    let yearAnnualSavings: number;
 
-    // Calculate savings: base contribution (with growth) minus the spending increase from base level
-    // This reflects that increased spending comes from what would have been savings
-    const spendingIncrease = Math.max(0, yearAnnualSpending - baseAnnualSpend);
-    const yearAnnualSavings = Math.max(0, yearlyContributionGrown - spendingIncrease);
-    
+    if (dynamicProjections && dynamicProjections[i]) {
+      // Use tax-aware savings from dynamic projections
+      yearAnnualSavings = dynamicProjections[i].totalSavings;
+    } else {
+      // Calculate contribution for this year, applying income growth if specified
+      const growthMultiplier = incomeGrowthRate ? Math.pow(1 + incomeGrowthRate / 100, i) : 1;
+      const yearlyContributionGrown = yearlyContribution * growthMultiplier;
+
+      // Calculate savings: base contribution (with growth) minus the spending increase from base level
+      // This reflects that increased spending comes from what would have been savings
+      const spendingIncrease = Math.max(0, yearAnnualSpending - baseAnnualSpend);
+      yearAnnualSavings = Math.max(0, yearlyContributionGrown - spendingIncrease);
+    }
+
     // Calculate this year's interest on previous net worth
     const yearInterest = previousNetWorth * r;
-    
+
     // New net worth = previous + interest + savings for this year
     const yearNetWorth = previousNetWorth + yearInterest + yearAnnualSavings;
     
