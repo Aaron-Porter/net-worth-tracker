@@ -49,6 +49,11 @@ export interface ProjectionRow {
   isFiYear: boolean;          // First year where SWR covers expenses
   isCrossover: boolean;       // First year where interest > contributions
   swrCoversSpend: boolean;    // Whether SWR covers monthly spend
+  // Tax information (only available when using dynamic projections)
+  grossIncome?: number;       // Gross income for the year
+  totalTax?: number;          // Total taxes paid (federal + state + FICA)
+  netIncome?: number;         // After-tax income (grossIncome - totalTax - preTaxContributions)
+  preTaxContributions?: number; // Pre-tax retirement contributions
 }
 
 export interface GrowthRates {
@@ -677,7 +682,10 @@ export function generateProjections(
   const currentFiProgress = currentFiTarget > 0 ? (currentNetWorth / currentFiTarget) * 100 : 0;
   
   if (currentSwrCoversSpend) fiYearFound = true;
-  
+
+  // Get current year tax info from dynamic projections if available
+  const currentDynamicRow = dynamicProjections && dynamicProjections[0];
+
   data.push({
     year: 'Now',
     age: birthYear ? currentYear - birthYear : null,
@@ -699,6 +707,11 @@ export function generateProjections(
     isFiYear: false,
     isCrossover: false,
     swrCoversSpend: currentSwrCoversSpend,
+    // Add tax information from dynamic projections if available
+    grossIncome: currentDynamicRow?.grossIncome,
+    totalTax: currentDynamicRow?.totalTax,
+    netIncome: currentDynamicRow?.netIncome,
+    preTaxContributions: currentDynamicRow?.preTaxContributions,
   });
   
   // Track cumulative values for proper calculation
@@ -729,9 +742,9 @@ export function generateProjections(
       const yearlyContributionGrown = yearlyContribution * growthMultiplier;
 
       // Calculate savings: base contribution (with growth) minus the spending increase from base level
-      // This reflects that increased spending comes from what would have been savings
-      const spendingIncrease = Math.max(0, yearAnnualSpending - baseAnnualSpend);
-      yearAnnualSavings = Math.max(0, yearlyContributionGrown - spendingIncrease);
+      // Can be negative if spending increase exceeds income growth - represents drawing from net worth
+      const spendingIncrease = yearAnnualSpending - baseAnnualSpend;
+      yearAnnualSavings = yearlyContributionGrown - spendingIncrease;
     }
 
     // Calculate this year's interest on previous net worth
@@ -766,6 +779,9 @@ export function generateProjections(
     // Coast FI
     const coastFiYear = findCoastFiYear(yearNetWorth, year, i, settings, applyInflation, useSpendingLevels);
     
+    // Extract tax info from dynamic projections if available
+    const dynamicRow = dynamicProjections && dynamicProjections[i];
+
     data.push({
       year,
       age,
@@ -785,6 +801,11 @@ export function generateProjections(
       coastFiYear,
       coastFiAge: coastFiYear && birthYear ? coastFiYear - birthYear : null,
       isFiYear,
+      // Add tax information from dynamic projections if available
+      grossIncome: dynamicRow?.grossIncome,
+      totalTax: dynamicRow?.totalTax,
+      netIncome: dynamicRow?.netIncome,
+      preTaxContributions: dynamicRow?.preTaxContributions,
       isCrossover,
       swrCoversSpend,
     });
@@ -2534,8 +2555,9 @@ export function calculateYearProjection(
   const totalMonthlySpending = inflationAdjustedBaseBudget + netWorthPortion;
   const annualSpending = totalMonthlySpending * 12;
   
-  // Calculate post-tax savings
-  const postTaxSavings = Math.max(0, taxCalc.netIncome - annualSpending);
+  // Calculate post-tax savings (can be negative if spending exceeds income)
+  // When negative, this represents drawing from net worth to cover overspending
+  const postTaxSavings = taxCalc.netIncome - annualSpending;
   const totalSavings = totalPreTax + postTaxSavings;
   const savingsRate = grossIncome > 0 ? (totalSavings / grossIncome) * 100 : 0;
   
