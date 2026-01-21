@@ -237,6 +237,7 @@ export function useScenarios(): UseScenariosReturn {
         inflationRate: scenario.inflationRate,
         baseMonthlyBudget: scenario.baseMonthlyBudget,
         spendingGrowthRate: scenario.spendingGrowthRate,
+        incomeGrowthRate: scenario.incomeGrowthRate,
       };
       
       // Calculate real-time net worth

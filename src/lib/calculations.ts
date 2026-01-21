@@ -18,6 +18,7 @@ export interface UserSettings {
   inflationRate: number;      // Expected inflation rate (e.g., 3 for 3%)
   baseMonthlyBudget: number;  // Base spending floor for levels system
   spendingGrowthRate: number; // % of net worth allowed as additional spending
+  incomeGrowthRate?: number;  // Annual income growth rate (e.g., 3 for 3%) - optional
 }
 
 export interface NetWorthEntry {
@@ -632,6 +633,7 @@ export function generateProjections(
     monthlySpend,
     inflationRate,
     birthDate,
+    incomeGrowthRate,
   } = settings;
   
   const r = currentRate / 100;
@@ -711,11 +713,15 @@ export function generateProjections(
     // Calculate spending for this year based on previous year's ending net worth
     const yearMonthlySpend = getSpendingForYear(i, previousNetWorth);
     const yearAnnualSpending = yearMonthlySpend * 12;
-    
-    // Calculate savings: base contribution minus the spending increase from base level
+
+    // Calculate contribution for this year, applying income growth if specified
+    const growthMultiplier = incomeGrowthRate ? Math.pow(1 + incomeGrowthRate / 100, i) : 1;
+    const yearlyContributionGrown = yearlyContribution * growthMultiplier;
+
+    // Calculate savings: base contribution (with growth) minus the spending increase from base level
     // This reflects that increased spending comes from what would have been savings
     const spendingIncrease = Math.max(0, yearAnnualSpending - baseAnnualSpend);
-    const yearAnnualSavings = Math.max(0, yearlyContribution - spendingIncrease);
+    const yearAnnualSavings = Math.max(0, yearlyContributionGrown - spendingIncrease);
     
     // Calculate this year's interest on previous net worth
     const yearInterest = previousNetWorth * r;
