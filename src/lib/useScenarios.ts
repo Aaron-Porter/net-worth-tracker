@@ -198,7 +198,18 @@ export function useScenarios(): UseScenariosReturn {
   const updateProfile = useCallback((data: Partial<UserProfile>) => {
     setLocalProfile(prev => ({ ...prev, ...data }));
   }, []);
-  
+
+  // Real-time update mechanism - triggers recalculation every 50ms
+  const [realtimeTick, setRealtimeTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRealtimeTick(prev => prev + 1);
+    }, 50); // Update every 50ms for smooth real-time display
+
+    return () => clearInterval(interval);
+  }, []);
+
   const scenarios: Scenario[] = useMemo(() => {
     if (!rawScenarios) return [];
     return rawScenarios as Scenario[];
@@ -311,7 +322,7 @@ export function useScenarios(): UseScenariosReturn {
         hasDynamicIncome,
       };
     });
-  }, [latestEntry, selectedScenarios, localProfile, entries]);
+  }, [latestEntry, selectedScenarios, localProfile, entries, realtimeTick]);
   
   const createScenario = useCallback(async (data: CreateScenarioData) => {
     return await createMutation(data);
