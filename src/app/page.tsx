@@ -685,6 +685,7 @@ function ProjectionsTable({
   const currentYear = new Date().getFullYear();
   const birthYear = birthDate ? new Date(birthDate).getFullYear() : null;
   const [showYearlyDetail, setShowYearlyDetail] = useState(true);
+  const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('yearly');
   
   // Find the best and worst scenarios for various metrics
   const getBestWorst = (getValue: (sp: ScenarioProjection) => number | null, lowerIsBetter = false) => {
@@ -1015,20 +1016,47 @@ function ProjectionsTable({
 
       {/* Year-by-Year Detail Table */}
       <div className="bg-slate-800/30 rounded-xl border border-slate-700">
-        <button 
-          onClick={() => setShowYearlyDetail(!showYearlyDetail)}
-          className="w-full px-4 py-3 border-b border-slate-700 flex items-center justify-between hover:bg-slate-700/20 transition-colors"
-        >
-          <h3 className="text-sm font-semibold text-slate-300">Year-by-Year Breakdown</h3>
-          <svg 
-            className={`w-5 h-5 text-slate-400 transition-transform ${showYearlyDetail ? 'rotate-180' : ''}`} 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
+        <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h3 className="text-sm font-semibold text-slate-300">Year-by-Year Breakdown</h3>
+            {/* Monthly/Yearly Toggle */}
+            <div className="flex items-center bg-slate-700/50 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode('monthly')}
+                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                  viewMode === 'monthly'
+                    ? 'bg-slate-600 text-slate-100'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setViewMode('yearly')}
+                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                  viewMode === 'yearly'
+                    ? 'bg-slate-600 text-slate-100'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Yearly
+              </button>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowYearlyDetail(!showYearlyDetail)}
+            className="hover:bg-slate-700/20 p-1 rounded transition-colors"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+            <svg
+              className={`w-5 h-5 text-slate-400 transition-transform ${showYearlyDetail ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
         
         {showYearlyDetail && (
           <div className="overflow-x-auto">
@@ -1048,37 +1076,37 @@ function ProjectionsTable({
                       <div className="text-xs font-normal text-slate-500">Net Worth</div>
                     </th>
                   ))}
-                  {/* Annual Spending columns for each scenario */}
+                  {/* Spending columns for each scenario */}
                   {scenarioProjections.map(sp => (
-                    <th 
-                      key={`spend-${sp.scenario._id}`} 
+                    <th
+                      key={`spend-${sp.scenario._id}`}
                       className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
                       style={{ color: sp.scenario.color }}
                     >
                       {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Spending/yr</div>
+                      <div className="text-xs font-normal text-slate-500">Spending/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
                     </th>
                   ))}
-                  {/* Annual Savings columns for each scenario */}
+                  {/* Savings columns for each scenario */}
                   {scenarioProjections.map(sp => (
-                    <th 
-                      key={`save-${sp.scenario._id}`} 
+                    <th
+                      key={`save-${sp.scenario._id}`}
                       className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
                       style={{ color: sp.scenario.color }}
                     >
                       {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Savings/yr</div>
+                      <div className="text-xs font-normal text-slate-500">Savings/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
                     </th>
                   ))}
-                  {/* Monthly SWR columns for each scenario */}
+                  {/* SWR columns for each scenario */}
                   {scenarioProjections.map(sp => (
-                    <th 
-                      key={`swr-${sp.scenario._id}`} 
+                    <th
+                      key={`swr-${sp.scenario._id}`}
                       className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
                       style={{ color: sp.scenario.color }}
                     >
                       {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Monthly SWR</div>
+                      <div className="text-xs font-normal text-slate-500">SWR/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
                     </th>
                   ))}
                   {/* FI Progress columns for each scenario */}
@@ -1100,7 +1128,7 @@ function ProjectionsTable({
                       style={{ color: sp.scenario.color }}
                     >
                       {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Income/yr</div>
+                      <div className="text-xs font-normal text-slate-500">Income/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
                     </th>
                   ))}
                   {/* Total Tax columns for each scenario (only if income data exists) */}
@@ -1111,7 +1139,7 @@ function ProjectionsTable({
                       style={{ color: sp.scenario.color }}
                     >
                       {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Taxes/yr</div>
+                      <div className="text-xs font-normal text-slate-500">Taxes/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
                     </th>
                   ))}
                   {/* Net Income columns for each scenario (only if income data exists) */}
@@ -1122,7 +1150,7 @@ function ProjectionsTable({
                       style={{ color: sp.scenario.color }}
                     >
                       {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Net Income/yr</div>
+                      <div className="text-xs font-normal text-slate-500">Net Income/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
                     </th>
                   ))}
                 </tr>
@@ -1174,45 +1202,50 @@ function ProjectionsTable({
                           </td>
                         );
                       })}
-                      {/* Annual Spending values */}
+                      {/* Spending values */}
                       {scenarioProjections.map(sp => {
                         const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const spendingValue = scenarioRow?.annualSpending || 0;
+                        const displayValue = viewMode === 'monthly' ? spendingValue / 12 : spendingValue;
                         return (
-                          <td 
+                          <td
                             key={`spend-${sp.scenario._id}`}
                             className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 text-rose-400/80`}
                           >
-                            {formatCurrency(scenarioRow?.annualSpending || 0)}
+                            {formatCurrency(displayValue)}
                           </td>
                         );
                       })}
-                      {/* Annual Savings values */}
+                      {/* Savings values */}
                       {scenarioProjections.map(sp => {
                         const scenarioRow = sp.projections.find(p => p.year === row.year);
                         const savings = scenarioRow?.annualSavings || 0;
+                        const displayValue = viewMode === 'monthly' ? savings / 12 : savings;
                         return (
-                          <td 
+                          <td
                             key={`save-${sp.scenario._id}`}
                             className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
                               savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'
                             }`}
                           >
-                            {formatCurrency(savings)}
+                            {formatCurrency(displayValue)}
                           </td>
                         );
                       })}
-                      {/* Monthly SWR values */}
+                      {/* SWR values */}
                       {scenarioProjections.map(sp => {
                         const scenarioRow = sp.projections.find(p => p.year === row.year);
                         const swrCoversSpend = scenarioRow?.swrCoversSpend;
+                        const monthlySwr = scenarioRow?.monthlySwr || 0;
+                        const displayValue = viewMode === 'yearly' ? monthlySwr * 12 : monthlySwr;
                         return (
-                          <td 
+                          <td
                             key={`swr-${sp.scenario._id}`}
                             className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
                               swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'
                             }`}
                           >
-                            {formatCurrency(scenarioRow?.monthlySwr || 0)}
+                            {formatCurrency(displayValue)}
                           </td>
                         );
                       })}
@@ -1236,6 +1269,7 @@ function ProjectionsTable({
                         const scenarioRow = sp.projections.find(p => p.year === row.year);
                         const income = scenarioRow?.grossIncome || 0;
                         const hasIncome = sp.hasDynamicIncome && income > 0;
+                        const displayValue = viewMode === 'monthly' ? income / 12 : income;
                         return (
                           <td
                             key={`income-${sp.scenario._id}`}
@@ -1243,7 +1277,7 @@ function ProjectionsTable({
                               hasIncome ? 'text-sky-400/80' : 'text-slate-500'
                             }`}
                           >
-                            {hasIncome ? formatCurrency(income) : '-'}
+                            {hasIncome ? formatCurrency(displayValue) : '-'}
                           </td>
                         );
                       })}
@@ -1252,6 +1286,7 @@ function ProjectionsTable({
                         const scenarioRow = sp.projections.find(p => p.year === row.year);
                         const totalTax = scenarioRow?.totalTax || 0;
                         const hasTax = sp.hasDynamicIncome && totalTax > 0;
+                        const displayValue = viewMode === 'monthly' ? totalTax / 12 : totalTax;
                         return (
                           <td
                             key={`tax-${sp.scenario._id}`}
@@ -1259,7 +1294,7 @@ function ProjectionsTable({
                               hasTax ? 'text-red-400/80' : 'text-slate-500'
                             }`}
                           >
-                            {hasTax ? formatCurrency(totalTax) : '-'}
+                            {hasTax ? formatCurrency(displayValue) : '-'}
                           </td>
                         );
                       })}
@@ -1268,6 +1303,7 @@ function ProjectionsTable({
                         const scenarioRow = sp.projections.find(p => p.year === row.year);
                         const netIncome = scenarioRow?.netIncome || 0;
                         const hasNetIncome = sp.hasDynamicIncome && netIncome > 0;
+                        const displayValue = viewMode === 'monthly' ? netIncome / 12 : netIncome;
                         return (
                           <td
                             key={`netincome-${sp.scenario._id}`}
@@ -1275,7 +1311,7 @@ function ProjectionsTable({
                               hasNetIncome ? 'text-emerald-400/80' : 'text-slate-500'
                             }`}
                           >
-                            {hasNetIncome ? formatCurrency(netIncome) : '-'}
+                            {hasNetIncome ? formatCurrency(displayValue) : '-'}
                           </td>
                         );
                       })}
