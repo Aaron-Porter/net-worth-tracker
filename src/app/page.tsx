@@ -15,9 +15,12 @@ import {
   formatPercent,
   calculateScenarioIncome,
   STATE_TAX_RATES,
+  STATE_TAX_INFO,
   CONTRIBUTION_LIMITS,
   FilingStatus,
   ScenarioIncomeBreakdown,
+  TaxCalculation,
+  BracketBreakdown,
 } from '../lib/calculations'
 import {
   LineChart,
@@ -1540,6 +1543,417 @@ function LevelsTab({
 }
 
 // ============================================================================
+// TAX CALCULATION DETAILS COMPONENT
+// Shows the full breakdown of how taxes are calculated
+// ============================================================================
+
+interface TaxCalculationDetailsProps {
+  taxes: TaxCalculation;
+  isExpanded?: boolean;
+  onToggle?: () => void;
+}
+
+function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalculationDetailsProps) {
+  const [expanded, setExpanded] = useState(isExpanded);
+  
+  const toggleExpanded = () => {
+    setExpanded(!expanded);
+    onToggle?.();
+  };
+
+  const stateName = taxes.stateCode ? STATE_TAX_INFO[taxes.stateCode]?.name || taxes.stateCode : null;
+
+  return (
+    <div className="bg-slate-800/50 rounded-xl border border-red-500/30 overflow-hidden">
+      {/* Header - Always visible */}
+      <button
+        onClick={toggleExpanded}
+        className="w-full p-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
+            <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div className="text-left">
+            <h4 className="text-sm font-semibold text-slate-200">Tax Calculation Details</h4>
+            <p className="text-xs text-slate-500">See exactly how your {formatCurrency(taxes.totalTax)} tax burden is calculated</p>
+          </div>
+        </div>
+        <svg
+          className={`w-5 h-5 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {/* Expanded Content */}
+      {expanded && (
+        <div className="border-t border-slate-700 p-4 space-y-6">
+          {/* Summary Overview */}
+          <div className="grid grid-cols-3 gap-4 text-center pb-4 border-b border-slate-700">
+            <div>
+              <p className="text-xs text-slate-500 uppercase mb-1">Gross Income</p>
+              <p className="text-lg font-mono text-slate-200">{formatCurrency(taxes.grossIncome)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 uppercase mb-1">Total Tax</p>
+              <p className="text-lg font-mono text-red-400">{formatCurrency(taxes.totalTax)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 uppercase mb-1">Net Income</p>
+              <p className="text-lg font-mono text-emerald-400">{formatCurrency(taxes.netIncome)}</p>
+            </div>
+          </div>
+
+          {/* Step 1: Pre-tax Deductions */}
+          {taxes.totalPreTaxContributions > 0 && (
+            <div>
+              <h5 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                <span className="w-5 h-5 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                Pre-tax Deductions
+              </h5>
+              <div className="bg-slate-900/50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">Gross Income</span>
+                  <span className="font-mono text-slate-200">{formatCurrency(taxes.grossIncome)}</span>
+                </div>
+                {taxes.preTaxContributions.traditional401k > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">− 401(k) Contribution</span>
+                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.traditional401k)}</span>
+                  </div>
+                )}
+                {taxes.preTaxContributions.traditionalIRA > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">− Traditional IRA</span>
+                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.traditionalIRA)}</span>
+                  </div>
+                )}
+                {taxes.preTaxContributions.hsa > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">− HSA Contribution</span>
+                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.hsa)}</span>
+                  </div>
+                )}
+                {taxes.preTaxContributions.other > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">− Other Pre-tax</span>
+                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.other)}</span>
+                  </div>
+                )}
+                <div className="border-t border-slate-700 pt-2 flex justify-between text-sm font-medium">
+                  <span className="text-slate-300">Adjusted Gross Income (AGI)</span>
+                  <span className="font-mono text-slate-200">{formatCurrency(taxes.adjustedGrossIncome)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Federal Tax */}
+          <div>
+            <h5 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+              <span className="w-5 h-5 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center text-xs font-bold">
+                {taxes.totalPreTaxContributions > 0 ? '2' : '1'}
+              </span>
+              Federal Income Tax
+            </h5>
+            <div className="bg-slate-900/50 rounded-lg p-4 space-y-3">
+              {/* Standard Deduction */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">
+                    {taxes.totalPreTaxContributions > 0 ? 'Adjusted Gross Income' : 'Gross Income'}
+                  </span>
+                  <span className="font-mono text-slate-200">
+                    {formatCurrency(taxes.totalPreTaxContributions > 0 ? taxes.adjustedGrossIncome : taxes.grossIncome)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">− Standard Deduction ({taxes.filingStatus.replace('_', ' ')})</span>
+                  <span className="font-mono text-blue-400">−{formatCurrency(taxes.federalStandardDeduction)}</span>
+                </div>
+                <div className="border-t border-slate-700 pt-2 flex justify-between text-sm font-medium">
+                  <span className="text-slate-300">Federal Taxable Income</span>
+                  <span className="font-mono text-slate-200">{formatCurrency(taxes.federalTaxableIncome)}</span>
+                </div>
+              </div>
+
+              {/* Bracket Breakdown */}
+              {taxes.federalBracketBreakdown.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs text-slate-500 uppercase mb-2">Federal Tax Brackets</p>
+                  <div className="space-y-1">
+                    {taxes.federalBracketBreakdown.map((bracket, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs">
+                        <div className="w-16 text-slate-500">
+                          {formatPercent(bracket.rate, 0)} rate
+                        </div>
+                        <div className="flex-1 h-5 bg-slate-800 rounded relative overflow-hidden">
+                          <div
+                            className="absolute inset-y-0 left-0 bg-blue-500/30 rounded"
+                            style={{
+                              width: `${Math.min(100, (bracket.taxableInBracket / taxes.federalTaxableIncome) * 100)}%`
+                            }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-between px-2">
+                            <span className="text-slate-400">
+                              {formatCurrency(bracket.bracketMin, 0)} – {bracket.bracketMax === Infinity ? '∞' : formatCurrency(bracket.bracketMax, 0)}
+                            </span>
+                            <span className="text-slate-300 font-mono">{formatCurrency(bracket.taxableInBracket, 0)}</span>
+                          </div>
+                        </div>
+                        <div className="w-20 text-right font-mono text-red-400">
+                          {formatCurrency(bracket.taxFromBracket)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Federal Tax Total */}
+              <div className="border-t border-slate-700 pt-3 mt-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-sm font-medium text-slate-300">Federal Tax</span>
+                    <span className="text-xs text-slate-500 ml-2">
+                      (Marginal: {formatPercent(taxes.marginalFederalRate)} • Effective: {formatPercent(taxes.effectiveFederalRate)})
+                    </span>
+                  </div>
+                  <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.federalTax)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 3: State Tax */}
+          <div>
+            <h5 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+              <span className="w-5 h-5 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center text-xs font-bold">
+                {taxes.totalPreTaxContributions > 0 ? '3' : '2'}
+              </span>
+              State Income Tax {stateName && <span className="text-slate-500 font-normal">({stateName})</span>}
+            </h5>
+            <div className="bg-slate-900/50 rounded-lg p-4">
+              {taxes.stateTaxType === 'none' ? (
+                <div className="text-center py-4">
+                  <p className="text-emerald-400 font-medium">No State Income Tax</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {stateName || 'Your state'} does not have a state income tax
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* State Deductions */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Adjusted Gross Income</span>
+                      <span className="font-mono text-slate-200">{formatCurrency(taxes.adjustedGrossIncome)}</span>
+                    </div>
+                    {taxes.stateStandardDeduction > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">− State Standard Deduction</span>
+                        <span className="font-mono text-purple-400">−{formatCurrency(taxes.stateStandardDeduction)}</span>
+                      </div>
+                    )}
+                    {taxes.statePersonalExemption > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">− Personal Exemption</span>
+                        <span className="font-mono text-purple-400">−{formatCurrency(taxes.statePersonalExemption)}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-slate-700 pt-2 flex justify-between text-sm font-medium">
+                      <span className="text-slate-300">State Taxable Income</span>
+                      <span className="font-mono text-slate-200">{formatCurrency(taxes.stateTaxableIncome)}</span>
+                    </div>
+                  </div>
+
+                  {/* State Bracket Breakdown */}
+                  {taxes.stateBracketBreakdown.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-xs text-slate-500 uppercase mb-2">
+                        {taxes.stateTaxType === 'flat' ? 'Flat Rate' : 'State Tax Brackets'}
+                      </p>
+                      <div className="space-y-1">
+                        {taxes.stateBracketBreakdown.map((bracket, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-xs">
+                            <div className="w-16 text-slate-500">
+                              {formatPercent(bracket.rate, 1)} rate
+                            </div>
+                            <div className="flex-1 h-5 bg-slate-800 rounded relative overflow-hidden">
+                              <div
+                                className="absolute inset-y-0 left-0 bg-purple-500/30 rounded"
+                                style={{
+                                  width: `${Math.min(100, taxes.stateTaxableIncome > 0 ? (bracket.taxableInBracket / taxes.stateTaxableIncome) * 100 : 0)}%`
+                                }}
+                              />
+                              <div className="absolute inset-0 flex items-center justify-between px-2">
+                                <span className="text-slate-400">
+                                  {taxes.stateTaxType === 'flat' ? 'All income' : 
+                                    `${formatCurrency(bracket.bracketMin, 0)} – ${bracket.bracketMax === Infinity ? '∞' : formatCurrency(bracket.bracketMax, 0)}`
+                                  }
+                                </span>
+                                <span className="text-slate-300 font-mono">{formatCurrency(bracket.taxableInBracket, 0)}</span>
+                              </div>
+                            </div>
+                            <div className="w-20 text-right font-mono text-red-400">
+                              {formatCurrency(bracket.taxFromBracket)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* State Tax Total */}
+                  <div className="border-t border-slate-700 pt-3 mt-3">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="text-sm font-medium text-slate-300">State Tax</span>
+                        <span className="text-xs text-slate-500 ml-2">
+                          (Marginal: {formatPercent(taxes.marginalStateRate)} • Effective: {formatPercent(taxes.effectiveStateRate)})
+                        </span>
+                      </div>
+                      <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.stateTax)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Step 4: FICA Taxes */}
+          <div>
+            <h5 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+              <span className="w-5 h-5 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center text-xs font-bold">
+                {taxes.totalPreTaxContributions > 0 ? '4' : '3'}
+              </span>
+              FICA Taxes (Social Security + Medicare)
+            </h5>
+            <div className="bg-slate-900/50 rounded-lg p-4 space-y-4">
+              {/* Social Security */}
+              <div>
+                <p className="text-xs text-slate-500 uppercase mb-2">Social Security ({formatPercent(taxes.fica.socialSecurityRate)})</p>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Wages Subject to SS</span>
+                    <span className="font-mono text-slate-200">
+                      {formatCurrency(taxes.fica.socialSecurityWages)}
+                      {taxes.fica.wagesAboveSsCap > 0 && (
+                        <span className="text-slate-500 text-xs ml-1">(capped at {formatCurrency(taxes.fica.socialSecurityWageCap)})</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">× {formatPercent(taxes.fica.socialSecurityRate)} rate</span>
+                    <span className="font-mono text-red-400">{formatCurrency(taxes.fica.socialSecurityTax)}</span>
+                  </div>
+                  {taxes.fica.wagesAboveSsCap > 0 && (
+                    <p className="text-xs text-emerald-400">
+                      You saved {formatCurrency(taxes.fica.wagesAboveSsCap * (taxes.fica.socialSecurityRate / 100))} because {formatCurrency(taxes.fica.wagesAboveSsCap)} of your income exceeds the SS wage cap
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Medicare */}
+              <div className="border-t border-slate-700 pt-4">
+                <p className="text-xs text-slate-500 uppercase mb-2">Medicare</p>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">All Wages × {formatPercent(taxes.fica.medicareBaseRate)} base rate</span>
+                    <span className="font-mono text-red-400">{formatCurrency(taxes.fica.medicareBaseTax)}</span>
+                  </div>
+                  {taxes.fica.additionalMedicareTax > 0 && (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">
+                          Wages above {formatCurrency(taxes.fica.additionalMedicareThreshold)} × {formatPercent(taxes.fica.additionalMedicareRate)} additional rate
+                        </span>
+                        <span className="font-mono text-red-400">{formatCurrency(taxes.fica.additionalMedicareTax)}</span>
+                      </div>
+                      <p className="text-xs text-amber-400">
+                        Additional Medicare Tax applies to {formatCurrency(taxes.fica.additionalMedicareWages)} of income above the {formatCurrency(taxes.fica.additionalMedicareThreshold)} threshold
+                      </p>
+                    </>
+                  )}
+                  <div className="flex justify-between text-sm font-medium border-t border-slate-700 pt-2">
+                    <span className="text-slate-300">Total Medicare Tax</span>
+                    <span className="font-mono text-red-400">{formatCurrency(taxes.fica.totalMedicareTax)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* FICA Total */}
+              <div className="border-t border-slate-700 pt-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-sm font-medium text-slate-300">Total FICA</span>
+                    <span className="text-xs text-slate-500 ml-2">
+                      (Effective: {formatPercent(taxes.fica.effectiveFicaRate)})
+                    </span>
+                  </div>
+                  <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.fica.totalFicaTax)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Final Summary */}
+          <div className="bg-gradient-to-br from-red-500/10 to-amber-500/10 rounded-lg p-4 border border-red-500/30">
+            <h5 className="text-sm font-medium text-slate-200 mb-3">Tax Summary</h5>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Federal Income Tax</span>
+                <span className="font-mono text-red-400">{formatCurrency(taxes.federalTax)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">State Income Tax</span>
+                <span className="font-mono text-red-400">{formatCurrency(taxes.stateTax)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Social Security</span>
+                <span className="font-mono text-red-400">{formatCurrency(taxes.fica.socialSecurityTax)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Medicare</span>
+                <span className="font-mono text-red-400">{formatCurrency(taxes.fica.totalMedicareTax)}</span>
+              </div>
+              <div className="border-t border-red-500/30 pt-2 mt-2 flex justify-between font-medium">
+                <span className="text-slate-200">Total Tax Burden</span>
+                <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.totalTax)}</span>
+              </div>
+              <div className="flex justify-between text-sm text-slate-500">
+                <span>Effective Total Tax Rate</span>
+                <span className="font-mono">{formatPercent(taxes.effectiveTotalRate)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Net Income */}
+          <div className="bg-emerald-500/10 rounded-lg p-4 border border-emerald-500/30">
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="text-sm font-medium text-emerald-400">Net Income After Taxes</span>
+                <p className="text-xs text-slate-500 mt-1">
+                  {formatCurrency(taxes.monthlyNetIncome)}/month • {formatCurrency(taxes.monthlyNetIncome / 4.33)}/week
+                </p>
+              </div>
+              <span className="text-2xl font-mono text-emerald-400">{formatCurrency(taxes.netIncome)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // SCENARIOS TAB - Step-by-Step Scenario Builder
 // ============================================================================
 
@@ -2321,6 +2735,11 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                   )}
                 </div>
               )}
+
+              {/* Tax Calculation Details */}
+              {incomeBreakdown && (
+                <TaxCalculationDetails taxes={incomeBreakdown.taxes} />
+              )}
             </div>
             <WizardNav />
           </>
@@ -2428,6 +2847,11 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 <p className="text-2xl font-mono text-red-400">{formatPercent(incomeBreakdown.taxes.effectiveTotalRate)}</p>
                 <p className="text-xs text-slate-500 mt-1">{formatCurrency(incomeBreakdown.taxes.totalTax)} total taxes</p>
               </div>
+            </div>
+
+            {/* Tax Calculation Details - Expandable */}
+            <div className="mb-4">
+              <TaxCalculationDetails taxes={incomeBreakdown.taxes} />
             </div>
 
             {/* Dynamic Projections Preview */}
