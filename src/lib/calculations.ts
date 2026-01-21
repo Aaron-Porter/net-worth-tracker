@@ -49,6 +49,11 @@ export interface ProjectionRow {
   isFiYear: boolean;          // First year where SWR covers expenses
   isCrossover: boolean;       // First year where interest > contributions
   swrCoversSpend: boolean;    // Whether SWR covers monthly spend
+  // Tax information (only available when using dynamic projections)
+  grossIncome?: number;       // Gross income for the year
+  totalTax?: number;          // Total taxes paid (federal + state + FICA)
+  netIncome?: number;         // After-tax income (grossIncome - totalTax - preTaxContributions)
+  preTaxContributions?: number; // Pre-tax retirement contributions
 }
 
 export interface GrowthRates {
@@ -677,7 +682,10 @@ export function generateProjections(
   const currentFiProgress = currentFiTarget > 0 ? (currentNetWorth / currentFiTarget) * 100 : 0;
   
   if (currentSwrCoversSpend) fiYearFound = true;
-  
+
+  // Get current year tax info from dynamic projections if available
+  const currentDynamicRow = dynamicProjections && dynamicProjections[0];
+
   data.push({
     year: 'Now',
     age: birthYear ? currentYear - birthYear : null,
@@ -699,6 +707,11 @@ export function generateProjections(
     isFiYear: false,
     isCrossover: false,
     swrCoversSpend: currentSwrCoversSpend,
+    // Add tax information from dynamic projections if available
+    grossIncome: currentDynamicRow?.grossIncome,
+    totalTax: currentDynamicRow?.totalTax,
+    netIncome: currentDynamicRow?.netIncome,
+    preTaxContributions: currentDynamicRow?.preTaxContributions,
   });
   
   // Track cumulative values for proper calculation
@@ -766,6 +779,9 @@ export function generateProjections(
     // Coast FI
     const coastFiYear = findCoastFiYear(yearNetWorth, year, i, settings, applyInflation, useSpendingLevels);
     
+    // Extract tax info from dynamic projections if available
+    const dynamicRow = dynamicProjections && dynamicProjections[i];
+
     data.push({
       year,
       age,
@@ -785,6 +801,11 @@ export function generateProjections(
       coastFiYear,
       coastFiAge: coastFiYear && birthYear ? coastFiYear - birthYear : null,
       isFiYear,
+      // Add tax information from dynamic projections if available
+      grossIncome: dynamicRow?.grossIncome,
+      totalTax: dynamicRow?.totalTax,
+      netIncome: dynamicRow?.netIncome,
+      preTaxContributions: dynamicRow?.preTaxContributions,
       isCrossover,
       swrCoversSpend,
     });

@@ -1094,13 +1094,35 @@ function ProjectionsTable({
                   ))}
                   {/* Gross Income columns for each scenario (only if income data exists) */}
                   {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => (
-                    <th 
-                      key={`income-${sp.scenario._id}`} 
+                    <th
+                      key={`income-${sp.scenario._id}`}
                       className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
                       style={{ color: sp.scenario.color }}
                     >
                       {sp.scenario.name}
                       <div className="text-xs font-normal text-slate-500">Income/yr</div>
+                    </th>
+                  ))}
+                  {/* Total Tax columns for each scenario (only if income data exists) */}
+                  {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => (
+                    <th
+                      key={`tax-${sp.scenario._id}`}
+                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.scenario.name}
+                      <div className="text-xs font-normal text-slate-500">Taxes/yr</div>
+                    </th>
+                  ))}
+                  {/* Net Income columns for each scenario (only if income data exists) */}
+                  {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => (
+                    <th
+                      key={`netincome-${sp.scenario._id}`}
+                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.scenario.name}
+                      <div className="text-xs font-normal text-slate-500">Net Income/yr</div>
                     </th>
                   ))}
                 </tr>
@@ -1211,19 +1233,49 @@ function ProjectionsTable({
                       })}
                       {/* Gross Income values (only if any scenario has income data) */}
                       {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => {
-                        // For dynamic projections, match by year
-                        const yearNum = row.year === 'Now' ? currentYear : row.year;
-                        const dynamicRow = sp.dynamicProjections?.find(d => d.year === yearNum);
-                        const income = dynamicRow?.grossIncome || 0;
+                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const income = scenarioRow?.grossIncome || 0;
                         const hasIncome = sp.hasDynamicIncome && income > 0;
                         return (
-                          <td 
+                          <td
                             key={`income-${sp.scenario._id}`}
                             className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
                               hasIncome ? 'text-sky-400/80' : 'text-slate-500'
                             }`}
                           >
                             {hasIncome ? formatCurrency(income) : '-'}
+                          </td>
+                        );
+                      })}
+                      {/* Total Tax values (only if any scenario has income data) */}
+                      {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => {
+                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const totalTax = scenarioRow?.totalTax || 0;
+                        const hasTax = sp.hasDynamicIncome && totalTax > 0;
+                        return (
+                          <td
+                            key={`tax-${sp.scenario._id}`}
+                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
+                              hasTax ? 'text-red-400/80' : 'text-slate-500'
+                            }`}
+                          >
+                            {hasTax ? formatCurrency(totalTax) : '-'}
+                          </td>
+                        );
+                      })}
+                      {/* Net Income values (only if any scenario has income data) */}
+                      {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => {
+                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const netIncome = scenarioRow?.netIncome || 0;
+                        const hasNetIncome = sp.hasDynamicIncome && netIncome > 0;
+                        return (
+                          <td
+                            key={`netincome-${sp.scenario._id}`}
+                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
+                              hasNetIncome ? 'text-emerald-400/80' : 'text-slate-500'
+                            }`}
+                          >
+                            {hasNetIncome ? formatCurrency(netIncome) : '-'}
                           </td>
                         );
                       })}
