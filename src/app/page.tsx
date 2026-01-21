@@ -906,6 +906,84 @@ function ProjectionsTable({
   
   const primaryProjection = scenarioProjections[0];
 
+  // Transform projections based on view mode
+  const displayRows = useMemo(() => {
+    if (viewMode === 'yearly') {
+      return primaryProjection.projections;
+    }
+
+    // For monthly view, expand each year into 12 months
+    const monthlyRows: any[] = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    for (let i = 0; i < primaryProjection.projections.length; i++) {
+      const currentRow = primaryProjection.projections[i];
+      const nextRow = primaryProjection.projections[i + 1];
+
+      // Skip if this is the "Now" row, just show it once
+      if (currentRow.year === 'Now') {
+        monthlyRows.push({
+          ...currentRow,
+          displayYear: 'Now',
+          monthIndex: 0,
+        });
+        continue;
+      }
+
+      // Generate 12 months for this year
+      for (let month = 0; month < 12; month++) {
+        const monthFraction = month / 12;
+        const year = currentRow.year as number;
+
+        // Interpolate values between this year and next year
+        const interpolate = (current: number, next: number | undefined) => {
+          if (next === undefined || !nextRow) return current;
+          return current + (next - current) * monthFraction;
+        };
+
+        // Get corresponding rows from next year for interpolation
+        const nextYearRow = nextRow && nextRow.year !== 'Now' ? nextRow : null;
+
+        // Calculate interpolated age
+        let interpolatedAge = currentRow.age;
+        if (interpolatedAge !== null && birthYear !== null) {
+          interpolatedAge = year - birthYear + monthFraction;
+        }
+
+        monthlyRows.push({
+          year: year,
+          displayYear: `${monthNames[month]} ${year}`,
+          monthIndex: month,
+          age: interpolatedAge,
+          yearsFromEntry: currentRow.yearsFromEntry + monthFraction,
+          netWorth: nextYearRow ? interpolate(currentRow.netWorth, nextYearRow.netWorth) : currentRow.netWorth,
+          interest: currentRow.interest / 12,
+          contributed: currentRow.contributed / 12,
+          annualSwr: currentRow.annualSwr,
+          monthlySwr: currentRow.monthlySwr,
+          weeklySwr: currentRow.weeklySwr,
+          dailySwr: currentRow.dailySwr,
+          monthlySpend: currentRow.monthlySpend,
+          annualSpending: currentRow.annualSpending,
+          annualSavings: currentRow.annualSavings,
+          fiTarget: currentRow.fiTarget,
+          fiProgress: nextYearRow ? interpolate(currentRow.fiProgress, nextYearRow.fiProgress) : currentRow.fiProgress,
+          coastFiYear: currentRow.coastFiYear,
+          coastFiAge: currentRow.coastFiAge,
+          isFiYear: currentRow.isFiYear && month === 0, // Only mark first month of FI year
+          isCrossover: currentRow.isCrossover && month === 0,
+          swrCoversSpend: currentRow.swrCoversSpend,
+          grossIncome: currentRow.grossIncome,
+          totalTax: currentRow.totalTax,
+          netIncome: currentRow.netIncome,
+          preTaxContributions: currentRow.preTaxContributions,
+        });
+      }
+    }
+
+    return monthlyRows;
+  }, [viewMode, primaryProjection.projections, birthYear]);
+
   return (
     <div className="flex-1 overflow-auto space-y-4">
       {/* Summary Comparison Table */}
@@ -1063,7 +1141,9 @@ function ProjectionsTable({
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-800 z-10">
                 <tr className="border-b border-slate-700">
-                  <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Year</th>
+                  <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                    {viewMode === 'monthly' ? 'Month' : 'Year'}
+                  </th>
                   {birthDate && <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Age</th>}
                   {/* Net Worth columns for each scenario */}
                   {scenarioProjections.map(sp => (
@@ -1156,12 +1236,14 @@ function ProjectionsTable({
                 </tr>
               </thead>
               <tbody>
-                {primaryProjection.projections.map((row) => {
-                  const isNow = row.year === 'Now';
-                  
+                {displayRows.map((row, rowIndex) => {
+                  const isNow = row.year === 'Now' || row.displayYear === 'Now';
+                  const displayYearValue = row.displayYear || row.year;
+                  const lookupYear = row.year;
+
                   // Check if any scenario hits FI this year
                   const scenarioFiStatus = scenarioProjections.map(sp => {
-                    const scenarioRow = sp.projections.find(p => p.year === row.year);
+                    const scenarioRow = sp.projections.find(p => p.year === lookupYear);
                     return {
                       scenario: sp,
                       isFiYear: scenarioRow?.isFiYear || false,
@@ -1170,41 +1252,64 @@ function ProjectionsTable({
                   });
                   const anyFiYear = scenarioFiStatus.some(s => s.isFiYear);
                   const anyFiNow = isNow && scenarioFiStatus.some(s => s.swrCoversSpend);
-                  
+
+                  // Generate unique key
+                  const rowKey = isNow ? 'now' : `${lookupYear}-${row.monthIndex || 0}`;
+
                   return (
                     <tr
-                      key={row.year}
+                      key={rowKey}
                       className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${
                         isNow ? 'border-b-2 border-slate-600 bg-slate-700/30' : ''
                       } ${anyFiYear ? 'bg-emerald-900/20' : ''
                       } ${anyFiNow ? 'bg-emerald-900/30' : ''}`}
                     >
                       <td className={`py-2 px-3 font-medium ${isNow ? 'text-slate-200 font-semibold' : 'text-slate-300'}`}>
-                        {row.year}
+                        {displayYearValue}
                       </td>
                       {birthDate && (
                         <td className={`py-2 px-3 ${isNow ? 'text-slate-300 font-medium' : 'text-slate-400'}`}>
-                          {row.age}
+                          {row.age !== null && typeof row.age === 'number' ? Math.floor(row.age) : row.age}
                         </td>
                       )}
                       {/* Net Worth values */}
                       {scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === row.year);
-                        const isFiYear = scenarioRow?.isFiYear;
+                        // For monthly view, we need to interpolate between years
+                        let netWorthValue = 0;
+                        let isFiYear = false;
+
+                        if (viewMode === 'monthly' && !isNow) {
+                          const currentYearRow = sp.projections.find(p => p.year === lookupYear);
+                          const nextYearRow = sp.projections.find(p => p.year === (lookupYear as number) + 1);
+
+                          if (currentYearRow && nextYearRow) {
+                            const monthFraction = (row.monthIndex || 0) / 12;
+                            netWorthValue = currentYearRow.netWorth + (nextYearRow.netWorth - currentYearRow.netWorth) * monthFraction;
+                          } else if (currentYearRow) {
+                            netWorthValue = currentYearRow.netWorth;
+                          }
+
+                          isFiYear = currentYearRow?.isFiYear && (row.monthIndex || 0) === 0;
+                        } else {
+                          const scenarioRow = sp.projections.find(p => p.year === lookupYear);
+                          netWorthValue = scenarioRow?.netWorth || 0;
+                          isFiYear = scenarioRow?.isFiYear || false;
+                        }
+
                         return (
-                          <td 
+                          <td
                             key={`nw-${sp.scenario._id}`}
                             className={`py-2 px-3 text-right font-mono ${isNow ? 'font-semibold' : ''}`}
                             style={{ color: sp.scenario.color }}
                           >
-                            {formatCurrency(scenarioRow?.netWorth || 0)}
+                            {formatCurrency(netWorthValue)}
                             {isFiYear && <span className="ml-1 text-xs text-emerald-400">FI</span>}
                           </td>
                         );
                       })}
                       {/* Spending values */}
                       {scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
                         const spendingValue = scenarioRow?.annualSpending || 0;
                         const displayValue = viewMode === 'monthly' ? spendingValue / 12 : spendingValue;
                         return (
@@ -1218,7 +1323,7 @@ function ProjectionsTable({
                       })}
                       {/* Savings values */}
                       {scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
                         const savings = scenarioRow?.annualSavings || 0;
                         const displayValue = viewMode === 'monthly' ? savings / 12 : savings;
                         return (
@@ -1234,7 +1339,7 @@ function ProjectionsTable({
                       })}
                       {/* SWR values */}
                       {scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
                         const swrCoversSpend = scenarioRow?.swrCoversSpend;
                         const monthlySwr = scenarioRow?.monthlySwr || 0;
                         const displayValue = viewMode === 'yearly' ? monthlySwr * 12 : monthlySwr;
@@ -1251,10 +1356,17 @@ function ProjectionsTable({
                       })}
                       {/* FI Progress values */}
                       {scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === row.year);
-                        const fiProgress = scenarioRow?.fiProgress || 0;
+                        // Use interpolated value from row for monthly view
+                        let fiProgress = 0;
+                        if (viewMode === 'monthly' && !isNow) {
+                          fiProgress = row.fiProgress || 0;
+                        } else {
+                          const scenarioRow = sp.projections.find(p => p.year === lookupYear);
+                          fiProgress = scenarioRow?.fiProgress || 0;
+                        }
+
                         return (
-                          <td 
+                          <td
                             key={`fi-${sp.scenario._id}`}
                             className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
                               fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'
@@ -1266,7 +1378,7 @@ function ProjectionsTable({
                       })}
                       {/* Gross Income values (only if any scenario has income data) */}
                       {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
                         const income = scenarioRow?.grossIncome || 0;
                         const hasIncome = sp.hasDynamicIncome && income > 0;
                         const displayValue = viewMode === 'monthly' ? income / 12 : income;
@@ -1283,7 +1395,7 @@ function ProjectionsTable({
                       })}
                       {/* Total Tax values (only if any scenario has income data) */}
                       {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
                         const totalTax = scenarioRow?.totalTax || 0;
                         const hasTax = sp.hasDynamicIncome && totalTax > 0;
                         const displayValue = viewMode === 'monthly' ? totalTax / 12 : totalTax;
@@ -1300,7 +1412,7 @@ function ProjectionsTable({
                       })}
                       {/* Net Income values (only if any scenario has income data) */}
                       {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === row.year);
+                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
                         const netIncome = scenarioRow?.netIncome || 0;
                         const hasNetIncome = sp.hasDynamicIncome && netIncome > 0;
                         const displayValue = viewMode === 'monthly' ? netIncome / 12 : netIncome;
