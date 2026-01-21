@@ -112,12 +112,12 @@ function AuthenticatedApp() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
       {/* Tab Navigation */}
-      <div className="sticky top-0 z-20 bg-slate-900/80 backdrop-blur border-b border-slate-700 overflow-x-hidden">
-        <div className="container mx-auto px-4">
-          <div className="flex gap-1 items-center min-w-0">
+      <div className="sticky top-0 z-20 bg-slate-900/80 backdrop-blur border-b border-slate-700 overflow-x-auto scrollbar-hide">
+        <div className="container mx-auto px-2 sm:px-4">
+          <div className="flex gap-1 items-center min-w-0 touch-pan-x">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`px-6 py-4 font-medium transition-colors relative ${
+              className={`px-3 py-3 sm:px-6 sm:py-4 font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === 'dashboard'
                   ? 'text-emerald-400'
                   : 'text-slate-400 hover:text-slate-200'
@@ -130,7 +130,7 @@ function AuthenticatedApp() {
             </button>
             <button
               onClick={() => setActiveTab('entries')}
-              className={`px-6 py-4 font-medium transition-colors relative ${
+              className={`px-3 py-3 sm:px-6 sm:py-4 font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === 'entries'
                   ? 'text-emerald-400'
                   : 'text-slate-400 hover:text-slate-200'
@@ -143,7 +143,7 @@ function AuthenticatedApp() {
             </button>
             <button
               onClick={() => setActiveTab('projections')}
-              className={`px-6 py-4 font-medium transition-colors relative ${
+              className={`px-3 py-3 sm:px-6 sm:py-4 font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === 'projections'
                   ? 'text-emerald-400'
                   : 'text-slate-400 hover:text-slate-200'
@@ -156,7 +156,7 @@ function AuthenticatedApp() {
             </button>
             <button
               onClick={() => setActiveTab('levels')}
-              className={`px-6 py-4 font-medium transition-colors relative ${
+              className={`px-3 py-3 sm:px-6 sm:py-4 font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === 'levels'
                   ? 'text-emerald-400'
                   : 'text-slate-400 hover:text-slate-200'
@@ -169,7 +169,7 @@ function AuthenticatedApp() {
             </button>
             <button
               onClick={() => setActiveTab('scenarios')}
-              className={`px-6 py-4 font-medium transition-colors relative ${
+              className={`px-3 py-3 sm:px-6 sm:py-4 font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === 'scenarios'
                   ? 'text-violet-400'
                   : 'text-slate-400 hover:text-slate-200'
@@ -1031,7 +1031,7 @@ function ProjectionsTable({
         </button>
         
         {showYearlyDetail && (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scrollbar-hide touch-pan-x">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-800 z-10">
                 <tr className="border-b border-slate-700">
@@ -1595,7 +1595,7 @@ function LevelsTab({
 
       {/* All Levels Table */}
       <h3 className="text-xl font-semibold text-slate-200 mb-4">All Levels</h3>
-      <div className="bg-slate-800/30 rounded-xl border border-slate-700 overflow-hidden max-h-[500px] overflow-y-auto">
+      <div className="bg-slate-800/30 rounded-xl border border-slate-700 overflow-hidden max-h-[500px] overflow-y-auto scrollbar-hide">
         <table className="w-full text-sm">
           <thead className="bg-slate-800 sticky top-0 z-10">
             <tr className="border-b border-slate-700">
@@ -2419,7 +2419,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-4xl max-h-[90vh] overflow-y-auto scrollbar-hide">
           {/* Header */}
           <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -3014,7 +3014,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                     Your savings will change over time as income grows ({incomeGrowth}%/yr) and spending increases with net worth ({spendingRate}%/yr).
                   </p>
                   
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto scrollbar-hide touch-pan-x">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-slate-500 text-xs uppercase">
