@@ -813,6 +813,38 @@ function ProjectionsTable({
         })),
       ]
     },
+    // Only show income projections if at least one scenario has income data
+    ...(scenarioProjections.some(sp => sp.hasDynamicIncome) ? [{
+      category: 'Annual Income Projections',
+      metrics: [
+        {
+          label: 'Current',
+          getValue: (sp: ScenarioProjection) => {
+            const row = sp.dynamicProjections?.find(d => d.yearsFromNow === 0);
+            return row ? formatCurrency(row.grossIncome) : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const row = sp.dynamicProjections?.find(d => d.yearsFromNow === 0);
+            return row?.grossIncome ?? null;
+          },
+          lowerIsBetter: false,
+          format: 'currency' as const,
+        },
+        ...[5, 10, 15, 20, 25, 30].map(years => ({
+          label: `In ${years} Years (${currentYear + years})`,
+          getValue: (sp: ScenarioProjection) => {
+            const row = sp.dynamicProjections?.find(d => d.yearsFromNow === years);
+            return row ? formatCurrency(row.grossIncome) : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const row = sp.dynamicProjections?.find(d => d.yearsFromNow === years);
+            return row?.grossIncome ?? null;
+          },
+          lowerIsBetter: false,
+          format: 'currency' as const,
+        })),
+      ]
+    }] : []),
     {
       category: 'Scenario Settings',
       metrics: [
@@ -1057,6 +1089,17 @@ function ProjectionsTable({
                       <div className="text-xs font-normal text-slate-500">FI %</div>
                     </th>
                   ))}
+                  {/* Gross Income columns for each scenario (only if income data exists) */}
+                  {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => (
+                    <th 
+                      key={`income-${sp.scenario._id}`} 
+                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
+                      style={{ color: sp.scenario.color }}
+                    >
+                      {sp.scenario.name}
+                      <div className="text-xs font-normal text-slate-500">Income/yr</div>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -1160,6 +1203,24 @@ function ProjectionsTable({
                             }`}
                           >
                             {fiProgress.toFixed(1)}%
+                          </td>
+                        );
+                      })}
+                      {/* Gross Income values (only if any scenario has income data) */}
+                      {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => {
+                        // For dynamic projections, match by year
+                        const yearNum = row.year === 'Now' ? currentYear : row.year;
+                        const dynamicRow = sp.dynamicProjections?.find(d => d.year === yearNum);
+                        const income = dynamicRow?.grossIncome || 0;
+                        const hasIncome = sp.hasDynamicIncome && income > 0;
+                        return (
+                          <td 
+                            key={`income-${sp.scenario._id}`}
+                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
+                              hasIncome ? 'text-sky-400/80' : 'text-slate-500'
+                            }`}
+                          >
+                            {hasIncome ? formatCurrency(income) : '-'}
                           </td>
                         );
                       })}
