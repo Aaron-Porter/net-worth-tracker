@@ -742,9 +742,9 @@ export function generateProjections(
       const yearlyContributionGrown = yearlyContribution * growthMultiplier;
 
       // Calculate savings: base contribution (with growth) minus the spending increase from base level
-      // This reflects that increased spending comes from what would have been savings
-      const spendingIncrease = Math.max(0, yearAnnualSpending - baseAnnualSpend);
-      yearAnnualSavings = Math.max(0, yearlyContributionGrown - spendingIncrease);
+      // Can be negative if spending increase exceeds income growth - represents drawing from net worth
+      const spendingIncrease = yearAnnualSpending - baseAnnualSpend;
+      yearAnnualSavings = yearlyContributionGrown - spendingIncrease;
     }
 
     // Calculate this year's interest on previous net worth
@@ -2555,8 +2555,9 @@ export function calculateYearProjection(
   const totalMonthlySpending = inflationAdjustedBaseBudget + netWorthPortion;
   const annualSpending = totalMonthlySpending * 12;
   
-  // Calculate post-tax savings
-  const postTaxSavings = Math.max(0, taxCalc.netIncome - annualSpending);
+  // Calculate post-tax savings (can be negative if spending exceeds income)
+  // When negative, this represents drawing from net worth to cover overspending
+  const postTaxSavings = taxCalc.netIncome - annualSpending;
   const totalSavings = totalPreTax + postTaxSavings;
   const savingsRate = grossIncome > 0 ? (totalSavings / grossIncome) * 100 : 0;
   
