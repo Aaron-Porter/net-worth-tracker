@@ -2566,8 +2566,8 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
     };
 
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" style={{ touchAction: 'pan-y' }}>
-        <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-4xl max-h-[85vh] overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-4xl max-h-[85vh] overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }} onClick={(e) => e.stopPropagation()}>
           {/* Header */}
           <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
