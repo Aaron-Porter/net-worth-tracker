@@ -229,6 +229,7 @@ function AuthenticatedApp() {
           projectionsView={projectionsView}
           setProjectionsView={setProjectionsView}
           setActiveTab={setActiveTab}
+          scenariosHook={scenariosHook}
         />
       )}
 
@@ -525,6 +526,520 @@ function EntriesTab({
 }
 
 // ============================================================================
+// SCENARIO MANAGEMENT COMPONENTS
+// ============================================================================
+
+function ScenarioManagementPanel({
+  onClose,
+  onEditScenario,
+  scenariosHook,
+}: {
+  onClose: () => void;
+  onEditScenario: (scenario: Scenario) => void;
+  scenariosHook: ReturnType<typeof useScenarios>;
+}) {
+
+  const handleCreateNew = () => {
+    const newScenario: Partial<Scenario> = {
+      name: `Scenario ${scenariosHook.scenarios.length + 1}`,
+      yearlyContribution: 0,
+      currentRate: 7,
+      swr: 4,
+      inflationRate: 3,
+      baseMonthlyBudget: 3000,
+      spendingGrowthRate: 0.5,
+    };
+    // Open editor with a new scenario template
+    onEditScenario(newScenario as Scenario);
+  };
+
+  return (
+    <div className="mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-slate-200">Scenarios</h3>
+        <div className="flex gap-2">
+          <button
+            onClick={handleCreateNew}
+            className="px-3 py-1.5 text-sm bg-violet-500 hover:bg-violet-600 text-white rounded-lg transition-colors"
+          >
+            + New Scenario
+          </button>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-slate-200 rounded"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {scenariosHook.scenarios.map(scenario => (
+          <div
+            key={scenario._id}
+            className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+              scenario.isSelected
+                ? 'bg-slate-900/50 border-slate-600'
+                : 'bg-slate-900/20 border-slate-700/50 opacity-60 hover:opacity-100'
+            }`}
+          >
+            {/* Selection checkbox */}
+            <button
+              onClick={() => scenariosHook.toggleSelected(scenario._id)}
+              className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                scenario.isSelected ? 'border-emerald-400 bg-emerald-400/20' : 'border-slate-500'
+              }`}
+            >
+              {scenario.isSelected && (
+                <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              )}
+            </button>
+
+            {/* Color indicator */}
+            <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: scenario.color }} />
+
+            {/* Scenario info */}
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-slate-200 truncate">{scenario.name}</div>
+              <div className="flex gap-3 text-xs text-slate-500 mt-0.5">
+                <span>
+                  Return: <span className="text-emerald-400">{scenario.currentRate}%</span>
+                </span>
+                <span>
+                  Inflation: <span className="text-amber-400">{scenario.inflationRate}%</span>
+                </span>
+                {scenario.grossIncome && (
+                  <span>
+                    Income: <span className="text-sky-400">{formatCurrency(scenario.grossIncome)}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => onEditScenario(scenario)}
+                className="p-1.5 text-slate-400 hover:text-violet-400 rounded transition-colors"
+                title="Edit"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+              </button>
+              <button
+                onClick={() => scenariosHook.duplicateScenario(scenario._id)}
+                className="p-1.5 text-slate-400 hover:text-sky-400 rounded transition-colors"
+                title="Duplicate"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+              </button>
+              {scenariosHook.scenarios.length > 1 && (
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete "${scenario.name}"?`)) {
+                      scenariosHook.deleteScenario(scenario._id);
+                    }
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-red-400 rounded transition-colors"
+                  title="Delete"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScenarioEditor({
+  scenario,
+  onClose,
+  onSave,
+  scenariosHook,
+}: {
+  scenario: Scenario;
+  onClose: () => void;
+  onSave: (updates: Partial<Scenario>) => Promise<void>;
+  scenariosHook: ReturnType<typeof useScenarios>;
+}) {
+  const isNewScenario = !scenario._id;
+
+  const [form, setForm] = useState({
+    name: scenario.name,
+    grossIncome: scenario.grossIncome?.toString() || '',
+    incomeGrowthRate: scenario.incomeGrowthRate?.toString() || '3',
+    filingStatus: scenario.filingStatus || 'single',
+    stateCode: scenario.stateCode || '',
+    preTax401k: scenario.preTax401k?.toString() || '',
+    preTaxIRA: scenario.preTaxIRA?.toString() || '',
+    preTaxHSA: scenario.preTaxHSA?.toString() || '',
+    preTaxOther: scenario.preTaxOther?.toString() || '',
+    yearlyContribution: scenario.yearlyContribution?.toString() || '',
+    baseMonthlyBudget: scenario.baseMonthlyBudget?.toString() || '3000',
+    spendingGrowthRate: scenario.spendingGrowthRate?.toString() || '0.5',
+    currentRate: scenario.currentRate?.toString() || '7',
+    swr: scenario.swr?.toString() || '4',
+    inflationRate: scenario.inflationRate?.toString() || '3',
+  });
+
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const updates: any = {
+        name: form.name || 'New Scenario',
+        yearlyContribution: parseFloat(form.yearlyContribution) || 0,
+        currentRate: parseFloat(form.currentRate) || 7,
+        swr: parseFloat(form.swr) || 4,
+        inflationRate: parseFloat(form.inflationRate) || 3,
+        baseMonthlyBudget: parseFloat(form.baseMonthlyBudget) || 3000,
+        spendingGrowthRate: parseFloat(form.spendingGrowthRate) || 0.5,
+      };
+
+      // Optional income fields
+      const grossIncome = parseFloat(form.grossIncome);
+      if (grossIncome > 0) {
+        updates.grossIncome = grossIncome;
+        updates.incomeGrowthRate = parseFloat(form.incomeGrowthRate) || 3;
+        updates.filingStatus = form.filingStatus as FilingStatus;
+        updates.stateCode = form.stateCode || undefined;
+        updates.preTax401k = parseFloat(form.preTax401k) || 0;
+        updates.preTaxIRA = parseFloat(form.preTaxIRA) || 0;
+        updates.preTaxHSA = parseFloat(form.preTaxHSA) || 0;
+        updates.preTaxOther = parseFloat(form.preTaxOther) || 0;
+      }
+
+      if (isNewScenario) {
+        await scenariosHook.createScenario(updates);
+      } else {
+        await onSave(updates);
+      }
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const applyTemplate = (template: typeof SCENARIO_TEMPLATES[number]) => {
+    setForm(prev => ({
+      ...prev,
+      currentRate: template.currentRate.toString(),
+      swr: template.swr.toString(),
+      inflationRate: template.inflationRate.toString(),
+    }));
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between z-10">
+          <h2 className="text-xl font-semibold text-slate-200">
+            {isNewScenario ? 'Create New Scenario' : `Edit: ${scenario.name}`}
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-slate-200 rounded transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Basic Info */}
+          <section>
+            <h3 className="text-lg font-semibold text-slate-200 mb-4">Basic Info</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Scenario Name</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  placeholder="e.g., Conservative Plan"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Investment Assumptions */}
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-200">Investment Assumptions</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => applyTemplate(SCENARIO_TEMPLATES[0])}
+                  className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition-colors"
+                >
+                  Conservative
+                </button>
+                <button
+                  onClick={() => applyTemplate(SCENARIO_TEMPLATES[1])}
+                  className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition-colors"
+                >
+                  Moderate
+                </button>
+                <button
+                  onClick={() => applyTemplate(SCENARIO_TEMPLATES[2])}
+                  className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition-colors"
+                >
+                  Aggressive
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Return Rate (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={form.currentRate}
+                  onChange={(e) => setForm({ ...form, currentRate: e.target.value })}
+                  className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">SWR (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={form.swr}
+                  onChange={(e) => setForm({ ...form, swr: e.target.value })}
+                  className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Inflation (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={form.inflationRate}
+                  onChange={(e) => setForm({ ...form, inflationRate: e.target.value })}
+                  className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Spending Assumptions */}
+          <section>
+            <h3 className="text-lg font-semibold text-slate-200 mb-4">Spending Assumptions</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Base Monthly Budget ($)</label>
+                <input
+                  type="number"
+                  value={form.baseMonthlyBudget}
+                  onChange={(e) => setForm({ ...form, baseMonthlyBudget: e.target.value })}
+                  className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Spending Growth Rate (% of NW)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={form.spendingGrowthRate}
+                  onChange={(e) => setForm({ ...form, spendingGrowthRate: e.target.value })}
+                  className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Savings */}
+          <section>
+            <h3 className="text-lg font-semibold text-slate-200 mb-4">Annual Savings</h3>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Yearly Contribution ($)
+              </label>
+              <input
+                type="number"
+                value={form.yearlyContribution}
+                onChange={(e) => setForm({ ...form, yearlyContribution: e.target.value })}
+                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                placeholder="Total annual savings"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Total amount you save each year (contributions to investments)
+              </p>
+            </div>
+          </section>
+
+          {/* Income & Taxes (Optional) */}
+          <section className="border-t border-slate-700 pt-6">
+            <h3 className="text-lg font-semibold text-slate-200 mb-2">Income & Taxes (Optional)</h3>
+            <p className="text-sm text-slate-400 mb-4">
+              Add income details for more accurate projections and tax calculations
+            </p>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Gross Income ($)</label>
+                  <input
+                    type="number"
+                    value={form.grossIncome}
+                    onChange={(e) => setForm({ ...form, grossIncome: e.target.value })}
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    placeholder="Annual gross income"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Income Growth (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.incomeGrowthRate}
+                    onChange={(e) => setForm({ ...form, incomeGrowthRate: e.target.value })}
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+              </div>
+
+              {form.grossIncome && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Filing Status</label>
+                      <select
+                        value={form.filingStatus}
+                        onChange={(e) => setForm({ ...form, filingStatus: e.target.value })}
+                        className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      >
+                        <option value="single">Single</option>
+                        <option value="married_jointly">Married Filing Jointly</option>
+                        <option value="married_separately">Married Filing Separately</option>
+                        <option value="head_of_household">Head of Household</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">State</label>
+                      <select
+                        value={form.stateCode}
+                        onChange={(e) => setForm({ ...form, stateCode: e.target.value })}
+                        className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      >
+                        <option value="">Select State</option>
+                        {Object.keys(STATE_TAX_INFO)
+                          .sort()
+                          .map((code) => (
+                            <option key={code} value={code}>
+                              {code} - {STATE_TAX_INFO[code].name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-300 mb-3">Pre-Tax Retirement Contributions</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">401k/403b ($)</label>
+                        <input
+                          type="number"
+                          value={form.preTax401k}
+                          onChange={(e) => setForm({ ...form, preTax401k: e.target.value })}
+                          className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Traditional IRA ($)</label>
+                        <input
+                          type="number"
+                          value={form.preTaxIRA}
+                          onChange={(e) => setForm({ ...form, preTaxIRA: e.target.value })}
+                          className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">HSA ($)</label>
+                        <input
+                          type="number"
+                          value={form.preTaxHSA}
+                          onChange={(e) => setForm({ ...form, preTaxHSA: e.target.value })}
+                          className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Other Pre-Tax ($)</label>
+                        <input
+                          type="number"
+                          value={form.preTaxOther}
+                          onChange={(e) => setForm({ ...form, preTaxOther: e.target.value })}
+                          className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-slate-800 border-t border-slate-700 p-4 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="px-4 py-2 text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white rounded-lg transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : isNewScenario ? 'Create Scenario' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // PROJECTIONS TAB
 // ============================================================================
 
@@ -535,6 +1050,7 @@ interface ProjectionsTabProps {
   projectionsView: 'table' | 'chart';
   setProjectionsView: (view: 'table' | 'chart') => void;
   setActiveTab: (tab: Tab) => void;
+  scenariosHook: ReturnType<typeof useScenarios>;
 }
 
 function ProjectionsTab({
@@ -544,6 +1060,7 @@ function ProjectionsTab({
   projectionsView,
   setProjectionsView,
   setActiveTab,
+  scenariosHook,
 }: ProjectionsTabProps) {
   const currentYear = new Date().getFullYear();
   const primaryProjection = scenarioProjections[0] || null;
@@ -609,6 +1126,9 @@ function ProjectionsTab({
     );
   }
 
+  const [showScenarioPanel, setShowScenarioPanel] = useState(false);
+  const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
+
   return (
     <div className="flex flex-col p-4">
       {/* Summary Bar */}
@@ -630,10 +1150,10 @@ function ProjectionsTab({
         </div>
         <div className="flex-1" />
         <button
-          onClick={() => setActiveTab('scenarios')}
-          className="text-xs text-slate-400 hover:text-slate-200 underline"
+          onClick={() => setShowScenarioPanel(!showScenarioPanel)}
+          className="px-3 py-1.5 text-sm font-medium bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 rounded-lg transition-colors"
         >
-          Edit Scenarios
+          {showScenarioPanel ? 'Hide' : 'Manage'} Scenarios
         </button>
         <div className="flex rounded-lg border border-slate-600 overflow-hidden">
           <button
@@ -658,6 +1178,29 @@ function ProjectionsTab({
           </button>
         </div>
       </div>
+
+      {/* Scenario Management Panel */}
+      {showScenarioPanel && (
+        <ScenarioManagementPanel
+          onClose={() => setShowScenarioPanel(false)}
+          onEditScenario={(scenario) => setEditingScenario(scenario)}
+          scenariosHook={scenariosHook}
+        />
+      )}
+
+      {/* Scenario Editor */}
+      {editingScenario && typeof document !== 'undefined' && createPortal(
+        <ScenarioEditor
+          scenario={editingScenario}
+          onClose={() => setEditingScenario(null)}
+          onSave={async (updates) => {
+            await scenariosHook.updateScenario(editingScenario._id, updates);
+            setEditingScenario(null);
+          }}
+          scenariosHook={scenariosHook}
+        />,
+        document.body
+      )}
 
       {/* Projections Content */}
       {projectionsView === 'table' ? (
