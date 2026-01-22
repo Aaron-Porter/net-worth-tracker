@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useConvexAuth } from 'convex/react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { api } from '../../convex/_generated/api'
@@ -2466,7 +2467,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
         )}
 
         {/* Quick Edit Panel */}
-        {quickEditScenario && (
+        {quickEditScenario && typeof document !== 'undefined' && createPortal(
           <QuickEditPanel
             scenario={quickEditScenario}
             onClose={() => setQuickEditScenario(null)}
@@ -2475,7 +2476,8 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
               setQuickEditScenario(null);
             }}
             currentNetWorth={currentNetWorth}
-          />
+          />,
+          document.body
         )}
       </div>
     );
@@ -2566,12 +2568,11 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
     };
 
     return (
-      <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/50" onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}>
-        <div className="h-full w-full sm:w-[600px] md:w-[700px] bg-slate-800 overflow-y-scroll">
+      <div className="fixed inset-0 z-[9999] pointer-events-auto">
+        <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+        <div className="absolute inset-y-0 right-0 w-full sm:w-[600px] md:w-[700px] bg-slate-800 shadow-2xl overflow-y-auto">
           {/* Header */}
-          <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between z-10">
+          <div className="bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-4 h-4 rounded-full" style={{ backgroundColor: scenario.color }} />
               <h2 className="text-xl font-semibold text-slate-200">Quick Edit: {scenario.name}</h2>
@@ -2716,7 +2717,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
           </div>
 
           {/* Footer */}
-          <div className="sticky bottom-0 bg-slate-800 border-t border-slate-700 p-4 flex justify-between z-10">
+          <div className="bg-slate-800 border-t border-slate-700 p-4 flex justify-between">
             <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-slate-200">
               Cancel
             </button>
