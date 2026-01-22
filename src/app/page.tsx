@@ -2567,9 +2567,9 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-        <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-4xl max-h-[85vh] overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }} onClick={(e) => e.stopPropagation()}>
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-4xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
           {/* Header */}
-          <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
+          <div className="flex-shrink-0 bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between rounded-t-2xl">
             <div className="flex items-center gap-3">
               <div className="w-4 h-4 rounded-full" style={{ backgroundColor: scenario.color }} />
               <h2 className="text-xl font-semibold text-slate-200">Quick Edit: {scenario.name}</h2>
@@ -2579,7 +2579,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             </button>
           </div>
 
-          <div className="p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
             {/* Scenario Name */}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Scenario Name</label>
@@ -2714,7 +2714,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
           </div>
 
           {/* Footer */}
-          <div className="sticky bottom-0 bg-slate-800 border-t border-slate-700 p-4 flex justify-between">
+          <div className="flex-shrink-0 bg-slate-800 border-t border-slate-700 p-4 flex justify-between rounded-b-2xl">
             <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-slate-200">
               Cancel
             </button>
