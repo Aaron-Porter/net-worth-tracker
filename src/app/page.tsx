@@ -1289,7 +1289,7 @@ function ProjectionsTable({
                             netWorthValue = currentYearRow.netWorth;
                           }
 
-                          isFiYear = currentYearRow?.isFiYear && (row.monthIndex || 0) === 0;
+                          isFiYear = (currentYearRow?.isFiYear ?? false) && (row.monthIndex || 0) === 0;
                         } else {
                           const scenarioRow = sp.projections.find(p => p.year === lookupYear);
                           netWorthValue = scenarioRow?.netWorth || 0;
