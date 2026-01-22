@@ -2566,15 +2566,10 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
     };
 
     return (
-      <>
-        {/* Backdrop */}
-        <div
-          className="fixed inset-0 bg-black/50 z-50"
-          onClick={onClose}
-        />
-
-        {/* Slide-out Drawer */}
-        <div className="fixed inset-y-0 right-0 w-full sm:w-[600px] md:w-[700px] bg-slate-800 shadow-2xl z-[60] overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/50" onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}>
+        <div className="h-full w-full sm:w-[600px] md:w-[700px] bg-slate-800 overflow-y-scroll">
           {/* Header */}
           <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between z-10">
             <div className="flex items-center gap-3">
@@ -2730,7 +2725,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             </button>
           </div>
         </div>
-      </>
+      </div>
     );
   }
 
