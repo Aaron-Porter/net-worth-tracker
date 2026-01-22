@@ -570,7 +570,7 @@ function ProjectionsTab({
 
   if (!latestEntry) {
     return (
-      <div className="h-[calc(100vh-57px)] flex items-center justify-center">
+      <div className="min-h-[50vh] flex items-center justify-center p-4">
         <div className="text-center">
           <p className="text-slate-400 mb-4">No net worth data found.</p>
           <button
@@ -586,7 +586,7 @@ function ProjectionsTab({
 
   if (scenarioProjections.length === 0) {
     return (
-      <div className="h-[calc(100vh-57px)] flex items-center justify-center">
+      <div className="min-h-[50vh] flex items-center justify-center p-4">
         <div className="text-center p-8 max-w-md">
           <div className="w-16 h-16 mx-auto mb-4 bg-violet-500/20 rounded-full flex items-center justify-center">
             <svg className="w-8 h-8 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -609,7 +609,7 @@ function ProjectionsTab({
   }
 
   return (
-    <div className="h-[calc(100vh-57px)] flex flex-col p-4">
+    <div className="flex flex-col p-4">
       {/* Summary Bar */}
       <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
         <div className="flex flex-wrap items-center gap-2">
@@ -1743,7 +1743,7 @@ function LevelsTab({
 
       {/* All Levels Table */}
       <h3 className="text-xl font-semibold text-slate-200 mb-4">All Levels</h3>
-      <div className="bg-slate-800/30 rounded-xl border border-slate-700 overflow-hidden max-h-[500px] overflow-y-auto scrollbar-hide">
+      <div className="bg-slate-800/30 rounded-xl border border-slate-700 overflow-hidden max-h-[70vh] overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
         <table className="w-full text-sm">
           <thead className="bg-slate-800 sticky top-0 z-10">
             <tr className="border-b border-slate-700">
@@ -2566,8 +2566,8 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
     };
 
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-4xl max-h-[90vh] overflow-y-auto scrollbar-hide">
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" style={{ touchAction: 'pan-y' }}>
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-4xl max-h-[85vh] overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
           {/* Header */}
           <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
