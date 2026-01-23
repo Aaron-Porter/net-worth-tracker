@@ -8,11 +8,11 @@ import { api } from '../../convex/_generated/api'
 import { Id } from '../../convex/_generated/dataModel'
 import { SignIn } from './components/SignIn'
 import { useScenarios, Scenario, ScenarioProjection, SCENARIO_TEMPLATES } from '../lib/useScenarios'
-import { 
-  formatCurrency, 
-  formatDate, 
-  getTimeSinceEntry, 
-  LEVEL_THRESHOLDS, 
+import {
+  formatCurrency,
+  formatDate,
+  getTimeSinceEntry,
+  LEVEL_THRESHOLDS,
   formatPercent,
   calculateScenarioIncome,
   STATE_TAX_RATES,
@@ -22,6 +22,8 @@ import {
   ScenarioIncomeBreakdown,
   TaxCalculation,
   BracketBreakdown,
+  calculateSwrAmounts,
+  calculateFiTarget,
 } from '../lib/calculations'
 import {
   LineChart,
@@ -1571,29 +1573,42 @@ function ProjectionsTable({
           interpolatedAge = year - birthYear + monthFraction;
         }
 
+        // Calculate interpolated net worth for this month
+        const monthNetWorth = interpolate(startOfYearNetWorth, currentRow.netWorth);
+
+        // Calculate SWR amounts based on interpolated net worth
+        const monthSwrAmounts = calculateSwrAmounts(monthNetWorth, primaryProjection.scenario.swr);
+
+        // Calculate FI target and progress based on monthly spend
+        const monthFiTarget = calculateFiTarget(currentRow.monthlySpend, primaryProjection.scenario.swr);
+        const monthFiProgress = monthFiTarget > 0 ? (monthNetWorth / monthFiTarget) * 100 : 0;
+
+        // Check if SWR covers spend for this month
+        const monthSwrCoversSpend = currentRow.monthlySpend > 0 && monthSwrAmounts.monthly >= currentRow.monthlySpend;
+
         monthlyRows.push({
           year: year,
           displayYear: `${monthNames[month]} ${year}`,
           monthIndex: month,
           age: interpolatedAge,
           yearsFromEntry: i === 0 ? monthFraction : (i + monthFraction),
-          netWorth: interpolate(startOfYearNetWorth, currentRow.netWorth),
+          netWorth: monthNetWorth,
           interest: currentRow.interest * monthFraction,
           contributed: currentRow.contributed * monthFraction,
-          annualSwr: currentRow.annualSwr,
-          monthlySwr: currentRow.monthlySwr,
-          weeklySwr: currentRow.weeklySwr,
-          dailySwr: currentRow.dailySwr,
+          annualSwr: monthSwrAmounts.annual,
+          monthlySwr: monthSwrAmounts.monthly,
+          weeklySwr: monthSwrAmounts.weekly,
+          dailySwr: monthSwrAmounts.daily,
           monthlySpend: currentRow.monthlySpend,
           annualSpending: currentRow.annualSpending,
           annualSavings: currentRow.annualSavings,
-          fiTarget: currentRow.fiTarget,
-          fiProgress: interpolate(startOfYearFiProgress, currentRow.fiProgress),
+          fiTarget: monthFiTarget,
+          fiProgress: monthFiProgress,
           coastFiYear: currentRow.coastFiYear,
           coastFiAge: currentRow.coastFiAge,
           isFiYear: currentRow.isFiYear && month === 11, // Mark last month (December) of FI year
           isCrossover: currentRow.isCrossover && month === 11,
-          swrCoversSpend: currentRow.swrCoversSpend,
+          swrCoversSpend: monthSwrCoversSpend,
           grossIncome: currentRow.grossIncome,
           totalTax: currentRow.totalTax,
           netIncome: currentRow.netIncome,
@@ -1959,10 +1974,33 @@ function ProjectionsTable({
                       })}
                       {/* SWR values */}
                       {scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
-                        const swrCoversSpend = scenarioRow?.swrCoversSpend;
-                        const monthlySwr = scenarioRow?.monthlySwr || 0;
-                        const displayValue = viewMode === 'yearly' ? monthlySwr * 12 : monthlySwr;
+                        let monthlySwr = 0;
+                        let swrCoversSpend = false;
+                        let displayValue = 0;
+
+                        if (viewMode === 'monthly') {
+                          const currentYearRow = sp.projections.find(p => p.year === lookupYear);
+                          const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
+
+                          if (currentYearRow) {
+                            // Calculate interpolated net worth for this month
+                            const monthFraction = ((row.monthIndex || 0) + 1) / 12;
+                            const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
+                            const monthNetWorth = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
+
+                            // Calculate SWR based on interpolated net worth
+                            const swrAmounts = calculateSwrAmounts(monthNetWorth, sp.scenario.swr);
+                            monthlySwr = swrAmounts.monthly;
+                            swrCoversSpend = currentYearRow.monthlySpend > 0 && monthlySwr >= currentYearRow.monthlySpend;
+                            displayValue = monthlySwr;
+                          }
+                        } else {
+                          const scenarioRow = sp.projections.find(p => p.year === lookupYear);
+                          monthlySwr = scenarioRow?.monthlySwr || 0;
+                          swrCoversSpend = scenarioRow?.swrCoversSpend || false;
+                          displayValue = monthlySwr * 12;
+                        }
+
                         return (
                           <td
                             key={`swr-${sp.scenario._id}`}
@@ -1976,19 +2014,21 @@ function ProjectionsTable({
                       })}
                       {/* FI Progress values */}
                       {scenarioProjections.map(sp => {
-                        // Interpolate FI progress for monthly view
+                        // Calculate FI progress based on interpolated net worth for monthly view
                         let fiProgress = 0;
                         if (viewMode === 'monthly') {
                           const currentYearRow = sp.projections.find(p => p.year === lookupYear);
                           const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
 
-                          // monthFraction for end-of-month: Jan=1/12, Feb=2/12, ..., Dec=12/12
-                          const monthFraction = ((row.monthIndex || 0) + 1) / 12;
-
                           if (currentYearRow) {
-                            // For first year, start from 0; otherwise from previous year's progress
-                            const startOfYearProgress = previousYearRow ? previousYearRow.fiProgress : 0;
-                            fiProgress = startOfYearProgress + (currentYearRow.fiProgress - startOfYearProgress) * monthFraction;
+                            // Calculate interpolated net worth for this month
+                            const monthFraction = ((row.monthIndex || 0) + 1) / 12;
+                            const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
+                            const monthNetWorth = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
+
+                            // Calculate FI target and progress based on interpolated net worth
+                            const fiTarget = calculateFiTarget(currentYearRow.monthlySpend, sp.scenario.swr);
+                            fiProgress = fiTarget > 0 ? (monthNetWorth / fiTarget) * 100 : 0;
                           }
                         } else {
                           const scenarioRow = sp.projections.find(p => p.year === lookupYear);
