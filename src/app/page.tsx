@@ -24,6 +24,7 @@ import {
   BracketBreakdown,
   calculateSwrAmounts,
   calculateFiTarget,
+  calculateLevelBasedSpending,
 } from '../lib/calculations'
 import {
   LineChart,
@@ -1547,9 +1548,35 @@ function ProjectionsTable({
     const monthlyRows: any[] = [];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+    // Create settings object for spending calculations
+    const settings = {
+      currentRate: primaryProjection.scenario.currentRate,
+      swr: primaryProjection.scenario.swr,
+      yearlyContribution: primaryProjection.scenario.yearlyContribution,
+      birthDate: birthDate,
+      monthlySpend: 0, // Not used - spending comes from levels system
+      inflationRate: primaryProjection.scenario.inflationRate,
+      baseMonthlyBudget: primaryProjection.scenario.baseMonthlyBudget,
+      spendingGrowthRate: primaryProjection.scenario.spendingGrowthRate,
+      incomeGrowthRate: primaryProjection.scenario.incomeGrowthRate,
+    };
+
+    // Calculate base spending (at year 0) for savings calculation
+    const baseMonthlySpend = calculateLevelBasedSpending(
+      primaryProjection.currentNetWorth.total,
+      settings,
+      0
+    );
+    const baseAnnualSpend = baseMonthlySpend * 12;
+
     for (let i = 0; i < primaryProjection.projections.length; i++) {
       const currentRow = primaryProjection.projections[i];
       const previousRow = i > 0 ? primaryProjection.projections[i - 1] : null;
+
+      // Calculate yearly contribution with income growth for this year
+      const incomeGrowthRate = primaryProjection.scenario.incomeGrowthRate || 0;
+      const growthMultiplier = Math.pow(1 + incomeGrowthRate / 100, i);
+      const yearlyContributionGrown = primaryProjection.scenario.yearlyContribution * growthMultiplier;
 
       // Generate 12 months for this year
       for (let month = 0; month < 12; month++) {
@@ -1576,15 +1603,30 @@ function ProjectionsTable({
         // Calculate interpolated net worth for this month
         const monthNetWorth = interpolate(startOfYearNetWorth, currentRow.netWorth);
 
+        // Calculate years from now for this month (for inflation adjustment)
+        const yearsFromNow = i + monthFraction;
+
+        // Calculate monthly spending based on interpolated net worth
+        const monthlySpend = calculateLevelBasedSpending(
+          monthNetWorth,
+          settings,
+          yearsFromNow
+        );
+        const annualSpending = monthlySpend * 12;
+
+        // Calculate savings: yearly contribution (with growth) minus spending increase from base
+        const spendingIncrease = annualSpending - baseAnnualSpend;
+        const annualSavings = yearlyContributionGrown - spendingIncrease;
+
         // Calculate SWR amounts based on interpolated net worth
         const monthSwrAmounts = calculateSwrAmounts(monthNetWorth, primaryProjection.scenario.swr);
 
         // Calculate FI target and progress based on monthly spend
-        const monthFiTarget = calculateFiTarget(currentRow.monthlySpend, primaryProjection.scenario.swr);
+        const monthFiTarget = calculateFiTarget(monthlySpend, primaryProjection.scenario.swr);
         const monthFiProgress = monthFiTarget > 0 ? (monthNetWorth / monthFiTarget) * 100 : 0;
 
         // Check if SWR covers spend for this month
-        const monthSwrCoversSpend = currentRow.monthlySpend > 0 && monthSwrAmounts.monthly >= currentRow.monthlySpend;
+        const monthSwrCoversSpend = monthlySpend > 0 && monthSwrAmounts.monthly >= monthlySpend;
 
         monthlyRows.push({
           year: year,
@@ -1599,9 +1641,9 @@ function ProjectionsTable({
           monthlySwr: monthSwrAmounts.monthly,
           weeklySwr: monthSwrAmounts.weekly,
           dailySwr: monthSwrAmounts.daily,
-          monthlySpend: currentRow.monthlySpend,
-          annualSpending: currentRow.annualSpending,
-          annualSavings: currentRow.annualSavings,
+          monthlySpend: monthlySpend,
+          annualSpending: annualSpending,
+          annualSavings: annualSavings,
           fiTarget: monthFiTarget,
           fiProgress: monthFiProgress,
           coastFiYear: currentRow.coastFiYear,
@@ -1618,7 +1660,7 @@ function ProjectionsTable({
     }
 
     return monthlyRows;
-  }, [viewMode, primaryProjection.projections, primaryProjection.currentNetWorth.total, birthYear]);
+  }, [viewMode, primaryProjection.projections, primaryProjection.currentNetWorth.total, primaryProjection.scenario, birthDate, birthYear]);
 
   return (
     <div className="flex-1 overflow-auto space-y-4">
