@@ -2200,7 +2200,7 @@ function ProjectionsChart({
   fiProgressChartData: Record<string, number | string>[];
   currentYear: number;
 }) {
-  const [selectedMetrics, setSelectedMetrics] = React.useState<Set<MetricType>>(new Set(['fiProgress']));
+  const [selectedMetrics, setSelectedMetrics] = React.useState<Set<MetricType>>(new Set<MetricType>(['fiProgress']));
   const [zoomDomain, setZoomDomain] = React.useState<[number, number] | null>(null);
 
   if (scenarioProjections.length === 0) {
