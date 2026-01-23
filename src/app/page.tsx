@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useConvexAuth } from 'convex/react'
 import { useAuthActions } from '@convex-dev/auth/react'
@@ -38,6 +38,7 @@ import {
   Area,
   AreaChart,
   ReferenceLine,
+  Brush,
 } from 'recharts'
 
 type Tab = 'dashboard' | 'entries' | 'projections' | 'levels' | 'scenarios'
@@ -2090,6 +2091,104 @@ function ProjectionsTable({
   )
 }
 
+// Custom tooltip for unified chart
+function UnifiedChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  // Group payload by scenario
+  const scenarioData: Record<string, any> = {};
+  payload.forEach((item: any) => {
+    const [scenarioName, metricType] = item.dataKey.split('_');
+    if (!scenarioData[scenarioName]) {
+      scenarioData[scenarioName] = {
+        color: item.stroke,
+        data: {}
+      };
+    }
+    scenarioData[scenarioName].data[metricType] = item.value;
+  });
+
+  return (
+    <div className="bg-slate-900 border border-slate-600 rounded-lg p-3 shadow-xl">
+      <p className="text-slate-400 text-sm font-medium mb-2">Year {label}</p>
+      {Object.entries(scenarioData).map(([scenarioName, data]: [string, any]) => (
+        <div key={scenarioName} className="mb-3 last:mb-0 pb-2 last:pb-0 border-b border-slate-700 last:border-0">
+          <p className="text-sm font-medium mb-1" style={{ color: data.color }}>
+            {scenarioName}
+          </p>
+          <div className="space-y-1 text-xs">
+            {data.data.fiProgress !== undefined && (
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-400">FI Progress:</span>
+                <span className="text-emerald-400 font-mono">{data.data.fiProgress.toFixed(1)}%</span>
+              </div>
+            )}
+            {data.data.netWorth !== undefined && (
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-400">Net Worth:</span>
+                <span className="text-sky-400 font-mono">{formatCurrency(data.data.netWorth)}</span>
+              </div>
+            )}
+            {data.data.spending !== undefined && (
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-400">Monthly Spending:</span>
+                <span className="text-amber-400 font-mono">{formatCurrency(data.data.spending)}</span>
+              </div>
+            )}
+            {data.data.savings !== undefined && (
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-400">Annual Savings:</span>
+                <span className="text-violet-400 font-mono">{formatCurrency(data.data.savings)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type MetricType = 'fiProgress' | 'netWorth' | 'spending' | 'savings';
+
+interface MetricConfig {
+  key: MetricType;
+  label: string;
+  yAxisId: 'left' | 'right';
+  color: string;
+  formatter: (value: number) => string;
+}
+
+const METRICS: MetricConfig[] = [
+  {
+    key: 'fiProgress',
+    label: 'FI Progress',
+    yAxisId: 'right',
+    color: '#10b981',
+    formatter: (v) => `${v.toFixed(0)}%`
+  },
+  {
+    key: 'netWorth',
+    label: 'Net Worth',
+    yAxisId: 'left',
+    color: '#0ea5e9',
+    formatter: (v) => `$${(v/1000000).toFixed(1)}M`
+  },
+  {
+    key: 'spending',
+    label: 'Monthly Spending',
+    yAxisId: 'left',
+    color: '#f59e0b',
+    formatter: (v) => formatCurrency(v)
+  },
+  {
+    key: 'savings',
+    label: 'Annual Savings',
+    yAxisId: 'left',
+    color: '#8b5cf6',
+    formatter: (v) => formatCurrency(v)
+  },
+];
+
 function ProjectionsChart({
   scenarioProjections,
   comparisonChartData,
@@ -2101,109 +2200,198 @@ function ProjectionsChart({
   fiProgressChartData: Record<string, number | string>[];
   currentYear: number;
 }) {
-  if (comparisonChartData.length === 0) {
+  const [selectedMetrics, setSelectedMetrics] = React.useState<Set<MetricType>>(new Set<MetricType>(['fiProgress']));
+  const [zoomDomain, setZoomDomain] = React.useState<[number, number] | null>(null);
+
+  if (scenarioProjections.length === 0) {
     return <div className="text-slate-400">No projection data available</div>
   }
 
+  // Prepare unified chart data with all metrics for all scenarios
+  const unifiedChartData = React.useMemo(() => {
+    const yearMap = new Map<number, any>();
+
+    scenarioProjections.forEach(sp => {
+      sp.projections.forEach(proj => {
+        if (!yearMap.has(proj.year)) {
+          yearMap.set(proj.year, { year: proj.year });
+        }
+        const yearData = yearMap.get(proj.year);
+
+        // Store all metrics for this scenario at this year
+        yearData[`${sp.scenario.name}_fiProgress`] = proj.fiProgress;
+        yearData[`${sp.scenario.name}_netWorth`] = proj.netWorth;
+        yearData[`${sp.scenario.name}_spending`] = proj.monthlySpend;
+        yearData[`${sp.scenario.name}_savings`] = proj.annualSavings;
+      });
+    });
+
+    return Array.from(yearMap.values()).sort((a, b) => a.year - b.year);
+  }, [scenarioProjections]);
+
+  const toggleMetric = (metric: MetricType) => {
+    const newMetrics = new Set(selectedMetrics);
+    if (newMetrics.has(metric)) {
+      newMetrics.delete(metric);
+    } else {
+      newMetrics.add(metric);
+    }
+    setSelectedMetrics(newMetrics);
+  };
+
+  // Determine which Y-axes to show based on selected metrics
+  const showLeftAxis = Array.from(selectedMetrics).some(m =>
+    METRICS.find(metric => metric.key === m)?.yAxisId === 'left'
+  );
+  const showRightAxis = Array.from(selectedMetrics).some(m =>
+    METRICS.find(metric => metric.key === m)?.yAxisId === 'right'
+  );
+
+  // Filter data based on zoom
+  const displayData = zoomDomain
+    ? unifiedChartData.filter(d => d.year >= zoomDomain[0] && d.year <= zoomDomain[1])
+    : unifiedChartData;
+
   return (
     <div className="flex-1 bg-slate-800/30 rounded-xl border border-slate-700 p-6 overflow-auto">
-      <div className="space-y-8">
-        {/* Net Worth Comparison Chart */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-medium text-slate-200">Net Worth Projections</h3>
-            <div className="flex gap-2">
-              {scenarioProjections.map(sp => (
-                sp.fiYear && (
-                  <span 
-                    key={sp.scenario._id}
-                    className="text-sm px-3 py-1 rounded-full"
-                    style={{ backgroundColor: `${sp.scenario.color}20`, color: sp.scenario.color }}
-                  >
-                    {sp.scenario.name}: FI in {sp.fiYear - currentYear}y
-                  </span>
-                )
-              ))}
-            </div>
-          </div>
-          <div className="w-full h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={comparisonChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="year" stroke="#94a3b8" />
-                <YAxis 
-                  stroke="#94a3b8"
-                  tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`}
-                />
-                <Tooltip 
-                  formatter={(value) => formatCurrency(value as number)}
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                />
-                <Legend />
-                {scenarioProjections.map((sp, index) => (
-                  <Line 
-                    key={sp.scenario._id}
-                    type="monotone" 
-                    dataKey={sp.scenario.name}
-                    name={sp.scenario.name}
-                    stroke={sp.scenario.color}
-                    strokeWidth={index === 0 ? 3 : 2}
-                    strokeDasharray={index === 0 ? undefined : "5 5"}
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+      <div className="space-y-6">
+        {/* Header with scenario indicators */}
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-medium text-slate-200">Scenario Projections</h3>
+          <div className="flex gap-2">
+            {scenarioProjections.map(sp => (
+              sp.fiYear && (
+                <span
+                  key={sp.scenario._id}
+                  className="text-sm px-3 py-1 rounded-full"
+                  style={{ backgroundColor: `${sp.scenario.color}20`, color: sp.scenario.color }}
+                >
+                  {sp.scenario.name}: FI in {sp.fiYear - currentYear}y
+                </span>
+              )
+            ))}
           </div>
         </div>
 
-        {/* FI Progress Comparison Chart */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-medium text-slate-200">FI Progress Comparison</h3>
-            <div className="text-sm text-slate-400">
-              Progress toward 100% Financial Independence
-            </div>
-          </div>
-          <div className="w-full h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={fiProgressChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="year" stroke="#94a3b8" />
-                <YAxis
-                  stroke="#94a3b8"
-                  tickFormatter={(v) => `${v}%`}
-                  domain={[0, 'auto']}
-                />
-                <Tooltip
-                  formatter={(value) => `${Number(value).toFixed(1)}%`}
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                />
-                <Legend />
-                <ReferenceLine
-                  y={100}
-                  stroke="#10b981"
-                  strokeDasharray="3 3"
-                  label={{ value: '100% FI', position: 'right', fill: '#10b981' }}
-                />
-                {scenarioProjections.map((sp, index) => (
-                  <Line
-                    key={sp.scenario._id}
-                    type="monotone"
-                    dataKey={sp.scenario.name}
-                    name={sp.scenario.name}
-                    stroke={sp.scenario.color}
-                    strokeWidth={index === 0 ? 3 : 2}
-                    strokeDasharray={index === 0 ? undefined : "5 5"}
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+        {/* Metric Toggles */}
+        <div className="flex flex-wrap gap-3">
+          {METRICS.map(metric => (
+            <button
+              key={metric.key}
+              onClick={() => toggleMetric(metric.key)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                selectedMetrics.has(metric.key)
+                  ? 'bg-slate-700 text-white border-2'
+                  : 'bg-slate-800/50 text-slate-400 border-2 border-transparent hover:border-slate-600'
+              }`}
+              style={selectedMetrics.has(metric.key) ? { borderColor: metric.color, color: metric.color } : {}}
+            >
+              {metric.label}
+            </button>
+          ))}
         </div>
+
+        {selectedMetrics.size === 0 ? (
+          <div className="text-center py-12 text-slate-400">
+            Select at least one metric to display
+          </div>
+        ) : (
+          <>
+            {/* Main Unified Chart */}
+            <div className="w-full h-[500px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={displayData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="year" stroke="#94a3b8" />
+
+                  {showLeftAxis && (
+                    <YAxis
+                      yAxisId="left"
+                      stroke="#94a3b8"
+                      tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`}
+                    />
+                  )}
+
+                  {showRightAxis && (
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      stroke="#94a3b8"
+                      tickFormatter={(v) => `${v}%`}
+                      domain={[0, 'auto']}
+                    />
+                  )}
+
+                  <Tooltip content={<UnifiedChartTooltip />} />
+                  <Legend />
+
+                  {/* Add reference line for 100% FI if FI Progress is selected */}
+                  {selectedMetrics.has('fiProgress') && (
+                    <ReferenceLine
+                      yAxisId="right"
+                      y={100}
+                      stroke="#10b981"
+                      strokeDasharray="3 3"
+                      label={{ value: '100% FI', position: 'right', fill: '#10b981' }}
+                    />
+                  )}
+
+                  {/* Render lines for each selected metric for each scenario */}
+                  {scenarioProjections.map((sp, scenarioIndex) => (
+                    Array.from(selectedMetrics).map(metricKey => {
+                      const metric = METRICS.find(m => m.key === metricKey)!;
+                      const dataKey = `${sp.scenario.name}_${metricKey}`;
+
+                      return (
+                        <Line
+                          key={dataKey}
+                          type="monotone"
+                          dataKey={dataKey}
+                          name={`${sp.scenario.name} - ${metric.label}`}
+                          stroke={sp.scenario.color}
+                          strokeWidth={scenarioIndex === 0 ? 3 : 2}
+                          strokeDasharray={scenarioIndex === 0 ? undefined : "5 5"}
+                          dot={false}
+                          yAxisId={metric.yAxisId}
+                          isAnimationActive={false}
+                        />
+                      );
+                    })
+                  ))}
+
+                  {/* Brush for zooming */}
+                  <Brush
+                    dataKey="year"
+                    height={30}
+                    stroke="#475569"
+                    fill="#1e293b"
+                    onChange={(domain: any) => {
+                      if (domain?.startIndex !== undefined && domain?.endIndex !== undefined) {
+                        const start = displayData[domain.startIndex]?.year;
+                        const end = displayData[domain.endIndex]?.year;
+                        if (start && end) {
+                          setZoomDomain([start, end]);
+                        }
+                      }
+                    }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Zoom Reset Button */}
+            {zoomDomain && (
+              <div className="flex justify-center">
+                <button
+                  onClick={() => setZoomDomain(null)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  Reset Zoom
+                </button>
+              </div>
+            )}
+          </>
+        )}
 
         {/* FI Timeline Comparison */}
         <div>
@@ -2246,58 +2434,6 @@ function ProjectionsChart({
             ))}
           </div>
         </div>
-
-        {/* Interest vs Contributions - Primary Scenario */}
-        {scenarioProjections[0] && (
-          <div>
-            <h3 className="text-lg font-medium text-slate-200 mb-3">
-              Interest vs Contributions ({scenarioProjections[0].scenario.name})
-            </h3>
-            <div className="w-full h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={scenarioProjections[0].projections
-                  .filter((d): d is typeof d & { year: number } => typeof d.year === 'number')
-                  .slice(0, 25)
-                  .map(d => ({
-                    year: d.year,
-                    contributed: Math.round(d.contributed),
-                    interest: Math.round(d.interest),
-                  }))
-                }>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="year" stroke="#94a3b8" />
-                  <YAxis 
-                    stroke="#94a3b8"
-                    tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`}
-                  />
-                  <Tooltip 
-                    formatter={(value) => formatCurrency(value as number)}
-                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                  />
-                  <Legend />
-                  <Area 
-                    type="monotone" 
-                    dataKey="contributed" 
-                    name="Contributions"
-                    stackId="1"
-                    stroke="#0ea5e9" 
-                    fill="#0ea5e9"
-                    isAnimationActive={false}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="interest" 
-                    name="Interest Earned"
-                    stackId="1"
-                    stroke="#10b981" 
-                    fill="#10b981"
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
