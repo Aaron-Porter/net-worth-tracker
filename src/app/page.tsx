@@ -1549,16 +1549,6 @@ function ProjectionsTable({
       const currentRow = primaryProjection.projections[i];
       const nextRow = primaryProjection.projections[i + 1];
 
-      // Skip if this is the "Now" row, just show it once
-      if (currentRow.year === 'Now') {
-        monthlyRows.push({
-          ...currentRow,
-          displayYear: 'Now',
-          monthIndex: 0,
-        });
-        continue;
-      }
-
       // Generate 12 months for this year
       for (let month = 0; month < 12; month++) {
         const monthFraction = month / 12;
@@ -1571,7 +1561,7 @@ function ProjectionsTable({
         };
 
         // Get corresponding rows from next year for interpolation
-        const nextYearRow = nextRow && nextRow.year !== 'Now' ? nextRow : null;
+        const nextYearRow = nextRow || null;
 
         // Calculate interpolated age
         let interpolatedAge = currentRow.age;
@@ -1866,7 +1856,6 @@ function ProjectionsTable({
               </thead>
               <tbody>
                 {displayRows.map((row, rowIndex) => {
-                  const isNow = row.year === 'Now' || row.displayYear === 'Now';
                   const displayYearValue = row.displayYear || row.year;
                   const lookupYear = row.year;
 
@@ -1880,24 +1869,22 @@ function ProjectionsTable({
                     };
                   });
                   const anyFiYear = scenarioFiStatus.some(s => s.isFiYear);
-                  const anyFiNow = isNow && scenarioFiStatus.some(s => s.swrCoversSpend);
 
                   // Generate unique key
-                  const rowKey = isNow ? 'now' : `${lookupYear}-${row.monthIndex || 0}`;
+                  const rowKey = `${lookupYear}-${row.monthIndex || 0}`;
 
                   return (
                     <tr
                       key={rowKey}
                       className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${
-                        isNow ? 'border-b-2 border-slate-600 bg-slate-700/30' : ''
-                      } ${anyFiYear ? 'bg-emerald-900/20' : ''
-                      } ${anyFiNow ? 'bg-emerald-900/30' : ''}`}
+                        anyFiYear ? 'bg-emerald-900/20' : ''
+                      }`}
                     >
-                      <td className={`py-2 px-3 font-medium ${isNow ? 'text-slate-200 font-semibold' : 'text-slate-300'}`}>
+                      <td className="py-2 px-3 font-medium text-slate-300">
                         {displayYearValue}
                       </td>
                       {birthDate && (
-                        <td className={`py-2 px-3 ${isNow ? 'text-slate-300 font-medium' : 'text-slate-400'}`}>
+                        <td className="py-2 px-3 text-slate-400">
                           {row.age !== null && typeof row.age === 'number' ? Math.floor(row.age) : row.age}
                         </td>
                       )}
@@ -1907,7 +1894,7 @@ function ProjectionsTable({
                         let netWorthValue = 0;
                         let isFiYear = false;
 
-                        if (viewMode === 'monthly' && !isNow) {
+                        if (viewMode === 'monthly') {
                           const currentYearRow = sp.projections.find(p => p.year === lookupYear);
                           const nextYearRow = sp.projections.find(p => p.year === (lookupYear as number) + 1);
 
@@ -1928,7 +1915,7 @@ function ProjectionsTable({
                         return (
                           <td
                             key={`nw-${sp.scenario._id}`}
-                            className={`py-2 px-3 text-right font-mono ${isNow ? 'font-semibold' : ''}`}
+                            className="py-2 px-3 text-right font-mono"
                             style={{ color: sp.scenario.color }}
                           >
                             {formatCurrency(netWorthValue)}
@@ -1987,7 +1974,7 @@ function ProjectionsTable({
                       {scenarioProjections.map(sp => {
                         // Use interpolated value from row for monthly view
                         let fiProgress = 0;
-                        if (viewMode === 'monthly' && !isNow) {
+                        if (viewMode === 'monthly') {
                           fiProgress = row.fiProgress || 0;
                         } else {
                           const scenarioRow = sp.projections.find(p => p.year === lookupYear);

@@ -213,8 +213,8 @@ export function useFinancials(options: UseFinancialsOptions = {}): UseFinancials
   // Extract key milestones from projections
   const fiRow = projections.find(p => p.isFiYear);
   const crossoverRow = projections.find(p => p.isCrossover);
-  const nowRow = projections.find(p => p.year === 'Now');
-  
+  const firstRow = projections[0]; // First projection row (current year)
+
   // Settings updater
   const updateLocalSetting = useCallback((
     key: keyof typeof localSettings,
@@ -222,30 +222,30 @@ export function useFinancials(options: UseFinancialsOptions = {}): UseFinancials
   ) => {
     setLocalSettings(prev => ({ ...prev, [key]: value }));
   }, []);
-  
+
   return {
     // Loading states
     isLoading: rawSettings === undefined,
     settingsLoaded,
-    
+
     // Raw data
     settings,
     entries,
     latestEntry,
-    
+
     // Calculated values
     currentNetWorth: realTimeNetWorth,
     growthRates,
     projections,
     levelInfo,
-    
+
     // Key milestones
     fiYear: typeof fiRow?.year === 'number' ? fiRow.year : null,
     fiAge: fiRow?.age ?? null,
     crossoverYear: typeof crossoverRow?.year === 'number' ? crossoverRow.year : null,
-    currentFiProgress: nowRow?.fiProgress ?? 0,
-    currentMonthlySwr: nowRow?.monthlySwr ?? 0,
-    currentAnnualSwr: nowRow?.annualSwr ?? 0,
+    currentFiProgress: firstRow?.fiProgress ?? 0,
+    currentMonthlySwr: firstRow?.monthlySwr ?? 0,
+    currentAnnualSwr: firstRow?.annualSwr ?? 0,
     
     // Settings controls
     includeContributions,

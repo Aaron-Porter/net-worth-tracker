@@ -29,7 +29,7 @@ export interface NetWorthEntry {
 }
 
 export interface ProjectionRow {
-  year: number | 'Now';
+  year: number;
   age: number | null;
   yearsFromEntry: number;
   netWorth: number;
@@ -670,49 +670,11 @@ export function generateProjections(
     : monthlySpend;
   const baseAnnualSpend = baseMonthlySpend * 12;
   
-  // "Now" row
+  // Check if currently FI (to prevent marking future years as FI year)
   const currentSpend = baseMonthlySpend;
-  const currentAnnualSpending = currentSpend * 12;
-  // At year 0, savings equals the full yearly contribution
-  const currentAnnualSavings = yearlyContribution;
-  const currentFiTarget = calculateFiTarget(currentSpend, swr);
   const currentSwrAmounts = calculateSwrAmounts(currentNetWorth, swr);
   const currentSwrCoversSpend = currentSpend > 0 && currentSwrAmounts.monthly >= currentSpend;
-  const currentCoastFiYear = findCoastFiYear(currentNetWorth, currentYear, 0, settings, applyInflation, useSpendingLevels);
-  const currentFiProgress = currentFiTarget > 0 ? (currentNetWorth / currentFiTarget) * 100 : 0;
-  
   if (currentSwrCoversSpend) fiYearFound = true;
-
-  // Get current year tax info from dynamic projections if available
-  const currentDynamicRow = dynamicProjections && dynamicProjections[0];
-
-  data.push({
-    year: 'Now',
-    age: birthYear ? currentYear - birthYear : null,
-    yearsFromEntry: 0,
-    netWorth: currentNetWorth,
-    interest: currentAppreciation,
-    contributed: 0,
-    annualSwr: currentSwrAmounts.annual,
-    monthlySwr: currentSwrAmounts.monthly,
-    weeklySwr: currentSwrAmounts.weekly,
-    dailySwr: currentSwrAmounts.daily,
-    monthlySpend: currentSpend,
-    annualSpending: currentAnnualSpending,
-    annualSavings: currentAnnualSavings,
-    fiTarget: currentFiTarget,
-    fiProgress: currentFiProgress,
-    coastFiYear: currentCoastFiYear,
-    coastFiAge: currentCoastFiYear && birthYear ? currentCoastFiYear - birthYear : null,
-    isFiYear: false,
-    isCrossover: false,
-    swrCoversSpend: currentSwrCoversSpend,
-    // Add tax information from dynamic projections if available
-    grossIncome: currentDynamicRow?.grossIncome,
-    totalTax: currentDynamicRow?.totalTax,
-    netIncome: currentDynamicRow?.netIncome,
-    preTaxContributions: currentDynamicRow?.preTaxContributions,
-  });
   
   // Track cumulative values for proper calculation
   let previousNetWorth = currentNetWorth;
