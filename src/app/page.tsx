@@ -1156,7 +1156,7 @@ function ProjectionsTab({
   // Prepare comparison chart data (limited to 30 years)
   const comparisonChartData = useMemo(() => {
     if (!primaryProjection) return [];
-    
+
     const years = primaryProjection.projections
       .filter((d): d is typeof d & { year: number } => typeof d.year === 'number')
       .slice(0, 30)
@@ -1168,6 +1168,27 @@ function ProjectionsTab({
       scenarioProjections.forEach(sp => {
         const row = sp.projections.find(p => p.year === year);
         dataPoint[sp.scenario.name] = Math.round(row?.netWorth || 0);
+      });
+
+      return dataPoint;
+    });
+  }, [primaryProjection, scenarioProjections]);
+
+  // Prepare FI progress comparison chart data (limited to 30 years)
+  const fiProgressChartData = useMemo(() => {
+    if (!primaryProjection) return [];
+
+    const years = primaryProjection.projections
+      .filter((d): d is typeof d & { year: number } => typeof d.year === 'number')
+      .slice(0, 30)
+      .map(d => d.year);
+
+    return years.map(year => {
+      const dataPoint: Record<string, number | string> = { year };
+
+      scenarioProjections.forEach(sp => {
+        const row = sp.projections.find(p => p.year === year);
+        dataPoint[sp.scenario.name] = Number((row?.fiProgress || 0).toFixed(1));
       });
 
       return dataPoint;
@@ -1300,6 +1321,7 @@ function ProjectionsTab({
         <ProjectionsChart
           scenarioProjections={scenarioProjections}
           comparisonChartData={comparisonChartData}
+          fiProgressChartData={fiProgressChartData}
           currentYear={currentYear}
         />
       )}
@@ -2071,10 +2093,12 @@ function ProjectionsTable({
 function ProjectionsChart({
   scenarioProjections,
   comparisonChartData,
+  fiProgressChartData,
   currentYear,
 }: {
   scenarioProjections: ScenarioProjection[];
   comparisonChartData: Record<string, number | string>[];
+  fiProgressChartData: Record<string, number | string>[];
   currentYear: number;
 }) {
   if (comparisonChartData.length === 0) {
@@ -2120,6 +2144,53 @@ function ProjectionsChart({
                   <Line 
                     key={sp.scenario._id}
                     type="monotone" 
+                    dataKey={sp.scenario.name}
+                    name={sp.scenario.name}
+                    stroke={sp.scenario.color}
+                    strokeWidth={index === 0 ? 3 : 2}
+                    strokeDasharray={index === 0 ? undefined : "5 5"}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* FI Progress Comparison Chart */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-medium text-slate-200">FI Progress Comparison</h3>
+            <div className="text-sm text-slate-400">
+              Progress toward 100% Financial Independence
+            </div>
+          </div>
+          <div className="w-full h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={fiProgressChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="year" stroke="#94a3b8" />
+                <YAxis
+                  stroke="#94a3b8"
+                  tickFormatter={(v) => `${v}%`}
+                  domain={[0, 'auto']}
+                />
+                <Tooltip
+                  formatter={(value) => `${Number(value).toFixed(1)}%`}
+                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
+                />
+                <Legend />
+                <ReferenceLine
+                  y={100}
+                  stroke="#10b981"
+                  strokeDasharray="3 3"
+                  label={{ value: '100% FI', position: 'right', fill: '#10b981' }}
+                />
+                {scenarioProjections.map((sp, index) => (
+                  <Line
+                    key={sp.scenario._id}
+                    type="monotone"
                     dataKey={sp.scenario.name}
                     name={sp.scenario.name}
                     stroke={sp.scenario.color}
