@@ -705,7 +705,6 @@ function ScenarioEditor({
     preTaxIRA: scenario.preTaxIRA?.toString() || '',
     preTaxHSA: scenario.preTaxHSA?.toString() || '',
     preTaxOther: scenario.preTaxOther?.toString() || '',
-    yearlyContribution: scenario.yearlyContribution?.toString() || '',
     baseMonthlyBudget: scenario.baseMonthlyBudget?.toString() || '3000',
     spendingGrowthRate: scenario.spendingGrowthRate?.toString() || '0.5',
     currentRate: scenario.currentRate?.toString() || '7',
@@ -715,12 +714,39 @@ function ScenarioEditor({
 
   const [saving, setSaving] = useState(false);
 
+  // Get current net worth for spending calculations
+  const currentNetWorth = scenariosHook.scenarioProjections[0]?.currentNetWorth.total || 0;
+
+  // Calculate live income breakdown when income is entered
+  const liveBreakdown = useMemo((): ScenarioIncomeBreakdown | null => {
+    const gross = parseFloat(form.grossIncome) || 0;
+    if (gross <= 0) return null;
+
+    const baseBudget = parseFloat(form.baseMonthlyBudget) || 3000;
+    const spendingRate = parseFloat(form.spendingGrowthRate) || 0;
+    const netWorthPortion = currentNetWorth * (spendingRate / 100) / 12;
+    const totalSpending = baseBudget + netWorthPortion;
+
+    return calculateScenarioIncome(
+      gross,
+      form.filingStatus as FilingStatus,
+      form.stateCode || null,
+      {
+        traditional401k: parseFloat(form.preTax401k) || 0,
+        traditionalIRA: parseFloat(form.preTaxIRA) || 0,
+        hsa: parseFloat(form.preTaxHSA) || 0,
+        other: parseFloat(form.preTaxOther) || 0,
+      },
+      totalSpending,
+      currentNetWorth
+    );
+  }, [form, currentNetWorth]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
       const updates: any = {
         name: form.name || 'New Scenario',
-        yearlyContribution: parseFloat(form.yearlyContribution) || 0,
         currentRate: parseFloat(form.currentRate) || 7,
         swr: parseFloat(form.swr) || 4,
         inflationRate: parseFloat(form.inflationRate) || 3,
@@ -730,7 +756,7 @@ function ScenarioEditor({
 
       // Optional income fields
       const grossIncome = parseFloat(form.grossIncome);
-      if (grossIncome > 0) {
+      if (grossIncome > 0 && liveBreakdown) {
         updates.grossIncome = grossIncome;
         updates.incomeGrowthRate = parseFloat(form.incomeGrowthRate) || 3;
         updates.filingStatus = form.filingStatus as FilingStatus;
@@ -739,6 +765,13 @@ function ScenarioEditor({
         updates.preTaxIRA = parseFloat(form.preTaxIRA) || 0;
         updates.preTaxHSA = parseFloat(form.preTaxHSA) || 0;
         updates.preTaxOther = parseFloat(form.preTaxOther) || 0;
+        // Calculate yearly contribution from breakdown
+        updates.yearlyContribution = liveBreakdown.totalAnnualSavings;
+        updates.effectiveTaxRate = liveBreakdown.taxes.effectiveTotalRate;
+      } else {
+        // No income data - savings must be specified manually in a different way
+        // For now, default to 0
+        updates.yearlyContribution = 0;
       }
 
       if (isNewScenario) {
@@ -885,26 +918,6 @@ function ScenarioEditor({
             </div>
           </section>
 
-          {/* Savings */}
-          <section>
-            <h3 className="text-lg font-semibold text-slate-200 mb-4">Annual Savings</h3>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Yearly Contribution ($)
-              </label>
-              <input
-                type="number"
-                value={form.yearlyContribution}
-                onChange={(e) => setForm({ ...form, yearlyContribution: e.target.value })}
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                placeholder="Total annual savings"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                Total amount you save each year (contributions to investments)
-              </p>
-            </div>
-          </section>
-
           {/* Income & Taxes (Optional) */}
           <section className="border-t border-slate-700 pt-6">
             <h3 className="text-lg font-semibold text-slate-200 mb-2">Income & Taxes (Optional)</h3>
@@ -1012,6 +1025,78 @@ function ScenarioEditor({
                     </div>
                   </div>
                 </>
+              )}
+
+              {/* Income Breakdown Display */}
+              {liveBreakdown && (
+                <div className="mt-6 space-y-4">
+                  <h4 className="text-sm font-semibold text-slate-200">Income Breakdown</h4>
+
+                  {/* High-level Summary */}
+                  <div className="bg-slate-900/50 rounded-lg p-4 space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Gross Income</span>
+                      <span className="font-mono text-slate-200">{formatCurrency(liveBreakdown.taxes.grossIncome)}</span>
+                    </div>
+
+                    {liveBreakdown.taxes.totalPreTaxContributions > 0 && (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-400">− Pre-tax Contributions</span>
+                          <span className="font-mono text-emerald-400">−{formatCurrency(liveBreakdown.taxes.totalPreTaxContributions)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm border-t border-slate-700 pt-2">
+                          <span className="text-slate-400">Adjusted Gross Income</span>
+                          <span className="font-mono text-slate-200">{formatCurrency(liveBreakdown.taxes.adjustedGrossIncome)}</span>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="flex justify-between text-sm border-t border-slate-700 pt-2">
+                      <span className="text-slate-400">− Total Taxes</span>
+                      <span className="font-mono text-red-400">−{formatCurrency(liveBreakdown.taxes.totalTax)}</span>
+                    </div>
+
+                    <div className="flex justify-between text-sm text-xs text-slate-500 pl-4">
+                      <span>Federal: {formatCurrency(liveBreakdown.taxes.federalTax)}</span>
+                      <span>State: {formatCurrency(liveBreakdown.taxes.stateTax)}</span>
+                      <span>FICA: {formatCurrency(liveBreakdown.taxes.fica.totalFicaTax)}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center border-t border-slate-700 pt-2">
+                      <div>
+                        <span className="text-sm font-medium text-emerald-400">Net Income</span>
+                        <p className="text-xs text-slate-500">
+                          Effective Tax Rate: {formatPercent(liveBreakdown.taxes.effectiveTotalRate)}
+                        </p>
+                      </div>
+                      <span className="text-lg font-mono text-emerald-400">{formatCurrency(liveBreakdown.taxes.netIncome)}</span>
+                    </div>
+
+                    <div className="border-t border-slate-700 pt-3 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">− Annual Spending</span>
+                        <span className="font-mono text-amber-400">−{formatCurrency(liveBreakdown.annualSpending)}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-t border-emerald-500/30 pt-2">
+                        <div>
+                          <span className="text-sm font-medium text-emerald-400">Total Annual Savings</span>
+                          <p className="text-xs text-slate-500">
+                            {formatCurrency(liveBreakdown.monthlySavingsAvailable)}/month
+                          </p>
+                        </div>
+                        <span className="text-lg font-mono text-emerald-400">{formatCurrency(liveBreakdown.totalAnnualSavings)}</span>
+                      </div>
+
+                      <p className="text-xs text-center text-slate-500 pt-2">
+                        Savings Rate: <span className="text-emerald-400 font-semibold">{formatPercent(liveBreakdown.savingsRateOfGross)}</span> of gross income
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Detailed Tax Calculation */}
+                  <TaxCalculationDetails taxes={liveBreakdown.taxes} />
+                </div>
               )}
             </div>
           </section>
