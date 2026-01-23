@@ -1781,94 +1781,37 @@ function ProjectionsTable({
                     {viewMode === 'monthly' ? 'Month' : 'Year'}
                   </th>
                   {birthDate && <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Age</th>}
-                  {/* Net Worth columns for each scenario */}
-                  {scenarioProjections.map(sp => (
-                    <th 
-                      key={`nw-${sp.scenario._id}`} 
-                      className="text-right font-medium py-3 px-3 whitespace-nowrap"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Net Worth</div>
-                    </th>
-                  ))}
-                  {/* Spending columns for each scenario */}
-                  {scenarioProjections.map(sp => (
-                    <th
-                      key={`spend-${sp.scenario._id}`}
-                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Spending/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
-                    </th>
-                  ))}
-                  {/* Savings columns for each scenario */}
-                  {scenarioProjections.map(sp => (
-                    <th
-                      key={`save-${sp.scenario._id}`}
-                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Savings/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
-                    </th>
-                  ))}
-                  {/* SWR columns for each scenario */}
-                  {scenarioProjections.map(sp => (
-                    <th
-                      key={`swr-${sp.scenario._id}`}
-                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">SWR/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
-                    </th>
-                  ))}
-                  {/* FI Progress columns for each scenario */}
-                  {scenarioProjections.map(sp => (
-                    <th 
-                      key={`fi-${sp.scenario._id}`} 
-                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">FI %</div>
-                    </th>
-                  ))}
-                  {/* Gross Income columns for each scenario (only if income data exists) */}
-                  {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => (
-                    <th
-                      key={`income-${sp.scenario._id}`}
-                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Income/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
-                    </th>
-                  ))}
-                  {/* Total Tax columns for each scenario (only if income data exists) */}
-                  {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => (
-                    <th
-                      key={`tax-${sp.scenario._id}`}
-                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Taxes/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
-                    </th>
-                  ))}
-                  {/* Net Income columns for each scenario (only if income data exists) */}
-                  {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => (
-                    <th
-                      key={`netincome-${sp.scenario._id}`}
-                      className="text-right font-medium py-3 px-3 whitespace-nowrap border-l border-slate-700"
-                      style={{ color: sp.scenario.color }}
-                    >
-                      {sp.scenario.name}
-                      <div className="text-xs font-normal text-slate-500">Net Income/{viewMode === 'monthly' ? 'mo' : 'yr'}</div>
-                    </th>
-                  ))}
+                  <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                    Scenario
+                  </th>
+                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                    Net Worth
+                  </th>
+                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                    Spending/{viewMode === 'monthly' ? 'mo' : 'yr'}
+                  </th>
+                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                    Savings/{viewMode === 'monthly' ? 'mo' : 'yr'}
+                  </th>
+                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                    SWR/{viewMode === 'monthly' ? 'mo' : 'yr'}
+                  </th>
+                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                    FI %
+                  </th>
+                  {scenarioProjections.some(sp => sp.hasDynamicIncome) && (
+                    <>
+                      <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                        Income/{viewMode === 'monthly' ? 'mo' : 'yr'}
+                      </th>
+                      <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                        Taxes/{viewMode === 'monthly' ? 'mo' : 'yr'}
+                      </th>
+                      <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                        Net Income/{viewMode === 'monthly' ? 'mo' : 'yr'}
+                      </th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -1890,215 +1833,189 @@ function ProjectionsTable({
                   // Generate unique key
                   const rowKey = `${lookupYear}-${row.monthIndex || 0}`;
 
-                  return (
-                    <tr
-                      key={rowKey}
-                      className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${
-                        anyFiYear ? 'bg-emerald-900/20' : ''
-                      }`}
-                    >
-                      <td className="py-2 px-3 font-medium text-slate-300">
-                        {displayYearValue}
-                      </td>
-                      {birthDate && (
-                        <td className="py-2 px-3 text-slate-400">
-                          {row.age !== null && typeof row.age === 'number' ? Math.floor(row.age) : row.age}
+                  // Return sub-rows for each scenario
+                  return scenarioProjections.map((sp, scenarioIndex) => {
+                    const isFirstScenario = scenarioIndex === 0;
+                    const isLastScenario = scenarioIndex === scenarioProjections.length - 1;
+
+                    // For monthly view, we need to interpolate from start to end of year
+                    let netWorthValue = 0;
+                    let isFiYear = false;
+
+                    if (viewMode === 'monthly') {
+                      const currentYearRow = sp.projections.find(p => p.year === lookupYear);
+                      const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
+
+                      // monthFraction for end-of-month: Jan=1/12, Feb=2/12, ..., Dec=12/12
+                      const monthFraction = ((row.monthIndex || 0) + 1) / 12;
+
+                      if (currentYearRow) {
+                        // For first year, start from current net worth; otherwise from previous year's end
+                        const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
+                        netWorthValue = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
+                      }
+
+                      isFiYear = (currentYearRow?.isFiYear ?? false) && (row.monthIndex || 0) === 11;
+                    } else {
+                      const scenarioRow = sp.projections.find(p => p.year === lookupYear);
+                      netWorthValue = scenarioRow?.netWorth || 0;
+                      isFiYear = scenarioRow?.isFiYear || false;
+                    }
+
+                    // Calculate other values
+                    const scenarioRow = sp.projections.find(p => p.year === lookupYear);
+                    const spendingValue = scenarioRow?.annualSpending || 0;
+                    const spendingDisplayValue = viewMode === 'monthly' ? spendingValue / 12 : spendingValue;
+
+                    const savings = scenarioRow?.annualSavings || 0;
+                    const savingsDisplayValue = viewMode === 'monthly' ? savings / 12 : savings;
+
+                    // SWR calculation
+                    let monthlySwr = 0;
+                    let swrCoversSpend = false;
+                    let swrDisplayValue = 0;
+
+                    if (viewMode === 'monthly') {
+                      const currentYearRow = sp.projections.find(p => p.year === lookupYear);
+                      const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
+
+                      if (currentYearRow) {
+                        // Calculate interpolated net worth for this month
+                        const monthFraction = ((row.monthIndex || 0) + 1) / 12;
+                        const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
+                        const monthNetWorth = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
+
+                        // Calculate SWR based on interpolated net worth
+                        const swrAmounts = calculateSwrAmounts(monthNetWorth, sp.scenario.swr);
+                        monthlySwr = swrAmounts.monthly;
+                        swrCoversSpend = currentYearRow.monthlySpend > 0 && monthlySwr >= currentYearRow.monthlySpend;
+                        swrDisplayValue = monthlySwr;
+                      }
+                    } else {
+                      monthlySwr = scenarioRow?.monthlySwr || 0;
+                      swrCoversSpend = scenarioRow?.swrCoversSpend || false;
+                      swrDisplayValue = monthlySwr * 12;
+                    }
+
+                    // FI Progress calculation
+                    let fiProgress = 0;
+                    if (viewMode === 'monthly') {
+                      const currentYearRow = sp.projections.find(p => p.year === lookupYear);
+                      const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
+
+                      if (currentYearRow) {
+                        // Calculate interpolated net worth for this month
+                        const monthFraction = ((row.monthIndex || 0) + 1) / 12;
+                        const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
+                        const monthNetWorth = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
+
+                        // Calculate FI target and progress based on interpolated net worth
+                        const fiTarget = calculateFiTarget(currentYearRow.monthlySpend, sp.scenario.swr);
+                        fiProgress = fiTarget > 0 ? (monthNetWorth / fiTarget) * 100 : 0;
+                      }
+                    } else {
+                      fiProgress = scenarioRow?.fiProgress || 0;
+                    }
+
+                    // Income values
+                    const income = scenarioRow?.grossIncome || 0;
+                    const hasIncome = sp.hasDynamicIncome && income > 0;
+                    const incomeDisplayValue = viewMode === 'monthly' ? income / 12 : income;
+
+                    const totalTax = scenarioRow?.totalTax || 0;
+                    const hasTax = sp.hasDynamicIncome && totalTax > 0;
+                    const taxDisplayValue = viewMode === 'monthly' ? totalTax / 12 : totalTax;
+
+                    const netIncome = scenarioRow?.netIncome || 0;
+                    const hasNetIncome = sp.hasDynamicIncome && netIncome > 0;
+                    const netIncomeDisplayValue = viewMode === 'monthly' ? netIncome / 12 : netIncome;
+
+                    return (
+                      <tr
+                        key={`${rowKey}-${sp.scenario._id}`}
+                        className={`hover:bg-slate-700/30 ${
+                          isLastScenario ? 'border-b border-slate-700/50' : 'border-b border-slate-700/20'
+                        } ${
+                          anyFiYear && isFirstScenario ? 'bg-emerald-900/20' : ''
+                        }`}
+                        style={{
+                          backgroundColor: isFirstScenario && anyFiYear ? undefined : `${sp.scenario.color}08`,
+                          borderLeftWidth: '3px',
+                          borderLeftColor: sp.scenario.color,
+                        }}
+                      >
+                        {/* Year/Month - only show in first scenario row */}
+                        {isFirstScenario && (
+                          <td
+                            className="py-2 px-3 font-medium text-slate-300 align-top"
+                            rowSpan={scenarioProjections.length}
+                          >
+                            {displayYearValue}
+                          </td>
+                        )}
+                        {/* Age - only show in first scenario row */}
+                        {isFirstScenario && birthDate && (
+                          <td
+                            className="py-2 px-3 text-slate-400 align-top"
+                            rowSpan={scenarioProjections.length}
+                          >
+                            {row.age !== null && typeof row.age === 'number' ? Math.floor(row.age) : row.age}
+                          </td>
+                        )}
+                        {/* Scenario name with color */}
+                        <td className="py-2 px-3 text-sm font-medium" style={{ color: sp.scenario.color }}>
+                          {sp.scenario.name}
                         </td>
-                      )}
-                      {/* Net Worth values */}
-                      {scenarioProjections.map(sp => {
-                        // For monthly view, we need to interpolate from start to end of year
-                        let netWorthValue = 0;
-                        let isFiYear = false;
-
-                        if (viewMode === 'monthly') {
-                          const currentYearRow = sp.projections.find(p => p.year === lookupYear);
-                          const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
-
-                          // monthFraction for end-of-month: Jan=1/12, Feb=2/12, ..., Dec=12/12
-                          const monthFraction = ((row.monthIndex || 0) + 1) / 12;
-
-                          if (currentYearRow) {
-                            // For first year, start from current net worth; otherwise from previous year's end
-                            const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
-                            netWorthValue = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
-                          }
-
-                          isFiYear = (currentYearRow?.isFiYear ?? false) && (row.monthIndex || 0) === 11;
-                        } else {
-                          const scenarioRow = sp.projections.find(p => p.year === lookupYear);
-                          netWorthValue = scenarioRow?.netWorth || 0;
-                          isFiYear = scenarioRow?.isFiYear || false;
-                        }
-
-                        return (
-                          <td
-                            key={`nw-${sp.scenario._id}`}
-                            className="py-2 px-3 text-right font-mono"
-                            style={{ color: sp.scenario.color }}
-                          >
-                            {formatCurrency(netWorthValue)}
-                            {isFiYear && <span className="ml-1 text-xs text-emerald-400">FI</span>}
-                          </td>
-                        );
-                      })}
-                      {/* Spending values */}
-                      {scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
-                        const spendingValue = scenarioRow?.annualSpending || 0;
-                        const displayValue = viewMode === 'monthly' ? spendingValue / 12 : spendingValue;
-                        return (
-                          <td
-                            key={`spend-${sp.scenario._id}`}
-                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 text-rose-400/80`}
-                          >
-                            {formatCurrency(displayValue)}
-                          </td>
-                        );
-                      })}
-                      {/* Savings values */}
-                      {scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
-                        const savings = scenarioRow?.annualSavings || 0;
-                        const displayValue = viewMode === 'monthly' ? savings / 12 : savings;
-                        return (
-                          <td
-                            key={`save-${sp.scenario._id}`}
-                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
-                              savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'
-                            }`}
-                          >
-                            {formatCurrency(displayValue)}
-                          </td>
-                        );
-                      })}
-                      {/* SWR values */}
-                      {scenarioProjections.map(sp => {
-                        let monthlySwr = 0;
-                        let swrCoversSpend = false;
-                        let displayValue = 0;
-
-                        if (viewMode === 'monthly') {
-                          const currentYearRow = sp.projections.find(p => p.year === lookupYear);
-                          const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
-
-                          if (currentYearRow) {
-                            // Calculate interpolated net worth for this month
-                            const monthFraction = ((row.monthIndex || 0) + 1) / 12;
-                            const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
-                            const monthNetWorth = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
-
-                            // Calculate SWR based on interpolated net worth
-                            const swrAmounts = calculateSwrAmounts(monthNetWorth, sp.scenario.swr);
-                            monthlySwr = swrAmounts.monthly;
-                            swrCoversSpend = currentYearRow.monthlySpend > 0 && monthlySwr >= currentYearRow.monthlySpend;
-                            displayValue = monthlySwr;
-                          }
-                        } else {
-                          const scenarioRow = sp.projections.find(p => p.year === lookupYear);
-                          monthlySwr = scenarioRow?.monthlySwr || 0;
-                          swrCoversSpend = scenarioRow?.swrCoversSpend || false;
-                          displayValue = monthlySwr * 12;
-                        }
-
-                        return (
-                          <td
-                            key={`swr-${sp.scenario._id}`}
-                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
-                              swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'
-                            }`}
-                          >
-                            {formatCurrency(displayValue)}
-                          </td>
-                        );
-                      })}
-                      {/* FI Progress values */}
-                      {scenarioProjections.map(sp => {
-                        // Calculate FI progress based on interpolated net worth for monthly view
-                        let fiProgress = 0;
-                        if (viewMode === 'monthly') {
-                          const currentYearRow = sp.projections.find(p => p.year === lookupYear);
-                          const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
-
-                          if (currentYearRow) {
-                            // Calculate interpolated net worth for this month
-                            const monthFraction = ((row.monthIndex || 0) + 1) / 12;
-                            const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
-                            const monthNetWorth = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
-
-                            // Calculate FI target and progress based on interpolated net worth
-                            const fiTarget = calculateFiTarget(currentYearRow.monthlySpend, sp.scenario.swr);
-                            fiProgress = fiTarget > 0 ? (monthNetWorth / fiTarget) * 100 : 0;
-                          }
-                        } else {
-                          const scenarioRow = sp.projections.find(p => p.year === lookupYear);
-                          fiProgress = scenarioRow?.fiProgress || 0;
-                        }
-
-                        return (
-                          <td
-                            key={`fi-${sp.scenario._id}`}
-                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
-                              fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'
-                            }`}
-                          >
-                            {fiProgress.toFixed(1)}%
-                          </td>
-                        );
-                      })}
-                      {/* Gross Income values (only if any scenario has income data) */}
-                      {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
-                        const income = scenarioRow?.grossIncome || 0;
-                        const hasIncome = sp.hasDynamicIncome && income > 0;
-                        const displayValue = viewMode === 'monthly' ? income / 12 : income;
-                        return (
-                          <td
-                            key={`income-${sp.scenario._id}`}
-                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
+                        {/* Net Worth */}
+                        <td className="py-2 px-3 text-right font-mono" style={{ color: sp.scenario.color }}>
+                          {formatCurrency(netWorthValue)}
+                          {isFiYear && <span className="ml-1 text-xs text-emerald-400">FI</span>}
+                        </td>
+                        {/* Spending */}
+                        <td className="py-2 px-3 text-right font-mono text-rose-400/80">
+                          {formatCurrency(spendingDisplayValue)}
+                        </td>
+                        {/* Savings */}
+                        <td className={`py-2 px-3 text-right font-mono ${
+                          savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'
+                        }`}>
+                          {formatCurrency(savingsDisplayValue)}
+                        </td>
+                        {/* SWR */}
+                        <td className={`py-2 px-3 text-right font-mono ${
+                          swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'
+                        }`}>
+                          {formatCurrency(swrDisplayValue)}
+                        </td>
+                        {/* FI Progress */}
+                        <td className={`py-2 px-3 text-right font-mono ${
+                          fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'
+                        }`}>
+                          {fiProgress.toFixed(1)}%
+                        </td>
+                        {/* Income columns (only if any scenario has income data) */}
+                        {scenarioProjections.some(sp => sp.hasDynamicIncome) && (
+                          <>
+                            <td className={`py-2 px-3 text-right font-mono ${
                               hasIncome ? 'text-sky-400/80' : 'text-slate-500'
-                            }`}
-                          >
-                            {hasIncome ? formatCurrency(displayValue) : '-'}
-                          </td>
-                        );
-                      })}
-                      {/* Total Tax values (only if any scenario has income data) */}
-                      {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
-                        const totalTax = scenarioRow?.totalTax || 0;
-                        const hasTax = sp.hasDynamicIncome && totalTax > 0;
-                        const displayValue = viewMode === 'monthly' ? totalTax / 12 : totalTax;
-                        return (
-                          <td
-                            key={`tax-${sp.scenario._id}`}
-                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
+                            }`}>
+                              {hasIncome ? formatCurrency(incomeDisplayValue) : '-'}
+                            </td>
+                            <td className={`py-2 px-3 text-right font-mono ${
                               hasTax ? 'text-red-400/80' : 'text-slate-500'
-                            }`}
-                          >
-                            {hasTax ? formatCurrency(displayValue) : '-'}
-                          </td>
-                        );
-                      })}
-                      {/* Net Income values (only if any scenario has income data) */}
-                      {scenarioProjections.some(sp => sp.hasDynamicIncome) && scenarioProjections.map(sp => {
-                        const scenarioRow = sp.projections.find(p => p.year === lookupYear);
-                        const netIncome = scenarioRow?.netIncome || 0;
-                        const hasNetIncome = sp.hasDynamicIncome && netIncome > 0;
-                        const displayValue = viewMode === 'monthly' ? netIncome / 12 : netIncome;
-                        return (
-                          <td
-                            key={`netincome-${sp.scenario._id}`}
-                            className={`py-2 px-3 text-right font-mono border-l border-slate-700/50 ${
+                            }`}>
+                              {hasTax ? formatCurrency(taxDisplayValue) : '-'}
+                            </td>
+                            <td className={`py-2 px-3 text-right font-mono ${
                               hasNetIncome ? 'text-emerald-400/80' : 'text-slate-500'
-                            }`}
-                          >
-                            {hasNetIncome ? formatCurrency(displayValue) : '-'}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
+                            }`}>
+                              {hasNetIncome ? formatCurrency(netIncomeDisplayValue) : '-'}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  });
                 })}
               </tbody>
             </table>
