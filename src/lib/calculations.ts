@@ -1088,7 +1088,9 @@ export const STATE_TAX_INFO: Record<string, StateTaxInfo> = {
         { min: 2000000, max: Infinity, rate: 13.3 },
       ],
     },
-    standardDeduction: { single: 5363, married_jointly: 10726 },
+    standardDeduction: { single: 5706, married_jointly: 11412 }, // 2025 values
+    // IMPORTANT: California does NOT allow HSA deductions for state tax purposes
+    // This is handled in the calculateTaxes() function by adding back HSA contributions
   },
 
   CT: {
@@ -1769,8 +1771,9 @@ export interface TaxCalculation {
   
   // Taxable incomes
   adjustedGrossIncome: number;        // Gross - pre-tax contributions (for federal)
+  stateAdjustedGrossIncome: number;   // State AGI (may differ from federal - e.g., CA doesn't allow HSA deductions)
   federalTaxableIncome: number;       // AGI - federal standard deduction
-  stateTaxableIncome: number;         // AGI - state deductions (varies by state)
+  stateTaxableIncome: number;         // State AGI - state deductions (varies by state)
   
   // Federal Tax Details
   federalTax: number;
@@ -2209,7 +2212,12 @@ export function calculateTaxes(
   
   // Calculate State Tax with detailed bracket breakdown
   // Note: State taxes are typically calculated on AGI with state-specific deductions
-  const stateResult = calculateStateTax(adjustedGrossIncome, stateCode, filingStatus);
+  // IMPORTANT: California and New Jersey do NOT allow HSA deductions
+  // For these states, we need to add back HSA contributions to AGI
+  const stateAGI = (stateCode?.toUpperCase() === 'CA' || stateCode?.toUpperCase() === 'NJ')
+    ? adjustedGrossIncome + preTaxContributions.hsa
+    : adjustedGrossIncome;
+  const stateResult = calculateStateTax(stateAGI, stateCode, filingStatus);
   
   // Calculate FICA with detailed breakdown
   // Note: FICA is calculated on gross wages, NOT reduced by 401k/IRA contributions
@@ -2240,6 +2248,7 @@ export function calculateTaxes(
     
     // Taxable incomes
     adjustedGrossIncome,
+    stateAdjustedGrossIncome: stateAGI,
     federalTaxableIncome,
     stateTaxableIncome: stateResult.taxableIncome,
     
