@@ -3283,7 +3283,7 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
           </div>
           <div className="text-left">
             <h4 className="text-sm font-semibold text-slate-200">Tax Calculation Details</h4>
-            <p className="text-xs text-slate-500">See exactly how your {formatCurrency(taxes.totalTax)} tax burden is calculated</p>
+            <p className="text-xs text-slate-500">See exactly how your <SimpleTrackedValue value={taxes.totalTax} name="Total Tax Burden" description="Sum of all taxes: Federal + State + FICA" formula="Federal Tax + State Tax + Social Security + Medicare" className="text-slate-500" /> tax burden is calculated</p>
           </div>
         </div>
         <svg
@@ -3303,15 +3303,15 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
           <div className="grid grid-cols-3 gap-4 text-center pb-4 border-b border-slate-700">
             <div>
               <p className="text-xs text-slate-500 uppercase mb-1">Gross Income</p>
-              <p className="text-lg font-mono text-slate-200">{formatCurrency(taxes.grossIncome)}</p>
+              <SimpleTrackedValue value={taxes.grossIncome} name="Gross Income" description="Total income before any deductions" formula="Annual Salary + Other Income" className="text-lg font-mono text-slate-200" />
             </div>
             <div>
               <p className="text-xs text-slate-500 uppercase mb-1">Total Tax</p>
-              <p className="text-lg font-mono text-red-400">{formatCurrency(taxes.totalTax)}</p>
+              <SimpleTrackedValue value={taxes.totalTax} name="Total Tax" description="All taxes combined" formula="Federal + State + FICA" inputs={[{ name: 'Federal', value: taxes.federalTax, unit: '$' }, { name: 'State', value: taxes.stateTax, unit: '$' }, { name: 'FICA', value: taxes.fica.totalFicaTax, unit: '$' }]} className="text-lg font-mono text-red-400" />
             </div>
             <div>
               <p className="text-xs text-slate-500 uppercase mb-1">Net Income</p>
-              <p className="text-lg font-mono text-emerald-400">{formatCurrency(taxes.netIncome)}</p>
+              <SimpleTrackedValue value={taxes.netIncome} name="Net Income" description="Take-home pay after all deductions and taxes" formula="Gross - Pre-Tax - Total Taxes" inputs={[{ name: 'Gross', value: taxes.grossIncome, unit: '$' }, { name: 'Pre-Tax', value: taxes.totalPreTaxContributions, unit: '$' }, { name: 'Taxes', value: taxes.totalTax, unit: '$' }]} className="text-lg font-mono text-emerald-400" />
             </div>
           </div>
 
@@ -3325,35 +3325,35 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
               <div className="bg-slate-900/50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">Gross Income</span>
-                  <span className="font-mono text-slate-200">{formatCurrency(taxes.grossIncome)}</span>
+                  <SimpleTrackedValue value={taxes.grossIncome} name="Gross Income" description="Total income before deductions" formula="Annual Salary" className="font-mono text-slate-200" />
                 </div>
                 {taxes.preTaxContributions.traditional401k > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">− 401(k) Contribution</span>
-                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.traditional401k)}</span>
+                    <span className="font-mono text-emerald-400">−<SimpleTrackedValue value={taxes.preTaxContributions.traditional401k} name="401(k) Contribution" description="Pre-tax contribution to 401(k) retirement account" formula="User Input" className="text-emerald-400" /></span>
                   </div>
                 )}
                 {taxes.preTaxContributions.traditionalIRA > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">− Traditional IRA</span>
-                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.traditionalIRA)}</span>
+                    <span className="font-mono text-emerald-400">−<SimpleTrackedValue value={taxes.preTaxContributions.traditionalIRA} name="Traditional IRA" description="Pre-tax contribution to Traditional IRA" formula="User Input" className="text-emerald-400" /></span>
                   </div>
                 )}
                 {taxes.preTaxContributions.hsa > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">− HSA Contribution</span>
-                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.hsa)}</span>
+                    <span className="font-mono text-emerald-400">−<SimpleTrackedValue value={taxes.preTaxContributions.hsa} name="HSA Contribution" description="Pre-tax contribution to Health Savings Account" formula="User Input" className="text-emerald-400" /></span>
                   </div>
                 )}
                 {taxes.preTaxContributions.other > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">− Other Pre-tax</span>
-                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.other)}</span>
+                    <span className="font-mono text-emerald-400">−<SimpleTrackedValue value={taxes.preTaxContributions.other} name="Other Pre-tax" description="Other pre-tax deductions" formula="User Input" className="text-emerald-400" /></span>
                   </div>
                 )}
                 <div className="border-t border-slate-700 pt-2 flex justify-between text-sm font-medium">
                   <span className="text-slate-300">Adjusted Gross Income (AGI)</span>
-                  <span className="font-mono text-slate-200">{formatCurrency(taxes.adjustedGrossIncome)}</span>
+                  <SimpleTrackedValue value={taxes.adjustedGrossIncome} name="Adjusted Gross Income" description="Gross income minus pre-tax deductions" formula="Gross Income - Pre-Tax Contributions" inputs={[{ name: 'Gross', value: taxes.grossIncome, unit: '$' }, { name: 'Pre-Tax', value: taxes.totalPreTaxContributions, unit: '$' }]} className="font-mono text-slate-200" />
                 </div>
               </div>
             </div>
@@ -3380,11 +3380,11 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">− Standard Deduction ({taxes.filingStatus.replace('_', ' ')})</span>
-                  <span className="font-mono text-blue-400">−{formatCurrency(taxes.federalStandardDeduction)}</span>
+                  <span className="font-mono text-blue-400">−<SimpleTrackedValue value={taxes.federalStandardDeduction} name="Federal Standard Deduction" description={`Standard deduction for ${taxes.filingStatus.replace('_', ' ')} filing status`} formula="IRS Standard Deduction Amount" className="text-blue-400" /></span>
                 </div>
                 <div className="border-t border-slate-700 pt-2 flex justify-between text-sm font-medium">
                   <span className="text-slate-300">Federal Taxable Income</span>
-                  <span className="font-mono text-slate-200">{formatCurrency(taxes.federalTaxableIncome)}</span>
+                  <SimpleTrackedValue value={taxes.federalTaxableIncome} name="Federal Taxable Income" description="Income subject to federal tax after deductions" formula="AGI - Standard Deduction" inputs={[{ name: 'AGI', value: taxes.adjustedGrossIncome, unit: '$' }, { name: 'Std Deduction', value: taxes.federalStandardDeduction, unit: '$' }]} className="font-mono text-slate-200" />
                 </div>
               </div>
 
@@ -3407,13 +3407,13 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                           />
                           <div className="absolute inset-0 flex items-center justify-between px-2">
                             <span className="text-slate-400">
-                              {formatCurrency(bracket.bracketMin, 0)} – {bracket.bracketMax === Infinity ? '∞' : formatCurrency(bracket.bracketMax, 0)}
+                              <SimpleTrackedValue value={bracket.bracketMin} name={`Bracket ${idx + 1} Min`} description={`Lower bound of ${formatPercent(bracket.rate, 0)} tax bracket`} formula="IRS Tax Bracket" decimals={0} className="text-slate-400" /> – {bracket.bracketMax === Infinity ? '∞' : <SimpleTrackedValue value={bracket.bracketMax} name={`Bracket ${idx + 1} Max`} description={`Upper bound of ${formatPercent(bracket.rate, 0)} tax bracket`} formula="IRS Tax Bracket" decimals={0} className="text-slate-400" />}
                             </span>
-                            <span className="text-slate-300 font-mono">{formatCurrency(bracket.taxableInBracket, 0)}</span>
+                            <SimpleTrackedValue value={bracket.taxableInBracket} name={`Taxable in ${formatPercent(bracket.rate, 0)} Bracket`} description={`Amount of income taxed at ${formatPercent(bracket.rate, 0)}`} formula={`min(Income in bracket, Bracket size)`} decimals={0} className="text-slate-300 font-mono" />
                           </div>
                         </div>
                         <div className="w-20 text-right font-mono text-red-400">
-                          {formatCurrency(bracket.taxFromBracket)}
+                          <SimpleTrackedValue value={bracket.taxFromBracket} name={`Tax from ${formatPercent(bracket.rate, 0)} Bracket`} description={`Tax calculated from income in this bracket`} formula={`${formatCurrency(bracket.taxableInBracket, 0)} × ${formatPercent(bracket.rate, 0)}`} className="text-red-400" />
                         </div>
                       </div>
                     ))}
@@ -3430,7 +3430,7 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                       (Marginal: {formatPercent(taxes.marginalFederalRate)} • Effective: {formatPercent(taxes.effectiveFederalRate)})
                     </span>
                   </div>
-                  <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.federalTax)}</span>
+                  <SimpleTrackedValue value={taxes.federalTax} name="Federal Income Tax" description="Total federal income tax from all brackets" formula="Sum of tax from each bracket" inputs={taxes.federalBracketBreakdown.map((b, i) => ({ name: `${formatPercent(b.rate, 0)} bracket`, value: b.taxFromBracket, unit: '$' }))} className="text-lg font-mono text-red-400" />
                 </div>
               </div>
             </div>
@@ -3458,23 +3458,23 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-400">Adjusted Gross Income</span>
-                      <span className="font-mono text-slate-200">{formatCurrency(taxes.adjustedGrossIncome)}</span>
+                      <SimpleTrackedValue value={taxes.adjustedGrossIncome} name="AGI for State Tax" description="Adjusted gross income used for state tax calculation" formula="Gross - Pre-Tax Contributions" className="font-mono text-slate-200" />
                     </div>
                     {taxes.stateStandardDeduction > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">− State Standard Deduction</span>
-                        <span className="font-mono text-purple-400">−{formatCurrency(taxes.stateStandardDeduction)}</span>
+                        <span className="font-mono text-purple-400">−<SimpleTrackedValue value={taxes.stateStandardDeduction} name="State Standard Deduction" description="State-specific standard deduction amount" formula="State Tax Rules" className="text-purple-400" /></span>
                       </div>
                     )}
                     {taxes.statePersonalExemption > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">− Personal Exemption</span>
-                        <span className="font-mono text-purple-400">−{formatCurrency(taxes.statePersonalExemption)}</span>
+                        <span className="font-mono text-purple-400">−<SimpleTrackedValue value={taxes.statePersonalExemption} name="Personal Exemption" description="State personal exemption amount" formula="State Tax Rules" className="text-purple-400" /></span>
                       </div>
                     )}
                     <div className="border-t border-slate-700 pt-2 flex justify-between text-sm font-medium">
                       <span className="text-slate-300">State Taxable Income</span>
-                      <span className="font-mono text-slate-200">{formatCurrency(taxes.stateTaxableIncome)}</span>
+                      <SimpleTrackedValue value={taxes.stateTaxableIncome} name="State Taxable Income" description="Income subject to state tax" formula="AGI - State Deductions - Exemptions" className="font-mono text-slate-200" />
                     </div>
                   </div>
 
@@ -3500,14 +3500,14 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                               <div className="absolute inset-0 flex items-center justify-between px-2">
                                 <span className="text-slate-400">
                                   {taxes.stateTaxType === 'flat' ? 'All income' : 
-                                    `${formatCurrency(bracket.bracketMin, 0)} – ${bracket.bracketMax === Infinity ? '∞' : formatCurrency(bracket.bracketMax, 0)}`
+                                    <><SimpleTrackedValue value={bracket.bracketMin} name={`State Bracket ${idx+1} Min`} description="Lower bound of state tax bracket" formula="State Tax Rules" decimals={0} className="text-slate-400" /> – {bracket.bracketMax === Infinity ? '∞' : <SimpleTrackedValue value={bracket.bracketMax} name={`State Bracket ${idx+1} Max`} description="Upper bound of state tax bracket" formula="State Tax Rules" decimals={0} className="text-slate-400" />}</>
                                   }
                                 </span>
-                                <span className="text-slate-300 font-mono">{formatCurrency(bracket.taxableInBracket, 0)}</span>
+                                <SimpleTrackedValue value={bracket.taxableInBracket} name={`Taxable in ${formatPercent(bracket.rate, 1)} State Bracket`} description="Amount of income taxed at this rate" formula="Income in bracket" decimals={0} className="text-slate-300 font-mono" />
                               </div>
                             </div>
                             <div className="w-20 text-right font-mono text-red-400">
-                              {formatCurrency(bracket.taxFromBracket)}
+                              <SimpleTrackedValue value={bracket.taxFromBracket} name={`State Tax from ${formatPercent(bracket.rate, 1)} Bracket`} description={`Tax at ${formatPercent(bracket.rate, 1)} rate`} formula={`${formatCurrency(bracket.taxableInBracket, 0)} × ${formatPercent(bracket.rate, 1)}`} className="text-red-400" />
                             </div>
                           </div>
                         ))}
@@ -3524,7 +3524,7 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                           (Marginal: {formatPercent(taxes.marginalStateRate)} • Effective: {formatPercent(taxes.effectiveStateRate)})
                         </span>
                       </div>
-                      <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.stateTax)}</span>
+                      <SimpleTrackedValue value={taxes.stateTax} name="State Income Tax" description="Total state income tax" formula="Sum of tax from state brackets" className="text-lg font-mono text-red-400" />
                     </div>
                   </div>
                 </div>
@@ -3548,19 +3548,19 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Wages Subject to SS</span>
                     <span className="font-mono text-slate-200">
-                      {formatCurrency(taxes.fica.socialSecurityWages)}
+                      <SimpleTrackedValue value={taxes.fica.socialSecurityWages} name="Social Security Wages" description="Wages subject to Social Security tax (capped at wage base)" formula={`min(Gross Income, SS Wage Cap)`} className="text-slate-200" />
                       {taxes.fica.wagesAboveSsCap > 0 && (
-                        <span className="text-slate-500 text-xs ml-1">(capped at {formatCurrency(taxes.fica.socialSecurityWageCap)})</span>
+                        <span className="text-slate-500 text-xs ml-1">(capped at <SimpleTrackedValue value={taxes.fica.socialSecurityWageCap} name="SS Wage Cap" description="Social Security wage base limit for the year" formula="IRS Annual Limit" className="text-slate-500" />)</span>
                       )}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">× {formatPercent(taxes.fica.socialSecurityRate)} rate</span>
-                    <span className="font-mono text-red-400">{formatCurrency(taxes.fica.socialSecurityTax)}</span>
+                    <SimpleTrackedValue value={taxes.fica.socialSecurityTax} name="Social Security Tax" description="Employee portion of Social Security tax" formula={`SS Wages × ${formatPercent(taxes.fica.socialSecurityRate)}`} inputs={[{ name: 'SS Wages', value: taxes.fica.socialSecurityWages, unit: '$' }, { name: 'Rate', value: `${taxes.fica.socialSecurityRate}%` }]} className="font-mono text-red-400" />
                   </div>
                   {taxes.fica.wagesAboveSsCap > 0 && (
                     <p className="text-xs text-emerald-400">
-                      You saved {formatCurrency(taxes.fica.wagesAboveSsCap * (taxes.fica.socialSecurityRate / 100))} because {formatCurrency(taxes.fica.wagesAboveSsCap)} of your income exceeds the SS wage cap
+                      You saved <SimpleTrackedValue value={taxes.fica.wagesAboveSsCap * (taxes.fica.socialSecurityRate / 100)} name="SS Tax Savings" description="Tax saved due to SS wage cap" formula={`Wages Above Cap × SS Rate`} className="text-emerald-400" /> because <SimpleTrackedValue value={taxes.fica.wagesAboveSsCap} name="Wages Above SS Cap" description="Income exceeding the Social Security wage base" formula="Gross - SS Wage Cap" className="text-emerald-400" /> of your income exceeds the SS wage cap
                     </p>
                   )}
                 </div>
@@ -3572,24 +3572,24 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">All Wages × {formatPercent(taxes.fica.medicareBaseRate)} base rate</span>
-                    <span className="font-mono text-red-400">{formatCurrency(taxes.fica.medicareBaseTax)}</span>
+                    <SimpleTrackedValue value={taxes.fica.medicareBaseTax} name="Medicare Base Tax" description="Base Medicare tax on all wages" formula={`Gross Income × ${formatPercent(taxes.fica.medicareBaseRate)}`} className="font-mono text-red-400" />
                   </div>
                   {taxes.fica.additionalMedicareTax > 0 && (
                     <>
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">
-                          Wages above {formatCurrency(taxes.fica.additionalMedicareThreshold)} × {formatPercent(taxes.fica.additionalMedicareRate)} additional rate
+                          Wages above <SimpleTrackedValue value={taxes.fica.additionalMedicareThreshold} name="Additional Medicare Threshold" description="Income threshold for additional Medicare tax" formula="IRS Threshold" className="text-slate-400" /> × {formatPercent(taxes.fica.additionalMedicareRate)} additional rate
                         </span>
-                        <span className="font-mono text-red-400">{formatCurrency(taxes.fica.additionalMedicareTax)}</span>
+                        <SimpleTrackedValue value={taxes.fica.additionalMedicareTax} name="Additional Medicare Tax" description="Additional Medicare tax on high earners" formula={`Wages Above Threshold × ${formatPercent(taxes.fica.additionalMedicareRate)}`} className="font-mono text-red-400" />
                       </div>
                       <p className="text-xs text-amber-400">
-                        Additional Medicare Tax applies to {formatCurrency(taxes.fica.additionalMedicareWages)} of income above the {formatCurrency(taxes.fica.additionalMedicareThreshold)} threshold
+                        Additional Medicare Tax applies to <SimpleTrackedValue value={taxes.fica.additionalMedicareWages} name="Wages Subject to Additional Medicare" description="Income above the threshold" formula="Gross - Threshold" className="text-amber-400" /> of income above the <SimpleTrackedValue value={taxes.fica.additionalMedicareThreshold} name="Additional Medicare Threshold" description="Income threshold" formula="IRS Rules" className="text-amber-400" /> threshold
                       </p>
                     </>
                   )}
                   <div className="flex justify-between text-sm font-medium border-t border-slate-700 pt-2">
                     <span className="text-slate-300">Total Medicare Tax</span>
-                    <span className="font-mono text-red-400">{formatCurrency(taxes.fica.totalMedicareTax)}</span>
+                    <SimpleTrackedValue value={taxes.fica.totalMedicareTax} name="Total Medicare Tax" description="Base Medicare + Additional Medicare tax" formula="Base Medicare + Additional Medicare" inputs={[{ name: 'Base', value: taxes.fica.medicareBaseTax, unit: '$' }, { name: 'Additional', value: taxes.fica.additionalMedicareTax, unit: '$' }]} className="font-mono text-red-400" />
                   </div>
                 </div>
               </div>
@@ -3603,7 +3603,7 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                       (Effective: {formatPercent(taxes.fica.effectiveFicaRate)})
                     </span>
                   </div>
-                  <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.fica.totalFicaTax)}</span>
+                  <SimpleTrackedValue value={taxes.fica.totalFicaTax} name="Total FICA Tax" description="Combined Social Security and Medicare taxes" formula="Social Security Tax + Total Medicare Tax" inputs={[{ name: 'SS Tax', value: taxes.fica.socialSecurityTax, unit: '$' }, { name: 'Medicare', value: taxes.fica.totalMedicareTax, unit: '$' }]} className="text-lg font-mono text-red-400" />
                 </div>
               </div>
             </div>
@@ -3615,23 +3615,23 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">Federal Income Tax</span>
-                <span className="font-mono text-red-400">{formatCurrency(taxes.federalTax)}</span>
+                <SimpleTrackedValue value={taxes.federalTax} name="Federal Income Tax" description="Total federal income tax" formula="Sum of tax from all federal brackets" className="font-mono text-red-400" />
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">State Income Tax</span>
-                <span className="font-mono text-red-400">{formatCurrency(taxes.stateTax)}</span>
+                <SimpleTrackedValue value={taxes.stateTax} name="State Income Tax" description="Total state income tax" formula="Sum of tax from state brackets" className="font-mono text-red-400" />
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">Social Security</span>
-                <span className="font-mono text-red-400">{formatCurrency(taxes.fica.socialSecurityTax)}</span>
+                <SimpleTrackedValue value={taxes.fica.socialSecurityTax} name="Social Security Tax" description="Employee Social Security tax" formula={`min(Wages, SS Cap) × ${formatPercent(taxes.fica.socialSecurityRate)}`} className="font-mono text-red-400" />
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">Medicare</span>
-                <span className="font-mono text-red-400">{formatCurrency(taxes.fica.totalMedicareTax)}</span>
+                <SimpleTrackedValue value={taxes.fica.totalMedicareTax} name="Medicare Tax" description="Base + Additional Medicare tax" formula="Base Medicare + Additional Medicare" className="font-mono text-red-400" />
               </div>
               <div className="border-t border-red-500/30 pt-2 mt-2 flex justify-between font-medium">
                 <span className="text-slate-200">Total Tax Burden</span>
-                <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.totalTax)}</span>
+                <SimpleTrackedValue value={taxes.totalTax} name="Total Tax Burden" description="All taxes combined" formula="Federal + State + Social Security + Medicare" inputs={[{ name: 'Federal', value: taxes.federalTax, unit: '$' }, { name: 'State', value: taxes.stateTax, unit: '$' }, { name: 'SS', value: taxes.fica.socialSecurityTax, unit: '$' }, { name: 'Medicare', value: taxes.fica.totalMedicareTax, unit: '$' }]} className="text-lg font-mono text-red-400" />
               </div>
               <div className="flex justify-between text-sm text-slate-500">
                 <span>Effective Total Tax Rate</span>
@@ -3646,10 +3646,10 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
               <div>
                 <span className="text-sm font-medium text-emerald-400">Net Income After Taxes</span>
                 <p className="text-xs text-slate-500 mt-1">
-                  {formatCurrency(taxes.monthlyNetIncome)}/month • {formatCurrency(taxes.monthlyNetIncome / 4.33)}/week
+                  <SimpleTrackedValue value={taxes.monthlyNetIncome} name="Monthly Net Income" description="Monthly take-home pay" formula="Annual Net Income ÷ 12" className="text-slate-500" />/month • <SimpleTrackedValue value={taxes.monthlyNetIncome / 4.33} name="Weekly Net Income" description="Weekly take-home pay" formula="Monthly Net Income ÷ 4.33" className="text-slate-500" />/week
                 </p>
               </div>
-              <span className="text-2xl font-mono text-emerald-400">{formatCurrency(taxes.netIncome)}</span>
+              <SimpleTrackedValue value={taxes.netIncome} name="Annual Net Income" description="Total take-home pay after all taxes" formula="Gross Income - Pre-Tax Contributions - Total Taxes" inputs={[{ name: 'Gross', value: taxes.grossIncome, unit: '$' }, { name: 'Pre-Tax', value: taxes.totalPreTaxContributions, unit: '$' }, { name: 'Taxes', value: taxes.totalTax, unit: '$' }]} className="text-2xl font-mono text-emerald-400" />
             </div>
           </div>
         </div>
