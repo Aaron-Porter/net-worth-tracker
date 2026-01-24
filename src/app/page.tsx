@@ -38,7 +38,6 @@ import {
   Area,
   AreaChart,
   ReferenceLine,
-  Brush,
 } from 'recharts'
 
 type Tab = 'dashboard' | 'entries' | 'projections' | 'levels' | 'scenarios'
@@ -2201,7 +2200,7 @@ function ProjectionsChart({
   currentYear: number;
 }) {
   const [selectedMetrics, setSelectedMetrics] = React.useState<Set<MetricType>>(new Set<MetricType>(['fiProgress']));
-  const [zoomDomain, setZoomDomain] = React.useState<[number, number] | null>(null);
+  const [brushRange, setBrushRange] = React.useState<{ startIndex: number; endIndex: number } | null>(null);
 
   if (scenarioProjections.length === 0) {
     return <div className="text-slate-400">No projection data available</div>
@@ -2247,10 +2246,11 @@ function ProjectionsChart({
     METRICS.find(metric => metric.key === m)?.yAxisId === 'right'
   );
 
-  // Filter data based on zoom
-  const displayData = zoomDomain
-    ? unifiedChartData.filter(d => d.year >= zoomDomain[0] && d.year <= zoomDomain[1])
-    : unifiedChartData;
+  // Filter data based on brush range for display
+  const displayData = React.useMemo(() => {
+    if (!brushRange) return unifiedChartData;
+    return unifiedChartData.slice(brushRange.startIndex, brushRange.endIndex + 1);
+  }, [unifiedChartData, brushRange]);
 
   return (
     <div className="flex-1 bg-slate-800/30 rounded-xl border border-slate-700 p-6 overflow-auto">
@@ -2359,37 +2359,55 @@ function ProjectionsChart({
                     })
                   ))}
 
-                  {/* Brush for zooming */}
-                  <Brush
-                    dataKey="year"
-                    height={30}
-                    stroke="#475569"
-                    fill="#1e293b"
-                    onChange={(domain: any) => {
-                      if (domain?.startIndex !== undefined && domain?.endIndex !== undefined) {
-                        const start = displayData[domain.startIndex]?.year;
-                        const end = displayData[domain.endIndex]?.year;
-                        if (start && end) {
-                          setZoomDomain([start, end]);
-                        }
-                      }
-                    }}
-                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>
 
-            {/* Zoom Reset Button */}
-            {zoomDomain && (
-              <div className="flex justify-center">
+            {/* Year Range Slider Controls */}
+            <div className="flex items-center gap-4 mt-4">
+              <span className="text-sm text-slate-400 min-w-[80px]">
+                From: {unifiedChartData[brushRange?.startIndex ?? 0]?.year}
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={Math.max(0, (brushRange?.endIndex ?? unifiedChartData.length - 1) - 1)}
+                value={brushRange?.startIndex ?? 0}
+                onChange={(e) => {
+                  const newStart = parseInt(e.target.value);
+                  setBrushRange(prev => ({
+                    startIndex: newStart,
+                    endIndex: prev?.endIndex ?? unifiedChartData.length - 1
+                  }));
+                }}
+                className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+              />
+              <input
+                type="range"
+                min={(brushRange?.startIndex ?? 0) + 1}
+                max={unifiedChartData.length - 1}
+                value={brushRange?.endIndex ?? unifiedChartData.length - 1}
+                onChange={(e) => {
+                  const newEnd = parseInt(e.target.value);
+                  setBrushRange(prev => ({
+                    startIndex: prev?.startIndex ?? 0,
+                    endIndex: newEnd
+                  }));
+                }}
+                className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+              />
+              <span className="text-sm text-slate-400 min-w-[80px] text-right">
+                To: {unifiedChartData[brushRange?.endIndex ?? unifiedChartData.length - 1]?.year}
+              </span>
+              {brushRange && (brushRange.startIndex !== 0 || brushRange.endIndex !== unifiedChartData.length - 1) && (
                 <button
-                  onClick={() => setZoomDomain(null)}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors"
+                  onClick={() => setBrushRange(null)}
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors"
                 >
-                  Reset Zoom
+                  Reset
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </>
         )}
 
