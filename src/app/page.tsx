@@ -1431,7 +1431,7 @@ function ScenarioEditor({
                       <div>
                         <span className="text-sm font-medium text-emerald-400">Net Income</span>
                         <p className="text-xs text-slate-500">
-                          Effective Tax Rate: {formatPercent(liveBreakdown.taxes.effectiveTotalRate)}
+                          Effective Tax Rate: <SimpleTrackedValue value={liveBreakdown.taxes.effectiveTotalRate} name="Effective Tax Rate" description="Total taxes as a percentage of gross income" formula="Total Taxes ÷ Gross Income × 100" inputs={[{ name: 'Taxes', value: liveBreakdown.taxes.totalTax, unit: '$' }, { name: 'Gross', value: liveBreakdown.taxes.grossIncome, unit: '$' }]} formatAs="percent" decimals={1} className="text-slate-500" />
                         </p>
                       </div>
                       <SimpleTrackedValue
@@ -1486,7 +1486,7 @@ function ScenarioEditor({
                       </div>
 
                       <p className="text-xs text-center text-slate-500 pt-2">
-                        Savings Rate: <span className="text-emerald-400 font-semibold">{formatPercent(liveBreakdown.savingsRateOfGross)}</span> of gross income
+                        Savings Rate: <SimpleTrackedValue value={liveBreakdown.savingsRateOfGross} name="Savings Rate" description="Percentage of gross income going to savings" formula="Total Annual Savings ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-emerald-400 font-semibold" /> of gross income
                       </p>
                     </div>
                   </div>
@@ -3671,7 +3671,7 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
               </div>
               <div className="flex justify-between text-sm text-slate-500">
                 <span>Effective Total Tax Rate</span>
-                <span className="font-mono">{formatPercent(taxes.effectiveTotalRate)}</span>
+                <SimpleTrackedValue value={taxes.effectiveTotalRate} name="Effective Total Tax Rate" description="Total taxes as percentage of gross income" formula="Total Taxes ÷ Gross Income × 100" inputs={[{ name: 'Total Taxes', value: taxes.totalTax, unit: '$' }, { name: 'Gross Income', value: taxes.grossIncome, unit: '$' }]} formatAs="percent" decimals={1} className="font-mono text-slate-500" />
               </div>
             </div>
           </div>
@@ -4190,7 +4190,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Tax Rate</p>
-                    <p className="text-lg font-mono text-red-400">{formatPercent(liveBreakdown.taxes.effectiveTotalRate)}</p>
+                    <SimpleTrackedValue value={liveBreakdown.taxes.effectiveTotalRate} name="Effective Tax Rate" description="Total taxes as percentage of gross income" formula="Total Taxes ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-lg font-mono text-red-400" />
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Annual Spending</p>
@@ -4595,10 +4595,10 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 <div className="h-full bg-sky-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationPostTaxSavings}%` }} title="Post-tax Savings">{incomeBreakdown.allocationPostTaxSavings >= 8 && 'Savings'}</div>
               </div>
               <div className="grid grid-cols-4 gap-2 text-xs">
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span><span className="text-slate-400">Pre-tax: {formatPercent(incomeBreakdown.allocationPreTaxSavings)}</span></div>
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-red-500 rounded-full"></span><span className="text-slate-400">Taxes: {formatPercent(incomeBreakdown.allocationTaxes)}</span></div>
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-500 rounded-full"></span><span className="text-slate-400">Spending: {formatPercent(incomeBreakdown.allocationSpending)}</span></div>
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-sky-500 rounded-full"></span><span className="text-slate-400">Post-tax: {formatPercent(incomeBreakdown.allocationPostTaxSavings)}</span></div>
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span><span className="text-slate-400">Pre-tax: <SimpleTrackedValue value={incomeBreakdown.allocationPreTaxSavings} name="Pre-tax Allocation" description="Percentage of gross income to pre-tax savings" formula="Pre-tax Savings ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-red-500 rounded-full"></span><span className="text-slate-400">Taxes: <SimpleTrackedValue value={incomeBreakdown.allocationTaxes} name="Tax Allocation" description="Percentage of gross income to taxes" formula="Total Taxes ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-500 rounded-full"></span><span className="text-slate-400">Spending: <SimpleTrackedValue value={incomeBreakdown.allocationSpending} name="Spending Allocation" description="Percentage of gross income to spending" formula="Annual Spending ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-sky-500 rounded-full"></span><span className="text-slate-400">Post-tax: <SimpleTrackedValue value={incomeBreakdown.allocationPostTaxSavings} name="Post-tax Savings Allocation" description="Percentage of gross income to post-tax savings" formula="Post-tax Savings ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
               </div>
             </div>
 
@@ -4632,11 +4632,11 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
                 <p className="text-xs text-slate-500 uppercase">Total Annual Savings (Year 1)</p>
                 <SimpleTrackedValue value={incomeBreakdown.totalAnnualSavings} name="Total Annual Savings" description="Pre-tax + Post-tax savings in year 1" formula="Pre-tax Contributions + Post-tax Savings" inputs={[{ name: 'Pre-tax', value: incomeBreakdown.totalPreTaxSavings, unit: '$' }, { name: 'Post-tax', value: incomeBreakdown.postTaxSavingsAvailable, unit: '$' }]} className="text-2xl font-mono text-sky-400" />
-                <p className="text-xs text-slate-500 mt-1">{formatPercent(incomeBreakdown.savingsRateOfGross)} of gross income</p>
+                <p className="text-xs text-slate-500 mt-1"><SimpleTrackedValue value={incomeBreakdown.savingsRateOfGross} name="Savings Rate" description="Percentage of gross income being saved" formula="Total Savings ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-500" /> of gross income</p>
               </div>
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
                 <p className="text-xs text-slate-500 uppercase">Effective Tax Rate</p>
-                <p className="text-2xl font-mono text-red-400">{formatPercent(incomeBreakdown.taxes.effectiveTotalRate)}</p>
+                <SimpleTrackedValue value={incomeBreakdown.taxes.effectiveTotalRate} name="Effective Tax Rate" description="Total taxes as percentage of gross income" formula="Total Taxes ÷ Gross Income × 100" inputs={[{ name: 'Taxes', value: incomeBreakdown.taxes.totalTax, unit: '$' }, { name: 'Gross', value: incomeBreakdown.taxes.grossIncome, unit: '$' }]} formatAs="percent" decimals={1} className="text-2xl font-mono text-red-400" />
                 <p className="text-xs text-slate-500 mt-1"><SimpleTrackedValue value={incomeBreakdown.taxes.totalTax} name="Total Taxes" description="All taxes combined" formula="Federal + State + FICA" className="text-slate-500" /> total taxes</p>
               </div>
             </div>
