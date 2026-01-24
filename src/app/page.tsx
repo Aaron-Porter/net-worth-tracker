@@ -1341,31 +1341,82 @@ function ScenarioEditor({
                   <div className="bg-slate-900/50 rounded-lg p-4 space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-400">Gross Income</span>
-                      <span className="font-mono text-slate-200">{formatCurrency(liveBreakdown.taxes.grossIncome)}</span>
+                      <SimpleTrackedValue
+                        value={liveBreakdown.taxes.grossIncome}
+                        name="Gross Income"
+                        description="Total annual income before any deductions"
+                        formula="Annual Salary + Other Income"
+                        className="font-mono text-slate-200"
+                      />
                     </div>
 
                     {liveBreakdown.taxes.totalPreTaxContributions > 0 && (
                       <>
                         <div className="flex justify-between text-sm">
                           <span className="text-slate-400">− Pre-tax Contributions</span>
-                          <span className="font-mono text-emerald-400">−{formatCurrency(liveBreakdown.taxes.totalPreTaxContributions)}</span>
+                          <span className="font-mono text-emerald-400">−<SimpleTrackedValue
+                            value={liveBreakdown.taxes.totalPreTaxContributions}
+                            name="Pre-Tax Contributions"
+                            description="Total pre-tax retirement contributions reducing taxable income"
+                            formula="401k + Traditional IRA + HSA + Other"
+                            className="font-mono text-emerald-400"
+                          /></span>
                         </div>
                         <div className="flex justify-between text-sm border-t border-slate-700 pt-2">
                           <span className="text-slate-400">Adjusted Gross Income</span>
-                          <span className="font-mono text-slate-200">{formatCurrency(liveBreakdown.taxes.adjustedGrossIncome)}</span>
+                          <SimpleTrackedValue
+                            value={liveBreakdown.taxes.adjustedGrossIncome}
+                            name="Adjusted Gross Income (AGI)"
+                            description="Gross income minus pre-tax contributions"
+                            formula="Gross Income - Pre-Tax Contributions"
+                            inputs={[
+                              { name: 'Gross Income', value: liveBreakdown.taxes.grossIncome, unit: '$' },
+                              { name: 'Pre-Tax', value: liveBreakdown.taxes.totalPreTaxContributions, unit: '$' },
+                            ]}
+                            className="font-mono text-slate-200"
+                          />
                         </div>
                       </>
                     )}
 
                     <div className="flex justify-between text-sm border-t border-slate-700 pt-2">
                       <span className="text-slate-400">− Total Taxes</span>
-                      <span className="font-mono text-red-400">−{formatCurrency(liveBreakdown.taxes.totalTax)}</span>
+                      <span className="font-mono text-red-400">−<SimpleTrackedValue
+                        value={liveBreakdown.taxes.totalTax}
+                        name="Total Taxes"
+                        description="Combined federal, state, and FICA taxes"
+                        formula="Federal Tax + State Tax + Social Security + Medicare"
+                        inputs={[
+                          { name: 'Federal', value: liveBreakdown.taxes.federalTax, unit: '$' },
+                          { name: 'State', value: liveBreakdown.taxes.stateTax, unit: '$' },
+                          { name: 'FICA', value: liveBreakdown.taxes.fica.totalFicaTax, unit: '$' },
+                        ]}
+                        className="font-mono text-red-400"
+                      /></span>
                     </div>
 
                     <div className="flex justify-between text-sm text-xs text-slate-500 pl-4">
-                      <span>Federal: {formatCurrency(liveBreakdown.taxes.federalTax)}</span>
-                      <span>State: {formatCurrency(liveBreakdown.taxes.stateTax)}</span>
-                      <span>FICA: {formatCurrency(liveBreakdown.taxes.fica.totalFicaTax)}</span>
+                      <span>Federal: <SimpleTrackedValue
+                        value={liveBreakdown.taxes.federalTax}
+                        name="Federal Income Tax"
+                        description="Federal income tax calculated using progressive brackets"
+                        formula="Sum of (Taxable Income in Bracket × Bracket Rate)"
+                        className="text-slate-500"
+                      /></span>
+                      <span>State: <SimpleTrackedValue
+                        value={liveBreakdown.taxes.stateTax}
+                        name="State Income Tax"
+                        description="State income tax based on your state's rates"
+                        formula="State Tax Calculation"
+                        className="text-slate-500"
+                      /></span>
+                      <span>FICA: <SimpleTrackedValue
+                        value={liveBreakdown.taxes.fica.totalFicaTax}
+                        name="FICA Taxes"
+                        description="Social Security and Medicare taxes"
+                        formula="Social Security Tax + Medicare Tax"
+                        className="text-slate-500"
+                      /></span>
                     </div>
 
                     <div className="flex justify-between items-center border-t border-slate-700 pt-2">
@@ -1375,22 +1426,55 @@ function ScenarioEditor({
                           Effective Tax Rate: {formatPercent(liveBreakdown.taxes.effectiveTotalRate)}
                         </p>
                       </div>
-                      <span className="text-lg font-mono text-emerald-400">{formatCurrency(liveBreakdown.taxes.netIncome)}</span>
+                      <SimpleTrackedValue
+                        value={liveBreakdown.taxes.netIncome}
+                        name="Net Income"
+                        description="Take-home pay after all taxes and deductions"
+                        formula="Gross Income - Pre-Tax Contributions - Total Taxes"
+                        inputs={[
+                          { name: 'Gross Income', value: liveBreakdown.taxes.grossIncome, unit: '$' },
+                          { name: 'Pre-Tax', value: liveBreakdown.taxes.totalPreTaxContributions, unit: '$' },
+                          { name: 'Total Taxes', value: liveBreakdown.taxes.totalTax, unit: '$' },
+                        ]}
+                        className="text-lg font-mono text-emerald-400"
+                      />
                     </div>
 
                     <div className="border-t border-slate-700 pt-3 space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">− Annual Spending</span>
-                        <span className="font-mono text-amber-400">−{formatCurrency(liveBreakdown.annualSpending)}</span>
+                        <span className="font-mono text-amber-400">−<SimpleTrackedValue
+                          value={liveBreakdown.annualSpending}
+                          name="Annual Spending"
+                          description="Level-based annual spending budget"
+                          formula="Monthly Budget × 12"
+                          className="font-mono text-amber-400"
+                        /></span>
                       </div>
                       <div className="flex justify-between items-center border-t border-emerald-500/30 pt-2">
                         <div>
                           <span className="text-sm font-medium text-emerald-400">Total Annual Savings</span>
                           <p className="text-xs text-slate-500">
-                            {formatCurrency(liveBreakdown.monthlySavingsAvailable)}/month
+                            <SimpleTrackedValue
+                              value={liveBreakdown.monthlySavingsAvailable}
+                              name="Monthly Savings"
+                              description="Monthly savings available after spending"
+                              formula="(Net Income - Annual Spending) ÷ 12"
+                              className="text-slate-500"
+                            />/month
                           </p>
                         </div>
-                        <span className="text-lg font-mono text-emerald-400">{formatCurrency(liveBreakdown.totalAnnualSavings)}</span>
+                        <SimpleTrackedValue
+                          value={liveBreakdown.totalAnnualSavings}
+                          name="Total Annual Savings"
+                          description="Amount saved per year after taxes and spending"
+                          formula="Net Income - Annual Spending"
+                          inputs={[
+                            { name: 'Net Income', value: liveBreakdown.taxes.netIncome, unit: '$' },
+                            { name: 'Annual Spending', value: liveBreakdown.annualSpending, unit: '$' },
+                          ]}
+                          className="text-lg font-mono text-emerald-400"
+                        />
                       </div>
 
                       <p className="text-xs text-center text-slate-500 pt-2">
