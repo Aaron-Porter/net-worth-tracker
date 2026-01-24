@@ -14,8 +14,8 @@ import {
   calculateFiProgressTracked,
   calculateLevelBasedSpendingTracked,
 } from './calculationTrace';
-import { ScenarioProjection } from './useScenarios';
-import { GrowthRates, RealTimeNetWorth, LevelInfo, ProjectionRow } from './calculations';
+import type { ScenarioProjection } from './useScenarios';
+import type { GrowthRates, RealTimeNetWorth, LevelInfo, ProjectionRow } from './calculations';
 
 // ============================================================================
 // TYPES
@@ -253,7 +253,7 @@ export function createTrackedAmount(
   description: string,
   formula: string,
   inputs: Array<{ name: string; value: number | string; unit?: string }> = [],
-  category: 'net_worth' | 'swr' | 'projection' | 'spending' | 'fi_target' | 'growth_rate' = 'projection'
+  category: 'net_worth' | 'swr' | 'projection' | 'spending' | 'fi_target' | 'growth_rate' | 'tax' | 'milestone' | 'level' = 'projection'
 ): TrackedValue {
   const builder = new CalculationBuilder(`${category}_${name}`, name, category)
     .setDescription(description)
@@ -265,4 +265,331 @@ export function createTrackedAmount(
   });
   
   return builder.build(value);
+}
+
+/**
+ * Create a tracked percentage value
+ */
+export function createTrackedPercent(
+  value: number,
+  name: string,
+  description: string,
+  formula: string,
+  inputs: Array<{ name: string; value: number | string; unit?: string }> = [],
+  category: 'fi_target' | 'tax' | 'projection' = 'projection'
+): TrackedValue {
+  const builder = new CalculationBuilder(`${category}_${name}`, name, category)
+    .setDescription(description)
+    .setFormula(formula)
+    .setUnit('%');
+  
+  inputs.forEach(input => {
+    builder.addInput(input.name, input.value, input.unit);
+  });
+  
+  return builder.build(value);
+}
+
+/**
+ * Create a tracked entry value (historical net worth entry)
+ */
+export function createTrackedEntry(
+  amount: number,
+  timestamp: number
+): TrackedValue {
+  const date = new Date(timestamp);
+  return new CalculationBuilder('entry_amount', 'Net Worth Entry', 'net_worth')
+    .setDescription(`Net worth recorded on ${date.toLocaleDateString()}`)
+    .setFormula('Recorded Value')
+    .setUnit('$')
+    .addInput('Recorded Amount', amount, '$')
+    .addInput('Date', date.toLocaleDateString())
+    .addInput('Time', date.toLocaleTimeString())
+    .build(amount);
+}
+
+/**
+ * Create a tracked milestone value
+ */
+export function createTrackedMilestone(
+  netWorth: number,
+  milestoneName: string,
+  targetPercentage: number | null = null
+): TrackedValue {
+  const builder = new CalculationBuilder('milestone_nw', `${milestoneName} Net Worth`, 'milestone')
+    .setDescription(`Net worth at the ${milestoneName} milestone`)
+    .setFormula(targetPercentage ? `Net Worth at ${targetPercentage}% FI Progress` : 'Net Worth at Milestone')
+    .setUnit('$')
+    .addInput('Net Worth', netWorth, '$');
+  
+  if (targetPercentage !== null) {
+    builder.addInput('Target Progress', targetPercentage, '%');
+  }
+  
+  return builder.build(netWorth);
+}
+
+/**
+ * Create tracked tax calculation values
+ */
+export function createTrackedTaxValues(taxes: {
+  grossIncome: number;
+  totalPreTaxContributions: number;
+  adjustedGrossIncome: number;
+  federalTax: number;
+  stateTax: number;
+  totalTax: number;
+  netIncome: number;
+  effectiveTotalRate: number;
+}): {
+  grossIncome: TrackedValue;
+  preTaxContributions: TrackedValue;
+  adjustedGrossIncome: TrackedValue;
+  federalTax: TrackedValue;
+  stateTax: TrackedValue;
+  totalTax: TrackedValue;
+  netIncome: TrackedValue;
+  effectiveRate: TrackedValue;
+} {
+  return {
+    grossIncome: new CalculationBuilder('gross_income', 'Gross Income', 'tax')
+      .setDescription('Total income before any deductions or taxes')
+      .setFormula('Annual Salary + Other Income')
+      .setUnit('$')
+      .addInput('Annual Amount', taxes.grossIncome, '$')
+      .build(taxes.grossIncome),
+
+    preTaxContributions: new CalculationBuilder('pretax_contrib', 'Pre-Tax Contributions', 'tax')
+      .setDescription('Total pre-tax retirement contributions (401k, IRA, HSA, etc.)')
+      .setFormula('401k + Traditional IRA + HSA + Other')
+      .setUnit('$')
+      .addInput('Total Pre-Tax', taxes.totalPreTaxContributions, '$')
+      .build(taxes.totalPreTaxContributions),
+
+    adjustedGrossIncome: new CalculationBuilder('agi', 'Adjusted Gross Income', 'tax')
+      .setDescription('Gross income minus pre-tax contributions')
+      .setFormula('Gross Income - Pre-Tax Contributions')
+      .setUnit('$')
+      .addInput('Gross Income', taxes.grossIncome, '$')
+      .addInput('Pre-Tax Contributions', taxes.totalPreTaxContributions, '$')
+      .addStep('Subtract pre-tax', 'Gross - Pre-Tax', [], taxes.adjustedGrossIncome)
+      .build(taxes.adjustedGrossIncome),
+
+    federalTax: new CalculationBuilder('federal_tax', 'Federal Income Tax', 'tax')
+      .setDescription('Federal income tax calculated using progressive tax brackets')
+      .setFormula('Sum of (Taxable Income in Bracket × Bracket Rate)')
+      .setUnit('$')
+      .addInput('Federal Tax', taxes.federalTax, '$')
+      .build(taxes.federalTax),
+
+    stateTax: new CalculationBuilder('state_tax', 'State Income Tax', 'tax')
+      .setDescription('State income tax based on your state\'s tax rates')
+      .setFormula('State Tax Calculation')
+      .setUnit('$')
+      .addInput('State Tax', taxes.stateTax, '$')
+      .build(taxes.stateTax),
+
+    totalTax: new CalculationBuilder('total_tax', 'Total Tax', 'tax')
+      .setDescription('Total taxes including federal, state, and FICA')
+      .setFormula('Federal Tax + State Tax + Social Security + Medicare')
+      .setUnit('$')
+      .addInput('Federal Tax', taxes.federalTax, '$')
+      .addInput('State Tax', taxes.stateTax, '$')
+      .addStep('Sum all taxes', 'Federal + State + FICA', [], taxes.totalTax)
+      .build(taxes.totalTax),
+
+    netIncome: new CalculationBuilder('net_income', 'Net Income', 'tax')
+      .setDescription('Take-home pay after all taxes and pre-tax deductions')
+      .setFormula('Gross Income - Pre-Tax Contributions - Total Tax')
+      .setUnit('$')
+      .addInput('Gross Income', taxes.grossIncome, '$')
+      .addInput('Pre-Tax Contributions', taxes.totalPreTaxContributions, '$')
+      .addInput('Total Tax', taxes.totalTax, '$')
+      .addStep('Calculate net', 'Gross - PreTax - Tax', [], taxes.netIncome)
+      .build(taxes.netIncome),
+
+    effectiveRate: new CalculationBuilder('effective_rate', 'Effective Tax Rate', 'tax')
+      .setDescription('Total taxes as a percentage of gross income')
+      .setFormula('(Total Tax ÷ Gross Income) × 100')
+      .setUnit('%')
+      .addInput('Total Tax', taxes.totalTax, '$')
+      .addInput('Gross Income', taxes.grossIncome, '$')
+      .addStep('Calculate rate', '(Tax ÷ Gross) × 100', [], taxes.effectiveTotalRate)
+      .build(taxes.effectiveTotalRate),
+  };
+}
+
+/**
+ * Create tracked level-based spending values
+ */
+export function createTrackedLevelValues(
+  levelInfo: LevelInfo,
+  scenario: { baseMonthlyBudget: number; spendingGrowthRate: number; inflationRate: number }
+): {
+  netWorth: TrackedValue;
+  monthlyBudget: TrackedValue;
+  annualBudget: TrackedValue;
+  baseBudget: TrackedValue;
+  netWorthPortion: TrackedValue;
+  amountToNext: TrackedValue;
+  nextLevelThreshold: TrackedValue | null;
+} {
+  return {
+    netWorth: new CalculationBuilder('level_net_worth', 'Current Net Worth', 'level')
+      .setDescription('Your current total net worth used for level calculations')
+      .setFormula('Current Net Worth')
+      .setUnit('$')
+      .addInput('Net Worth', levelInfo.netWorth, '$')
+      .build(levelInfo.netWorth),
+
+    monthlyBudget: new CalculationBuilder('monthly_budget', 'Monthly Budget', 'spending')
+      .setDescription('Your unlocked monthly spending budget based on your net worth level')
+      .setFormula('Inflation-Adjusted Base + (Net Worth × Spending Rate ÷ 12)')
+      .setUnit('$')
+      .addInput('Base Monthly Budget', scenario.baseMonthlyBudget, '$')
+      .addInput('Net Worth', levelInfo.netWorth, '$')
+      .addInput('Spending Growth Rate', scenario.spendingGrowthRate, '%')
+      .addInput('Years Elapsed', levelInfo.yearsElapsed, 'years')
+      .addInput('Inflation Rate', scenario.inflationRate, '%')
+      .addStep('Adjust base for inflation', `Base × (1 + ${scenario.inflationRate}%)^years`, [], levelInfo.baseBudgetInflationAdjusted)
+      .addStep('Calculate net worth portion', `NW × ${scenario.spendingGrowthRate}% ÷ 12`, [], levelInfo.netWorthPortion)
+      .addStep('Sum components', 'Adjusted Base + NW Portion', [], levelInfo.unlockedAtNetWorth)
+      .build(levelInfo.unlockedAtNetWorth),
+
+    annualBudget: new CalculationBuilder('annual_budget', 'Annual Budget', 'spending')
+      .setDescription('Your annual spending budget (monthly × 12)')
+      .setFormula('Monthly Budget × 12')
+      .setUnit('$')
+      .addInput('Monthly Budget', levelInfo.unlockedAtNetWorth, '$')
+      .build(levelInfo.unlockedAtNetWorth * 12),
+
+    baseBudget: new CalculationBuilder('base_budget', 'Base Budget (Inflation-Adjusted)', 'spending')
+      .setDescription('Your base monthly budget adjusted for inflation since tracking started')
+      .setFormula(`Original Base × (1 + ${scenario.inflationRate}%)^${levelInfo.yearsElapsed.toFixed(1)} years`)
+      .setUnit('$')
+      .addInput('Original Base', levelInfo.baseBudgetOriginal, '$')
+      .addInput('Inflation Rate', scenario.inflationRate, '%')
+      .addInput('Years Elapsed', levelInfo.yearsElapsed, 'years')
+      .build(levelInfo.baseBudgetInflationAdjusted),
+
+    netWorthPortion: new CalculationBuilder('nw_portion', 'Net Worth Spending Portion', 'spending')
+      .setDescription('Additional monthly spending unlocked by your net worth')
+      .setFormula(`Net Worth × ${scenario.spendingGrowthRate}% ÷ 12`)
+      .setUnit('$')
+      .addInput('Net Worth', levelInfo.netWorth, '$')
+      .addInput('Spending Growth Rate', scenario.spendingGrowthRate, '%')
+      .addStep('Calculate annual portion', `NW × ${scenario.spendingGrowthRate}%`, [], levelInfo.netWorth * scenario.spendingGrowthRate / 100)
+      .addStep('Convert to monthly', 'Annual ÷ 12', [], levelInfo.netWorthPortion)
+      .build(levelInfo.netWorthPortion),
+
+    amountToNext: new CalculationBuilder('amount_to_next', 'Amount to Next Level', 'level')
+      .setDescription('Net worth needed to reach the next level')
+      .setFormula('Next Level Threshold - Current Net Worth')
+      .setUnit('$')
+      .addInput('Next Level Threshold', levelInfo.nextLevel?.threshold || 0, '$')
+      .addInput('Current Net Worth', levelInfo.netWorth, '$')
+      .build(levelInfo.amountToNext),
+
+    nextLevelThreshold: levelInfo.nextLevel 
+      ? new CalculationBuilder('next_threshold', 'Next Level Threshold', 'level')
+          .setDescription(`Net worth required for Level ${levelInfo.nextLevel.level} (${levelInfo.nextLevel.name})`)
+          .setFormula('Predefined Level Threshold')
+          .setUnit('$')
+          .addInput('Level', levelInfo.nextLevel.level)
+          .addInput('Level Name', levelInfo.nextLevel.name)
+          .addInput('Threshold', levelInfo.nextLevel.threshold, '$')
+          .build(levelInfo.nextLevel.threshold)
+      : null,
+  };
+}
+
+/**
+ * Create tracked projection row values
+ */
+export function createTrackedProjectionValues(
+  row: ProjectionRow,
+  scenario: { currentRate: number; swr: number; yearlyContribution: number; inflationRate: number }
+): {
+  netWorth: TrackedValue;
+  interest: TrackedValue;
+  contributed: TrackedValue;
+  annualSwr: TrackedValue;
+  monthlySwr: TrackedValue;
+  monthlySpend: TrackedValue;
+  fiTarget: TrackedValue;
+  fiProgress: TrackedValue;
+  savings: TrackedValue;
+} {
+  return {
+    netWorth: new CalculationBuilder('proj_nw', `Net Worth (${row.year})`, 'projection')
+      .setDescription(`Projected net worth for year ${row.year}`)
+      .setFormula('Previous NW × (1 + Rate) + Contributions - Spending')
+      .setUnit('$')
+      .addInput('Year', row.year)
+      .addInput('Return Rate', scenario.currentRate, '%')
+      .addInput('Interest Earned', row.interest, '$')
+      .addInput('Contributed', row.contributed, '$')
+      .build(row.netWorth),
+
+    interest: new CalculationBuilder('proj_interest', `Interest (${row.year})`, 'projection')
+      .setDescription(`Investment returns for year ${row.year}`)
+      .setFormula('Previous Net Worth × Return Rate')
+      .setUnit('$')
+      .addInput('Return Rate', scenario.currentRate, '%')
+      .build(row.interest),
+
+    contributed: new CalculationBuilder('proj_contrib', `Contributions (${row.year})`, 'projection')
+      .setDescription(`Total contributions for year ${row.year}`)
+      .setFormula('Yearly Contribution Amount')
+      .setUnit('$')
+      .addInput('Yearly Contribution', scenario.yearlyContribution, '$')
+      .build(row.contributed),
+
+    annualSwr: new CalculationBuilder('proj_swr_annual', `Annual SWR (${row.year})`, 'swr')
+      .setDescription(`Safe withdrawal amount for year ${row.year}`)
+      .setFormula(`Net Worth × ${scenario.swr}%`)
+      .setUnit('$')
+      .addInput('Net Worth', row.netWorth, '$')
+      .addInput('SWR', scenario.swr, '%')
+      .build(row.annualSwr),
+
+    monthlySwr: new CalculationBuilder('proj_swr_monthly', `Monthly SWR (${row.year})`, 'swr')
+      .setDescription(`Monthly safe withdrawal amount for year ${row.year}`)
+      .setFormula('Annual SWR ÷ 12')
+      .setUnit('$')
+      .addInput('Annual SWR', row.annualSwr, '$')
+      .build(row.monthlySwr),
+
+    monthlySpend: new CalculationBuilder('proj_spend', `Monthly Spending (${row.year})`, 'spending')
+      .setDescription(`Level-based spending budget for year ${row.year}`)
+      .setFormula('Base (inflation-adjusted) + Net Worth Portion')
+      .setUnit('$')
+      .addInput('Inflation Rate', scenario.inflationRate, '%')
+      .build(row.monthlySpend),
+
+    fiTarget: new CalculationBuilder('proj_fi_target', `FI Target (${row.year})`, 'fi_target')
+      .setDescription(`Net worth needed for financial independence in year ${row.year}`)
+      .setFormula(`(Monthly Spending × 12) ÷ ${scenario.swr}%`)
+      .setUnit('$')
+      .addInput('Monthly Spending', row.monthlySpend, '$')
+      .addInput('SWR', scenario.swr, '%')
+      .build(row.fiTarget),
+
+    fiProgress: new CalculationBuilder('proj_fi_progress', `FI Progress (${row.year})`, 'fi_target')
+      .setDescription(`Progress towards FI in year ${row.year}`)
+      .setFormula('(Net Worth ÷ FI Target) × 100')
+      .setUnit('%')
+      .addInput('Net Worth', row.netWorth, '$')
+      .addInput('FI Target', row.fiTarget, '$')
+      .build(row.fiProgress),
+
+    savings: new CalculationBuilder('proj_savings', `Annual Savings (${row.year})`, 'projection')
+      .setDescription(`Net savings for year ${row.year}`)
+      .setFormula('Contributions + Interest - Annual Spending')
+      .setUnit('$')
+      .addInput('Contributions', row.contributed, '$')
+      .addInput('Interest', row.interest, '$')
+      .addInput('Annual Spending', row.annualSpending, '$')
+      .build(row.annualSavings),
+  };
 }
