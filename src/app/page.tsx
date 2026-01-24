@@ -923,7 +923,7 @@ function ScenarioManagementPanel({
                 </span>
                 {scenario.grossIncome && (
                   <span>
-                    Income: <span className="text-sky-400">{formatCurrency(scenario.grossIncome)}</span>
+                    Income: <SimpleTrackedValue value={scenario.grossIncome} name="Gross Income" description="Annual income for this scenario" formula="User Input" className="text-sky-400" />
                   </span>
                 )}
               </div>
@@ -2255,8 +2255,16 @@ function ProjectionsTable({
                         <td className="py-2.5 px-4 text-right font-mono text-slate-500">
                           {diff !== null && !metric.isInput ? (
                             <span className={diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400/70' : ''}>
-                              {metric.format === 'currency' && (diff > 0 ? '+' : '')}{
-                                metric.format === 'currency' ? formatCurrency(diff) :
+                              {metric.format === 'currency' && (diff > 0 ? '+' : '')}
+                              {metric.format === 'currency' ? (
+                                <SimpleTrackedValue 
+                                  value={diff} 
+                                  name={`${metric.label} Difference`} 
+                                  description={`Difference between first and last scenario for ${metric.label}`}
+                                  formula="Last Scenario Value - First Scenario Value"
+                                  className={diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400/70' : ''}
+                                />
+                              ) :
                                 metric.format === 'percent' ? `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%` :
                                 metric.format === 'years' ? `${diff > 0 ? '+' : ''}${diff}y` :
                                 `${diff > 0 ? '+' : ''}${diff}`
@@ -2685,19 +2693,19 @@ function UnifiedChartTooltip({ active, payload, label, timeUnit }: any) {
             {data.data.netWorth !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">Net Worth:</span>
-                <span className="text-sky-400 font-mono">{formatCurrency(data.data.netWorth)}</span>
+                <SimpleTrackedValue value={data.data.netWorth} name={`Year ${data.data.year} Net Worth`} description="Projected net worth at this point" formula="Prior Year × (1 + Return) + Savings" className="text-sky-400 font-mono" />
               </div>
             )}
             {data.data.spending !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">{spendingLabel}:</span>
-                <span className="text-amber-400 font-mono">{formatCurrency(data.data.spending)}</span>
+                <SimpleTrackedValue value={data.data.spending} name={`Year ${data.data.year} ${spendingLabel}`} description="Projected spending at this point" formula="Base + (Net Worth × Rate)" className="text-amber-400 font-mono" />
               </div>
             )}
             {data.data.savings !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">{savingsLabel}:</span>
-                <span className="text-violet-400 font-mono">{formatCurrency(data.data.savings)}</span>
+                <SimpleTrackedValue value={data.data.savings} name={`Year ${data.data.year} ${savingsLabel}`} description="Projected savings at this point" formula="Income - Taxes - Spending" className="text-violet-400 font-mono" />
               </div>
             )}
           </div>
@@ -3021,7 +3029,7 @@ function ProjectionsChart({
                   </div>
                   <div className="flex justify-between">
                     <span>Contribution:</span>
-                    <span className="text-sky-400">{formatCurrency(sp.scenario.yearlyContribution)}/yr</span>
+                    <span className="text-sky-400"><SimpleTrackedValue value={sp.scenario.yearlyContribution} name="Yearly Contribution" description="Annual savings contribution" formula="User Input" className="text-sky-400" />/yr</span>
                   </div>
                 </div>
               </div>
@@ -3226,17 +3234,17 @@ function LevelsTab({
                   </div>
                 </td>
                 <td className="py-2 px-4 text-right font-mono text-slate-400">
-                  {level.threshold === 0 ? '-' : formatCurrency(level.threshold, 0)}
+                  {level.threshold === 0 ? '-' : <SimpleTrackedValue value={level.threshold} name={`${level.name} Threshold`} description={`Net worth required to reach ${level.name} level`} formula="FI Target × Level Multiplier" decimals={0} className="text-slate-400" />}
                 </td>
                 <td className={`py-2 px-4 text-right font-mono ${
                   level.isCurrent ? 'text-violet-400 font-semibold' : level.isUnlocked ? 'text-emerald-400' : 'text-slate-500'
                 }`}>
-                  {formatCurrency(level.monthlyBudget, 0)}
+                  <SimpleTrackedValue value={level.monthlyBudget} name={`${level.name} Monthly Budget`} description={`Monthly spending budget at ${level.name} level`} formula={`Base Budget + (Threshold × SWR ÷ 12)`} decimals={0} className={level.isCurrent ? 'text-violet-400 font-semibold' : level.isUnlocked ? 'text-emerald-400' : 'text-slate-500'} />
                 </td>
                 <td className={`py-2 px-4 text-right font-mono ${
                   level.isCurrent ? 'text-violet-400/80' : level.isUnlocked ? 'text-emerald-400/80' : 'text-slate-600'
                 }`}>
-                  {formatCurrency(level.monthlyBudget * 12, 0)}
+                  <SimpleTrackedValue value={level.monthlyBudget * 12} name={`${level.name} Annual Budget`} description={`Annual spending at ${level.name} level`} formula="Monthly Budget × 12" decimals={0} className={level.isCurrent ? 'text-violet-400/80' : level.isUnlocked ? 'text-emerald-400/80' : 'text-slate-600'} />
                 </td>
               </tr>
             ))}
@@ -3374,9 +3382,13 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                   <span className="text-slate-400">
                     {taxes.totalPreTaxContributions > 0 ? 'Adjusted Gross Income' : 'Gross Income'}
                   </span>
-                  <span className="font-mono text-slate-200">
-                    {formatCurrency(taxes.totalPreTaxContributions > 0 ? taxes.adjustedGrossIncome : taxes.grossIncome)}
-                  </span>
+                  <SimpleTrackedValue 
+                    value={taxes.totalPreTaxContributions > 0 ? taxes.adjustedGrossIncome : taxes.grossIncome} 
+                    name={taxes.totalPreTaxContributions > 0 ? "Adjusted Gross Income" : "Gross Income"}
+                    description={taxes.totalPreTaxContributions > 0 ? "Income after pre-tax deductions" : "Total income before deductions"}
+                    formula={taxes.totalPreTaxContributions > 0 ? "Gross Income - Pre-Tax Contributions" : "Annual Salary"}
+                    className="font-mono text-slate-200" 
+                  />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">− Standard Deduction ({taxes.filingStatus.replace('_', ' ')})</span>
@@ -3882,8 +3894,8 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                     <div className="min-w-0">
                       <span className="font-medium text-slate-200">{scenario.name}</span>
                       <div className="flex gap-3 text-xs text-slate-500 mt-1">
-                        <span>Saves: <span className="text-sky-400">{formatCurrency(scenario.yearlyContribution)}/yr</span></span>
-                        {scenario.grossIncome && <span>Income: <span className="text-emerald-400">{formatCurrency(scenario.grossIncome)}</span></span>}
+                        <span>Saves: <SimpleTrackedValue value={scenario.yearlyContribution} name="Yearly Savings" description="Annual investment contribution" formula="User Input" className="text-sky-400" />/yr</span>
+                        {scenario.grossIncome && <span>Income: <SimpleTrackedValue value={scenario.grossIncome} name="Gross Income" description="Annual income for scenario" formula="User Input" className="text-emerald-400" /></span>}
                       </div>
                     </div>
                   </div>
@@ -4332,7 +4344,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
               <div className="flex justify-between items-center mb-2">
                 <label className="text-sm font-medium text-slate-300">401(k) / 403(b) Contribution</label>
-                <span className="text-xs text-slate-500">Limit: {formatCurrency(CONTRIBUTION_LIMITS.traditional401k)}</span>
+                <span className="text-xs text-slate-500">Limit: <SimpleTrackedValue value={CONTRIBUTION_LIMITS.traditional401k} name="401(k) Limit" description="IRS annual contribution limit for 401(k)" formula="IRS Limit (2024)" className="text-slate-500" /></span>
               </div>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -4342,7 +4354,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
               <div className="flex justify-between items-center mb-2">
                 <label className="text-sm font-medium text-slate-300">Traditional IRA</label>
-                <span className="text-xs text-slate-500">Limit: {formatCurrency(CONTRIBUTION_LIMITS.traditionalIRA)}</span>
+                <span className="text-xs text-slate-500">Limit: <SimpleTrackedValue value={CONTRIBUTION_LIMITS.traditionalIRA} name="IRA Limit" description="IRS annual contribution limit for Traditional IRA" formula="IRS Limit (2024)" className="text-slate-500" /></span>
               </div>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -4352,7 +4364,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
               <div className="flex justify-between items-center mb-2">
                 <label className="text-sm font-medium text-slate-300">HSA (Health Savings Account)</label>
-                <span className="text-xs text-slate-500">Limit: {formatCurrency(CONTRIBUTION_LIMITS.hsa_individual)}-{formatCurrency(CONTRIBUTION_LIMITS.hsa_family)}</span>
+                <span className="text-xs text-slate-500">Limit: <SimpleTrackedValue value={CONTRIBUTION_LIMITS.hsa_individual} name="HSA Individual Limit" description="HSA limit for individual coverage" formula="IRS Limit (2024)" className="text-slate-500" />-<SimpleTrackedValue value={CONTRIBUTION_LIMITS.hsa_family} name="HSA Family Limit" description="HSA limit for family coverage" formula="IRS Limit (2024)" className="text-slate-500" /></span>
               </div>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -4361,7 +4373,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             </div>
             {incomeBreakdown && (
               <div className="bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/30">
-                <p className="text-sm text-emerald-400">Pre-tax savings reduce your taxable income by <strong>{formatCurrency(incomeBreakdown.totalPreTaxSavings)}</strong>, saving you approximately <strong>{formatCurrency(incomeBreakdown.totalPreTaxSavings * (incomeBreakdown.taxes.marginalFederalRate / 100))}</strong> in taxes.</p>
+                <p className="text-sm text-emerald-400">Pre-tax savings reduce your taxable income by <strong><SimpleTrackedValue value={incomeBreakdown.totalPreTaxSavings} name="Total Pre-tax Savings" description="Sum of all pre-tax contributions" formula="401(k) + IRA + HSA + Other" className="text-emerald-400" /></strong>, saving you approximately <strong><SimpleTrackedValue value={incomeBreakdown.totalPreTaxSavings * (incomeBreakdown.taxes.marginalFederalRate / 100)} name="Tax Savings" description="Estimated tax savings from pre-tax contributions" formula="Pre-tax Savings × Marginal Tax Rate" inputs={[{ name: 'Pre-tax', value: incomeBreakdown.totalPreTaxSavings, unit: '$' }, { name: 'Marginal Rate', value: `${incomeBreakdown.taxes.marginalFederalRate}%` }]} className="text-emerald-400" /></strong> in taxes.</p>
               </div>
             )}
           </div>
@@ -4405,7 +4417,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
                   <input type="number" value={wizardState.baseMonthlyBudget} onChange={(e) => setWizardState(s => ({ ...s, baseMonthlyBudget: e.target.value }))} placeholder="3000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
                 </div>
-                <p className="mt-2 text-sm text-slate-500">Annual base: {formatCurrency(baseBudget * 12)}</p>
+                <p className="mt-2 text-sm text-slate-500">Annual base: <SimpleTrackedValue value={baseBudget * 12} name="Annual Base Budget" description="Base budget multiplied by 12 months" formula="Monthly Base × 12" className="text-slate-500" /></p>
               </div>
 
               {/* Spending Growth Rate */}
@@ -4441,22 +4453,22 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                         <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
                         Base Budget
                       </span>
-                      <span className="font-mono text-amber-400">{formatCurrency(baseBudget)}/mo</span>
+                      <SimpleTrackedValue value={baseBudget} name="Base Budget" description="Fixed monthly spending floor" formula="User Input" className="font-mono text-amber-400" /><span className="text-amber-400">/mo</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400 flex items-center gap-2">
                         <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
                         Net Worth Portion
-                        <span className="text-xs text-slate-500">({spendingRate}% × {formatCurrency(currentNetWorth)} ÷ 12)</span>
+                        <span className="text-xs text-slate-500">({spendingRate}% × <SimpleTrackedValue value={currentNetWorth} name="Current Net Worth" description="Your current net worth" formula="Sum of all assets" decimals={0} className="text-slate-500" /> ÷ 12)</span>
                       </span>
-                      <span className="font-mono text-emerald-400">+{formatCurrency(netWorthPortion)}/mo</span>
+                      <span className="font-mono text-emerald-400">+<SimpleTrackedValue value={netWorthPortion} name="Net Worth Portion" description="Monthly spending from net worth" formula={`Net Worth × ${spendingRate}% ÷ 12`} className="text-emerald-400" />/mo</span>
                     </div>
                     <div className="border-t border-slate-600 pt-3 flex justify-between items-center">
                       <span className="text-slate-200 font-medium">Total Monthly Budget</span>
-                      <span className="text-2xl font-mono text-violet-400">{formatCurrency(totalUnlockedSpending)}</span>
+                      <SimpleTrackedValue value={totalUnlockedSpending} name="Total Monthly Budget" description="Your unlocked monthly spending" formula="Base Budget + Net Worth Portion" inputs={[{ name: 'Base', value: baseBudget, unit: '$' }, { name: 'NW Portion', value: netWorthPortion, unit: '$' }]} className="text-2xl font-mono text-violet-400" />
                     </div>
                     <p className="text-xs text-slate-500 pt-2">
-                      Annual spending: {formatCurrency(totalUnlockedSpending * 12)} • This grows automatically as your net worth increases
+                      Annual spending: <SimpleTrackedValue value={totalUnlockedSpending * 12} name="Annual Spending" description="Total unlocked monthly spending × 12" formula="Monthly Budget × 12" className="text-slate-500" /> • This grows automatically as your net worth increases
                     </p>
                   </div>
                 </div>
@@ -4467,16 +4479,21 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
                   <h4 className="text-sm font-medium text-slate-300 mb-4">Your Money Flow</h4>
                   <div className="space-y-3">
-                    <div className="flex justify-between"><span className="text-slate-400">Gross Income</span><span className="font-mono text-slate-200">{formatCurrency(incomeBreakdown.taxes.grossIncome)}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">- Pre-tax Savings</span><span className="font-mono text-emerald-400">-{formatCurrency(incomeBreakdown.totalPreTaxSavings)}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">- Total Taxes</span><span className="font-mono text-red-400">-{formatCurrency(incomeBreakdown.taxes.totalTax)}</span></div>
-                    <div className="border-t border-slate-600 pt-2 flex justify-between"><span className="text-slate-300">Net Income</span><span className="font-mono text-emerald-400">{formatCurrency(incomeBreakdown.taxes.netIncome)}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">- Annual Spending</span><span className="font-mono text-amber-400">-{formatCurrency(totalUnlockedSpending * 12)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Gross Income</span><SimpleTrackedValue value={incomeBreakdown.taxes.grossIncome} name="Gross Income" description="Annual income before deductions" formula="User Input" className="font-mono text-slate-200" /></div>
+                    <div className="flex justify-between"><span className="text-slate-400">- Pre-tax Savings</span><span className="font-mono text-emerald-400">-<SimpleTrackedValue value={incomeBreakdown.totalPreTaxSavings} name="Pre-tax Savings" description="401k + IRA + HSA + Other" formula="Sum of pre-tax contributions" className="text-emerald-400" /></span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">- Total Taxes</span><span className="font-mono text-red-400">-<SimpleTrackedValue value={incomeBreakdown.taxes.totalTax} name="Total Taxes" description="Federal + State + FICA taxes" formula="Sum of all taxes" className="text-red-400" /></span></div>
+                    <div className="border-t border-slate-600 pt-2 flex justify-between"><span className="text-slate-300">Net Income</span><SimpleTrackedValue value={incomeBreakdown.taxes.netIncome} name="Net Income" description="Take-home pay after taxes and pre-tax" formula="Gross - Pre-tax - Taxes" className="font-mono text-emerald-400" /></div>
+                    <div className="flex justify-between"><span className="text-slate-400">- Annual Spending</span><span className="font-mono text-amber-400">-<SimpleTrackedValue value={totalUnlockedSpending * 12} name="Annual Spending" description="Total monthly budget × 12" formula="Monthly Budget × 12" className="text-amber-400" /></span></div>
                     <div className="border-t border-slate-600 pt-2 flex justify-between font-medium">
                       <span className="text-slate-200">Post-tax Savings Available</span>
-                      <span className={`font-mono ${incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12 >= 0 ? 'text-sky-400' : 'text-red-400'}`}>
-                        {formatCurrency(Math.max(0, incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12))}
-                      </span>
+                      <SimpleTrackedValue 
+                        value={Math.max(0, incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12)} 
+                        name="Post-tax Savings" 
+                        description="Amount available for post-tax savings/investments" 
+                        formula="Net Income - Annual Spending"
+                        inputs={[{ name: 'Net Income', value: incomeBreakdown.taxes.netIncome, unit: '$' }, { name: 'Spending', value: totalUnlockedSpending * 12, unit: '$' }]}
+                        className={`font-mono ${incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12 >= 0 ? 'text-sky-400' : 'text-red-400'}`}
+                      />
                     </div>
                   </div>
                   {incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12 < 0 && (
@@ -4567,7 +4584,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-xs text-slate-500 uppercase mb-1">Base Budget</p>
-                  <p className="text-xl font-mono text-amber-400">{formatCurrency(baseBudget)}/mo</p>
+                  <p className="text-xl font-mono text-amber-400"><SimpleTrackedValue value={baseBudget} name="Base Budget" description="Fixed monthly spending floor" formula="User Input" className="text-amber-400" />/mo</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 uppercase mb-1">Growth Rate</p>
@@ -4576,12 +4593,12 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 uppercase mb-1">Current Total</p>
-                  <p className="text-xl font-mono text-emerald-400">{formatCurrency(totalUnlockedSpending)}/mo</p>
+                  <p className="text-xl font-mono text-emerald-400"><SimpleTrackedValue value={totalUnlockedSpending} name="Current Monthly Budget" description="Base + net worth portion" formula="Base + (Net Worth × Rate ÷ 12)" className="text-emerald-400" />/mo</p>
                 </div>
               </div>
               {spendingRate > 0 && (
                 <p className="text-xs text-slate-500 mt-4 text-center">
-                  As your net worth grows, your monthly budget will increase. At {formatCurrency(1000000)} net worth, your budget would be {formatCurrency(baseBudget + (1000000 * spendingRate / 100 / 12))}/mo.
+                  As your net worth grows, your monthly budget will increase. At <SimpleTrackedValue value={1000000} name="Example Net Worth" description="Example milestone net worth" formula="$1,000,000" decimals={0} className="text-slate-500" /> net worth, your budget would be <SimpleTrackedValue value={baseBudget + (1000000 * spendingRate / 100 / 12)} name="Projected Budget at $1M" description="Budget at $1M net worth" formula={`Base + ($1M × ${spendingRate}% ÷ 12)`} className="text-slate-500" />/mo.
                 </p>
               )}
             </div>
@@ -4590,13 +4607,13 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
                 <p className="text-xs text-slate-500 uppercase">Total Annual Savings (Year 1)</p>
-                <p className="text-2xl font-mono text-sky-400">{formatCurrency(incomeBreakdown.totalAnnualSavings)}</p>
+                <SimpleTrackedValue value={incomeBreakdown.totalAnnualSavings} name="Total Annual Savings" description="Pre-tax + Post-tax savings in year 1" formula="Pre-tax Contributions + Post-tax Savings" inputs={[{ name: 'Pre-tax', value: incomeBreakdown.totalPreTaxSavings, unit: '$' }, { name: 'Post-tax', value: incomeBreakdown.postTaxSavingsAvailable, unit: '$' }]} className="text-2xl font-mono text-sky-400" />
                 <p className="text-xs text-slate-500 mt-1">{formatPercent(incomeBreakdown.savingsRateOfGross)} of gross income</p>
               </div>
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
                 <p className="text-xs text-slate-500 uppercase">Effective Tax Rate</p>
                 <p className="text-2xl font-mono text-red-400">{formatPercent(incomeBreakdown.taxes.effectiveTotalRate)}</p>
-                <p className="text-xs text-slate-500 mt-1">{formatCurrency(incomeBreakdown.taxes.totalTax)} total taxes</p>
+                <p className="text-xs text-slate-500 mt-1"><SimpleTrackedValue value={incomeBreakdown.taxes.totalTax} name="Total Taxes" description="All taxes combined" formula="Federal + State + FICA" className="text-slate-500" /> total taxes</p>
               </div>
             </div>
 
@@ -4667,10 +4684,18 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                         {projections.map(p => (
                           <tr key={p.year} className="border-t border-slate-700">
                             <td className="py-2 text-slate-300">{p.year === 0 ? 'Now' : `Year ${p.year}`}</td>
-                            <td className="py-2 text-right font-mono text-emerald-400">{formatCurrency(p.income)}</td>
-                            <td className="py-2 text-right font-mono text-amber-400">{formatCurrency(p.spending)}</td>
-                            <td className={`py-2 text-right font-mono ${p.savings > 0 ? 'text-sky-400' : 'text-red-400'}`}>{formatCurrency(p.savings)}</td>
-                            <td className="py-2 text-right font-mono text-violet-400">{formatCurrency(p.netWorth)}</td>
+                            <td className="py-2 text-right font-mono text-emerald-400">
+                              <SimpleTrackedValue value={p.income} name={`Year ${p.year} Income`} description={p.year === 0 ? "Current gross income" : `Income after ${p.year} year(s) of growth`} formula={p.year === 0 ? "User Input" : `Year 0 Income × (1 + Growth Rate)^${p.year}`} className="text-emerald-400" />
+                            </td>
+                            <td className="py-2 text-right font-mono text-amber-400">
+                              <SimpleTrackedValue value={p.spending} name={`Year ${p.year} Spending`} description="Annual spending based on budget formula" formula="(Base + Net Worth Portion) × 12" className="text-amber-400" />
+                            </td>
+                            <td className={`py-2 text-right font-mono ${p.savings > 0 ? 'text-sky-400' : 'text-red-400'}`}>
+                              <SimpleTrackedValue value={p.savings} name={`Year ${p.year} Savings`} description="Amount saved for the year" formula="Net Income - Annual Spending" className={p.savings > 0 ? 'text-sky-400' : 'text-red-400'} />
+                            </td>
+                            <td className="py-2 text-right font-mono text-violet-400">
+                              <SimpleTrackedValue value={p.netWorth} name={`Year ${p.year} Net Worth`} description="Projected total net worth" formula="Prior Net Worth × (1 + Return) + Savings" className="text-violet-400" />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
