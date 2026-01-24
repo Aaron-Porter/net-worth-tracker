@@ -28,6 +28,8 @@ import {
   FiMilestone,
   FI_MILESTONE_DEFINITIONS,
 } from '../lib/calculations'
+import { TrackedValue, SimpleTrackedValue } from './components/TrackedValue'
+import { generateTrackedDashboardValues, createTrackedAmount, TrackedDashboardValues } from '../lib/trackedScenarioValues'
 import {
   LineChart,
   Line,
@@ -274,6 +276,12 @@ function DashboardTab({
   selectedScenarios,
   setActiveTab,
 }: DashboardTabProps) {
+  // Generate tracked values for calculation transparency
+  const trackedValues = useMemo(() => {
+    if (!latestEntry || !primaryProjection) return null;
+    return generateTrackedDashboardValues(primaryProjection, latestEntry.timestamp);
+  }, [latestEntry, primaryProjection]);
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
@@ -284,7 +292,7 @@ function DashboardTab({
       </p>
 
       {/* Current Total Display */}
-      {latestEntry && primaryProjection ? (
+      {latestEntry && primaryProjection && trackedValues ? (
         <div className="mb-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-emerald-500/30">
           {/* Scenario indicator */}
           <div className="flex justify-center mb-4">
@@ -304,18 +312,30 @@ function DashboardTab({
             Current Net Worth
           </h2>
           <div className="text-center">
-            <span className="text-4xl md:text-5xl font-bold font-mono bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
-              {formatCurrency(primaryProjection.currentNetWorth.total, 6)}
-            </span>
+            <TrackedValue 
+              value={trackedValues.currentNetWorth}
+              decimals={6}
+              className="text-4xl md:text-5xl font-bold font-mono bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent"
+            />
           </div>
+          <p className="text-xs text-slate-500 text-center mt-1">
+            Click any number to see calculation details
+          </p>
           <div className="mt-4 flex justify-center gap-8 text-sm">
             <div className="text-center">
               <p className="text-slate-500">Base Amount</p>
-              <p className="text-slate-300 font-mono">{formatCurrency(primaryProjection.currentNetWorth.baseAmount)}</p>
+              <TrackedValue 
+                value={trackedValues.baseAmount}
+                className="text-slate-300 font-mono"
+              />
             </div>
             <div className="text-center">
               <p className="text-slate-500">Appreciation</p>
-              <p className="text-emerald-400 font-mono">+{formatCurrency(primaryProjection.currentNetWorth.appreciation, 4)}</p>
+              <span className="text-emerald-400 font-mono">+<TrackedValue 
+                value={trackedValues.appreciation}
+                decimals={4}
+                className="text-emerald-400 font-mono"
+              /></span>
             </div>
           </div>
           <p className="text-slate-500 text-center mt-4 text-xs">
@@ -335,7 +355,7 @@ function DashboardTab({
       )}
 
       {/* Metrics Section */}
-      {latestEntry && primaryProjection && (
+      {latestEntry && primaryProjection && trackedValues && (
         <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
           <h2 className="text-lg font-semibold text-slate-300 mb-4">
             Metrics
@@ -349,33 +369,40 @@ function DashboardTab({
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Second</p>
-                <p className="text-emerald-400 font-mono">
-                  {formatCurrency(primaryProjection.growthRates.perSecond, 6)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.growthPerSecond}
+                  decimals={6}
+                  className="text-emerald-400 font-mono"
+                />
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Minute</p>
-                <p className="text-emerald-400 font-mono">
-                  {formatCurrency(primaryProjection.growthRates.perMinute, 4)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.growthPerMinute}
+                  decimals={4}
+                  className="text-emerald-400 font-mono"
+                />
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Hour</p>
-                <p className="text-emerald-400 font-mono">
-                  {formatCurrency(primaryProjection.growthRates.perHour)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.growthPerHour}
+                  className="text-emerald-400 font-mono"
+                />
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Day</p>
-                <p className="text-emerald-400 font-mono">
-                  {formatCurrency(primaryProjection.growthRates.perDay)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.growthPerDay}
+                  className="text-emerald-400 font-mono"
+                />
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3 col-span-2 sm:col-span-2">
                 <p className="text-slate-500 text-xs">Per Year</p>
-                <p className="text-emerald-400 font-mono text-lg">
-                  {formatCurrency(primaryProjection.growthRates.perYear)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.growthPerYear}
+                  className="text-emerald-400 font-mono text-lg"
+                />
               </div>
             </div>
           </div>
@@ -388,15 +415,42 @@ function DashboardTab({
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Annual</p>
-                <p className="text-amber-400 font-mono text-lg">
-                  {formatCurrency(primaryProjection.currentNetWorth.total * (primaryProjection.scenario.swr / 100))}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.annualSwr}
+                  className="text-amber-400 font-mono text-lg"
+                />
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Monthly</p>
-                <p className="text-amber-400 font-mono text-lg">
-                  {formatCurrency(primaryProjection.currentMonthlySwr)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.monthlySwr}
+                  className="text-amber-400 font-mono text-lg"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* FI Progress */}
+          <div className="mt-6">
+            <h3 className="text-sm font-medium text-slate-400 mb-3">
+              Financial Independence
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <p className="text-slate-500 text-xs">FI Target</p>
+                <TrackedValue 
+                  value={trackedValues.fiTarget}
+                  className="text-violet-400 font-mono text-lg"
+                />
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <p className="text-slate-500 text-xs">FI Progress</p>
+                <TrackedValue 
+                  value={trackedValues.fiProgress}
+                  showCurrency={false}
+                  formatter={(v) => `${v.toFixed(1)}%`}
+                  className="text-violet-400 font-mono text-lg"
+                />
               </div>
             </div>
           </div>
