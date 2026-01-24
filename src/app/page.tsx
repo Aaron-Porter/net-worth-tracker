@@ -25,6 +25,8 @@ import {
   calculateSwrAmounts,
   calculateFiTarget,
   calculateLevelBasedSpending,
+  FiMilestone,
+  FI_MILESTONE_DEFINITIONS,
 } from '../lib/calculations'
 import {
   LineChart,
@@ -400,8 +402,222 @@ function DashboardTab({
           </div>
         </div>
       )}
+
+      {/* FI Milestones Section */}
+      {latestEntry && primaryProjection && (
+        <FiMilestonesCard primaryProjection={primaryProjection} />
+      )}
     </div>
   )
+}
+
+// ============================================================================
+// FI MILESTONES CARD
+// ============================================================================
+
+interface FiMilestonesCardProps {
+  primaryProjection: ScenarioProjection;
+}
+
+function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
+  const { fiMilestones, currentFiProgress } = primaryProjection;
+  const currentYear = new Date().getFullYear();
+  
+  // Filter milestones by type for display
+  const percentageMilestones = fiMilestones.milestones.filter(m => m.type === 'percentage');
+  const lifestyleMilestones = fiMilestones.milestones.filter(m => m.type === 'lifestyle');
+  const specialMilestones = fiMilestones.milestones.filter(m => m.type === 'special');
+  
+  return (
+    <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
+      <h2 className="text-lg font-semibold text-slate-300 mb-2">
+        FI Milestones
+      </h2>
+      <p className="text-slate-500 text-sm mb-6">
+        Your journey to financial independence
+      </p>
+      
+      {/* Current Progress Overview */}
+      <div className="mb-6 bg-slate-900/50 rounded-xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-slate-400 text-sm">Current FI Progress</span>
+          <span className="text-emerald-400 font-mono text-lg font-semibold">
+            {currentFiProgress.toFixed(1)}%
+          </span>
+        </div>
+        
+        {/* Progress bar with milestone markers */}
+        <div className="relative">
+          <div className="h-4 bg-slate-700 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500"
+              style={{ width: `${Math.min(100, currentFiProgress)}%` }}
+            />
+          </div>
+          
+          {/* Milestone markers */}
+          <div className="absolute top-0 left-0 right-0 h-4 flex items-center">
+            {[10, 25, 50, 75, 100].map(percent => (
+              <div
+                key={percent}
+                className="absolute h-4 w-0.5 bg-slate-600"
+                style={{ left: `${percent}%` }}
+                title={`${percent}% FI`}
+              />
+            ))}
+          </div>
+        </div>
+        
+        {/* Milestone labels */}
+        <div className="flex justify-between mt-2 text-xs text-slate-500">
+          <span>0%</span>
+          <span>25%</span>
+          <span>50%</span>
+          <span>75%</span>
+          <span>100%</span>
+        </div>
+        
+        {/* Next milestone info */}
+        {fiMilestones.nextMilestone && (
+          <div className="mt-4 pt-4 border-t border-slate-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-300 text-sm font-medium">
+                  Next: {fiMilestones.nextMilestone.shortName}
+                </p>
+                <p className="text-slate-500 text-xs">
+                  {fiMilestones.nextMilestone.yearsFromNow === 0 
+                    ? 'This year' 
+                    : fiMilestones.nextMilestone.yearsFromNow === 1
+                      ? 'Next year'
+                      : `In ${fiMilestones.nextMilestone.yearsFromNow} years`}
+                  {fiMilestones.nextMilestone.age && ` (age ${fiMilestones.nextMilestone.age})`}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-slate-300 font-mono text-sm">
+                  {formatCurrency(fiMilestones.amountToNext)}
+                </p>
+                <p className="text-slate-500 text-xs">to go</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Percentage Milestones */}
+      <div className="mb-6">
+        <h3 className="text-sm font-medium text-slate-400 mb-3">
+          Progress Milestones
+        </h3>
+        <div className="space-y-2">
+          {percentageMilestones.map(milestone => (
+            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+          ))}
+        </div>
+      </div>
+      
+      {/* Lifestyle Milestones */}
+      <div className="mb-6">
+        <h3 className="text-sm font-medium text-slate-400 mb-3">
+          Lifestyle Milestones
+        </h3>
+        <div className="space-y-2">
+          {lifestyleMilestones.map(milestone => (
+            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+          ))}
+        </div>
+      </div>
+      
+      {/* Special Milestones */}
+      <div>
+        <h3 className="text-sm font-medium text-slate-400 mb-3">
+          Special Milestones
+        </h3>
+        <div className="space-y-2">
+          {specialMilestones.map(milestone => (
+            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface MilestoneRowProps {
+  milestone: {
+    id: string;
+    name: string;
+    shortName: string;
+    description: string;
+    color: string;
+    year: number | null;
+    age: number | null;
+    yearsFromNow: number | null;
+    isAchieved: boolean;
+    netWorthAtMilestone: number | null;
+  };
+  currentYear: number;
+}
+
+function MilestoneRow({ milestone, currentYear }: MilestoneRowProps) {
+  const [showDescription, setShowDescription] = React.useState(false);
+  
+  return (
+    <div 
+      className={`rounded-lg p-3 transition-colors cursor-pointer ${
+        milestone.isAchieved 
+          ? 'bg-emerald-900/30 border border-emerald-500/30' 
+          : 'bg-slate-900/50 hover:bg-slate-900/70'
+      }`}
+      onClick={() => setShowDescription(!showDescription)}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div 
+            className={`w-3 h-3 rounded-full ${milestone.isAchieved ? 'bg-emerald-400' : 'bg-slate-600'}`}
+            style={!milestone.isAchieved ? { borderColor: milestone.color, borderWidth: 2 } : { backgroundColor: milestone.color }}
+          />
+          <div>
+            <span className={`text-sm font-medium ${milestone.isAchieved ? 'text-emerald-300' : 'text-slate-300'}`}>
+              {milestone.shortName}
+            </span>
+            {milestone.isAchieved && (
+              <span className="ml-2 text-xs text-emerald-400">Achieved</span>
+            )}
+          </div>
+        </div>
+        
+        <div className="text-right">
+          {milestone.year ? (
+            <>
+              <span className={`text-sm font-mono ${milestone.isAchieved ? 'text-emerald-400' : 'text-slate-400'}`}>
+                {milestone.year}
+              </span>
+              {milestone.age && (
+                <span className="text-xs text-slate-500 ml-2">
+                  (age {milestone.age})
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-xs text-slate-500">Not projected</span>
+          )}
+        </div>
+      </div>
+      
+      {showDescription && (
+        <p className="mt-2 text-xs text-slate-400 pl-6">
+          {milestone.description}
+          {milestone.netWorthAtMilestone && (
+            <span className="block mt-1 text-slate-500">
+              Net worth at milestone: {formatCurrency(milestone.netWorthAtMilestone)}
+            </span>
+          )}
+        </p>
+      )}
+    </div>
+  );
 }
 
 // ============================================================================
@@ -1391,6 +1607,102 @@ function ProjectionsTable({
           label: 'Crossover Year',
           getValue: (sp: ScenarioProjection) => sp.crossoverYear ? sp.crossoverYear.toString() : '-',
           getNumericValue: (sp: ScenarioProjection) => sp.crossoverYear,
+          lowerIsBetter: true,
+          format: 'year',
+        },
+      ]
+    },
+    {
+      category: 'FI Journey Milestones',
+      metrics: [
+        {
+          label: '25% FI Year',
+          getValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'fi_25');
+            return milestone?.year ? milestone.year.toString() : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'fi_25');
+            return milestone?.year ?? null;
+          },
+          lowerIsBetter: true,
+          format: 'year',
+        },
+        {
+          label: '50% FI Year',
+          getValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'fi_50');
+            return milestone?.year ? milestone.year.toString() : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'fi_50');
+            return milestone?.year ?? null;
+          },
+          lowerIsBetter: true,
+          format: 'year',
+        },
+        {
+          label: '75% FI Year',
+          getValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'fi_75');
+            return milestone?.year ? milestone.year.toString() : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'fi_75');
+            return milestone?.year ?? null;
+          },
+          lowerIsBetter: true,
+          format: 'year',
+        },
+        {
+          label: 'Lean FI Year',
+          getValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'lean_fi');
+            return milestone?.year ? milestone.year.toString() : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'lean_fi');
+            return milestone?.year ?? null;
+          },
+          lowerIsBetter: true,
+          format: 'year',
+        },
+        {
+          label: 'Barista FI Year',
+          getValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'barista_fi');
+            return milestone?.year ? milestone.year.toString() : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'barista_fi');
+            return milestone?.year ?? null;
+          },
+          lowerIsBetter: true,
+          format: 'year',
+        },
+        {
+          label: 'Coast FI Year',
+          getValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'coast_fi');
+            return milestone?.year ? milestone.year.toString() : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'coast_fi');
+            return milestone?.year ?? null;
+          },
+          lowerIsBetter: true,
+          format: 'year',
+        },
+        {
+          label: 'Fat FI Year',
+          getValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'fat_fi');
+            return milestone?.year ? milestone.year.toString() : '-';
+          },
+          getNumericValue: (sp: ScenarioProjection) => {
+            const milestone = sp.fiMilestones.milestones.find(m => m.id === 'fat_fi');
+            return milestone?.year ?? null;
+          },
           lowerIsBetter: true,
           format: 'year',
         },

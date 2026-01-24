@@ -119,6 +119,57 @@ export interface CalculatedFinancials {
 }
 
 // ============================================================================
+// FI MILESTONES - Goals along the journey to 100% FI
+// ============================================================================
+
+export type FiMilestoneType = 
+  | 'percentage'      // Based on FI progress percentage (10%, 25%, 50%, 75%, 100%)
+  | 'lifestyle'       // Based on spending levels (Lean FI, Regular FI, Fat FI)
+  | 'special';        // Special milestones (Coast FI, Barista FI, Crossover)
+
+export interface FiMilestone {
+  id: string;
+  name: string;
+  shortName: string;
+  description: string;
+  type: FiMilestoneType;
+  // For percentage milestones, this is the FI progress % target
+  // For lifestyle milestones, this is a multiplier of base spending
+  targetValue: number;
+  // When this milestone was/will be achieved
+  year: number | null;
+  age: number | null;
+  yearsFromNow: number | null;
+  // Status
+  isAchieved: boolean;
+  // The net worth at achievement (actual or projected)
+  netWorthAtMilestone: number | null;
+  // For display - color/icon hints
+  color: string;
+  icon: string;
+}
+
+export interface FiMilestonesInfo {
+  milestones: FiMilestone[];
+  currentMilestone: FiMilestone | null;  // Most recently achieved
+  nextMilestone: FiMilestone | null;     // Next to achieve
+  progressToNext: number;                 // 0-100
+  amountToNext: number;                   // $ needed
+}
+
+// Predefined milestone definitions
+export interface FiMilestoneDefinition {
+  id: string;
+  name: string;
+  shortName: string;
+  description: string;
+  type: FiMilestoneType;
+  targetValue: number;
+  color: string;
+  icon: string;
+}
+
+// ============================================================================
 // CONSTANTS
 // ============================================================================
 
@@ -185,6 +236,142 @@ export const DEFAULT_SETTINGS: UserSettings = {
   baseMonthlyBudget: 3000,
   spendingGrowthRate: 2,
 };
+
+/**
+ * FI Milestone Definitions
+ * These represent key goals along the journey to financial independence.
+ * 
+ * Percentage milestones: Based on FI progress (net worth / FI target)
+ * Lifestyle milestones: Based on spending multiples (Lean = 0.7x, Regular = 1x, Fat = 1.5x)
+ * Special milestones: Crossover point, Coast FI, Barista FI
+ */
+export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
+  // Percentage-based milestones (FI progress %)
+  {
+    id: 'fi_10',
+    name: '10% FI - First Steps',
+    shortName: '10% FI',
+    description: 'You\'ve taken the first meaningful steps toward financial independence. Your investments are starting to work for you.',
+    type: 'percentage',
+    targetValue: 10,
+    color: '#94a3b8', // slate-400
+    icon: 'seedling',
+  },
+  {
+    id: 'fi_25',
+    name: '25% FI - Quarter Way',
+    shortName: '25% FI',
+    description: 'A quarter of the way to FI! Your portfolio is gaining momentum and compound growth is becoming visible.',
+    type: 'percentage',
+    targetValue: 25,
+    color: '#60a5fa', // blue-400
+    icon: 'sprout',
+  },
+  {
+    id: 'fi_50',
+    name: '50% FI - Halfway',
+    shortName: '50% FI',
+    description: 'You\'re halfway to financial independence! This is a major psychological milestone.',
+    type: 'percentage',
+    targetValue: 50,
+    color: '#a78bfa', // violet-400
+    icon: 'plant',
+  },
+  {
+    id: 'fi_75',
+    name: '75% FI - Home Stretch',
+    shortName: '75% FI',
+    description: 'Three-quarters of the way! The finish line is in sight and compound growth is accelerating.',
+    type: 'percentage',
+    targetValue: 75,
+    color: '#f59e0b', // amber-500
+    icon: 'tree',
+  },
+  {
+    id: 'fi_100',
+    name: '100% FI - Financial Independence',
+    shortName: 'FI',
+    description: 'You\'ve reached financial independence! Your safe withdrawal rate covers your desired lifestyle.',
+    type: 'percentage',
+    targetValue: 100,
+    color: '#10b981', // emerald-500
+    icon: 'flag',
+  },
+  
+  // Lifestyle-based milestones (spending multipliers)
+  {
+    id: 'lean_fi',
+    name: 'Lean FI',
+    shortName: 'Lean FI',
+    description: 'Your SWR covers a lean/minimal lifestyle (70% of your regular spending). You could survive without a traditional job.',
+    type: 'lifestyle',
+    targetValue: 0.7, // 70% of regular spending
+    color: '#22c55e', // green-500
+    icon: 'leaf',
+  },
+  {
+    id: 'barista_fi',
+    name: 'Barista FI',
+    shortName: 'Barista FI',
+    description: 'Your SWR covers most expenses (85%). A part-time job would cover the rest, giving you flexibility.',
+    type: 'lifestyle',
+    targetValue: 0.85, // 85% of regular spending
+    color: '#14b8a6', // teal-500
+    icon: 'coffee',
+  },
+  {
+    id: 'regular_fi',
+    name: 'Regular FI',
+    shortName: 'Regular FI',
+    description: 'Your SWR fully covers your regular lifestyle. This is the traditional FI target.',
+    type: 'lifestyle',
+    targetValue: 1.0, // 100% of regular spending
+    color: '#10b981', // emerald-500
+    icon: 'check-circle',
+  },
+  {
+    id: 'fat_fi',
+    name: 'Fat FI',
+    shortName: 'Fat FI',
+    description: 'Your SWR supports an enhanced lifestyle (150% of regular spending), with room for luxuries and unexpected expenses.',
+    type: 'lifestyle',
+    targetValue: 1.5, // 150% of regular spending
+    color: '#eab308', // yellow-500
+    icon: 'star',
+  },
+  
+  // Special milestones
+  {
+    id: 'crossover',
+    name: 'Crossover Point',
+    shortName: 'Crossover',
+    description: 'Your investment income (interest/gains) exceeds your contributions. Your money is now working harder than you.',
+    type: 'special',
+    targetValue: 0, // Calculated differently - when interest > contributions
+    color: '#8b5cf6', // violet-500
+    icon: 'arrows-cross',
+  },
+  {
+    id: 'coast_fi',
+    name: 'Coast FI',
+    shortName: 'Coast FI',
+    description: 'You could stop saving today and still reach FI by traditional retirement age through compound growth alone.',
+    type: 'special',
+    targetValue: 65, // Default target retirement age for Coast FI calculation
+    color: '#06b6d4', // cyan-500
+    icon: 'sailboat',
+  },
+  {
+    id: 'flamingo_fi',
+    name: 'Flamingo FI',
+    shortName: 'Flamingo FI',
+    description: 'You\'re 50% to FI and could semi-retire now, letting your investments grow while working part-time.',
+    type: 'special',
+    targetValue: 50, // 50% FI - can semi-retire and let investments compound
+    color: '#ec4899', // pink-500
+    icon: 'flamingo',
+  },
+] as const;
 
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
 const PROJECTION_YEARS = 61;
@@ -612,6 +799,248 @@ export function calculateLevelBasedSpending(
   
   // Add net worth portion (annual rate / 12 for monthly)
   return inflatedBase + (netWorth * (spendingGrowthRate / 100) / 12);
+}
+
+/**
+ * Calculate FI milestones from projections
+ * Returns information about achieved and upcoming milestones on the path to FI
+ */
+export function calculateFiMilestones(
+  projections: ProjectionRow[],
+  settings: UserSettings,
+  birthYear: number | null
+): FiMilestonesInfo {
+  if (!projections.length) {
+    return {
+      milestones: [],
+      currentMilestone: null,
+      nextMilestone: null,
+      progressToNext: 0,
+      amountToNext: 0,
+    };
+  }
+  
+  const currentYear = new Date().getFullYear();
+  const currentRow = projections[0];
+  const currentNetWorth = currentRow.netWorth;
+  const currentFiProgress = currentRow.fiProgress;
+  const currentMonthlySpend = currentRow.monthlySpend;
+  const currentFiTarget = currentRow.fiTarget;
+  
+  const milestones: FiMilestone[] = [];
+  
+  // Process each milestone definition
+  for (const def of FI_MILESTONE_DEFINITIONS) {
+    let milestone: FiMilestone;
+    
+    if (def.type === 'percentage') {
+      // Percentage-based milestones (10%, 25%, 50%, 75%, 100%)
+      const targetProgress = def.targetValue;
+      const isAchieved = currentFiProgress >= targetProgress;
+      
+      // Find the first year when this milestone is/was achieved
+      let milestoneYear: number | null = null;
+      let milestoneNetWorth: number | null = null;
+      
+      for (const row of projections) {
+        if (row.fiProgress >= targetProgress) {
+          milestoneYear = row.year;
+          milestoneNetWorth = row.netWorth;
+          break;
+        }
+      }
+      
+      milestone = {
+        ...def,
+        year: milestoneYear,
+        age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+        yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+        isAchieved,
+        netWorthAtMilestone: milestoneNetWorth,
+      };
+    } else if (def.type === 'lifestyle') {
+      // Lifestyle-based milestones (based on spending multipliers)
+      const spendingMultiplier = def.targetValue;
+      const adjustedSpend = currentMonthlySpend * spendingMultiplier;
+      const lifestyleFiTarget = calculateFiTarget(adjustedSpend, settings.swr);
+      const lifestyleFiProgress = lifestyleFiTarget > 0 ? (currentNetWorth / lifestyleFiTarget) * 100 : 0;
+      const isAchieved = lifestyleFiProgress >= 100;
+      
+      // Find the first year when this lifestyle FI is achieved
+      let milestoneYear: number | null = null;
+      let milestoneNetWorth: number | null = null;
+      
+      for (const row of projections) {
+        const rowSpend = row.monthlySpend * spendingMultiplier;
+        const rowTarget = calculateFiTarget(rowSpend, settings.swr);
+        if (row.netWorth >= rowTarget) {
+          milestoneYear = row.year;
+          milestoneNetWorth = row.netWorth;
+          break;
+        }
+      }
+      
+      milestone = {
+        ...def,
+        year: milestoneYear,
+        age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+        yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+        isAchieved,
+        netWorthAtMilestone: milestoneNetWorth,
+      };
+    } else {
+      // Special milestones
+      if (def.id === 'crossover') {
+        // Crossover Point - when interest exceeds contributions
+        const crossoverRow = projections.find(p => p.isCrossover);
+        const isAchieved = projections.some(p => p.interest > p.contributed && p.contributed > 0);
+        
+        // For current achievement, check if already achieved
+        let currentlyAchieved = false;
+        if (currentRow.interest > currentRow.contributed && currentRow.contributed > 0) {
+          currentlyAchieved = true;
+        }
+        
+        milestone = {
+          ...def,
+          year: crossoverRow?.year ?? null,
+          age: crossoverRow?.year && birthYear ? crossoverRow.year - birthYear : null,
+          yearsFromNow: crossoverRow?.year ? crossoverRow.year - currentYear : null,
+          isAchieved: currentlyAchieved,
+          netWorthAtMilestone: crossoverRow?.netWorth ?? null,
+        };
+      } else if (def.id === 'coast_fi') {
+        // Coast FI - when you can stop saving and still reach FI at retirement age
+        // Use the existing coastFiYear calculation from projections
+        const coastFiYear = currentRow.coastFiYear;
+        const isAchieved = coastFiYear !== null && coastFiYear <= currentYear;
+        
+        milestone = {
+          ...def,
+          year: coastFiYear,
+          age: coastFiYear && birthYear ? coastFiYear - birthYear : null,
+          yearsFromNow: coastFiYear ? coastFiYear - currentYear : null,
+          isAchieved,
+          netWorthAtMilestone: isAchieved ? currentNetWorth : null,
+        };
+      } else if (def.id === 'flamingo_fi') {
+        // Flamingo FI - 50% of the way to FI (same as 50% FI but framed differently)
+        const isAchieved = currentFiProgress >= 50;
+        
+        let milestoneYear: number | null = null;
+        let milestoneNetWorth: number | null = null;
+        
+        for (const row of projections) {
+          if (row.fiProgress >= 50) {
+            milestoneYear = row.year;
+            milestoneNetWorth = row.netWorth;
+            break;
+          }
+        }
+        
+        milestone = {
+          ...def,
+          year: milestoneYear,
+          age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+          yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+          isAchieved,
+          netWorthAtMilestone: milestoneNetWorth,
+        };
+      } else {
+        // Unknown special milestone
+        milestone = {
+          ...def,
+          year: null,
+          age: null,
+          yearsFromNow: null,
+          isAchieved: false,
+          netWorthAtMilestone: null,
+        };
+      }
+    }
+    
+    milestones.push(milestone);
+  }
+  
+  // Sort milestones by achievement status and then by years from now
+  // Achieved milestones first (sorted by recency), then upcoming (sorted by proximity)
+  const sortedMilestones = [...milestones].sort((a, b) => {
+    if (a.isAchieved && !b.isAchieved) return -1;
+    if (!a.isAchieved && b.isAchieved) return 1;
+    
+    // Both achieved or both not achieved - sort by year
+    const yearA = a.year ?? Infinity;
+    const yearB = b.year ?? Infinity;
+    return yearA - yearB;
+  });
+  
+  // Find current and next milestones (use percentage-based for primary tracking)
+  const percentageMilestones = milestones.filter(m => m.type === 'percentage');
+  const achievedPercentage = percentageMilestones.filter(m => m.isAchieved);
+  const upcomingPercentage = percentageMilestones.filter(m => !m.isAchieved);
+  
+  const currentMilestone = achievedPercentage.length > 0 
+    ? achievedPercentage[achievedPercentage.length - 1] 
+    : null;
+  const nextMilestone = upcomingPercentage.length > 0 
+    ? upcomingPercentage[0] 
+    : null;
+  
+  // Calculate progress to next milestone
+  let progressToNext = 0;
+  let amountToNext = 0;
+  
+  if (nextMilestone) {
+    const targetProgress = nextMilestone.targetValue;
+    const currentProgress = currentFiProgress;
+    const previousTarget = currentMilestone?.targetValue ?? 0;
+    
+    if (targetProgress > previousTarget) {
+      progressToNext = ((currentProgress - previousTarget) / (targetProgress - previousTarget)) * 100;
+      progressToNext = Math.max(0, Math.min(100, progressToNext));
+    }
+    
+    // Calculate amount needed to reach next milestone
+    const targetNetWorth = currentFiTarget * (targetProgress / 100);
+    amountToNext = Math.max(0, targetNetWorth - currentNetWorth);
+  }
+  
+  return {
+    milestones: sortedMilestones,
+    currentMilestone,
+    nextMilestone,
+    progressToNext,
+    amountToNext,
+  };
+}
+
+/**
+ * Get a summary of key FI milestones for display
+ * Returns a condensed view with the most important milestones
+ */
+export function getFiMilestonesSummary(
+  milestonesInfo: FiMilestonesInfo
+): {
+  achieved: FiMilestone[];
+  upcoming: FiMilestone[];
+  nextPercentage: FiMilestone | null;
+  nextLifestyle: FiMilestone | null;
+} {
+  const { milestones, nextMilestone } = milestonesInfo;
+  
+  const achieved = milestones.filter(m => m.isAchieved);
+  const upcoming = milestones.filter(m => !m.isAchieved && m.year !== null);
+  
+  // Find the next lifestyle milestone
+  const lifestyleMilestones = milestones.filter(m => m.type === 'lifestyle');
+  const nextLifestyle = lifestyleMilestones.find(m => !m.isAchieved) ?? null;
+  
+  return {
+    achieved,
+    upcoming,
+    nextPercentage: nextMilestone,
+    nextLifestyle,
+  };
 }
 
 /**

@@ -21,7 +21,16 @@ import {
   generateDynamicProjections,
   YearlyProjectedFinancials,
   FilingStatus,
+  FiMilestonesInfo,
+  FiMilestone,
+  FiMilestoneDefinition,
+  FI_MILESTONE_DEFINITIONS,
+  calculateFiMilestones,
 } from './calculations';
+
+// Re-export FI milestone types for convenience
+export type { FiMilestonesInfo, FiMilestone, FiMilestoneDefinition };
+export { FI_MILESTONE_DEFINITIONS };
 
 export interface Scenario {
   _id: Id<"scenarios">;
@@ -64,6 +73,8 @@ export interface ScenarioProjection {
   // Dynamic projections (when income data is available)
   dynamicProjections: YearlyProjectedFinancials[] | null;
   hasDynamicIncome: boolean;
+  // FI Milestones along the journey
+  fiMilestones: FiMilestonesInfo;
 }
 
 export interface UserProfile {
@@ -307,6 +318,14 @@ export function useScenarios(): UseScenariosReturn {
       const crossoverRow = projections.find(p => p.isCrossover);
       const firstRow = projections[0]; // First projection row (current year)
 
+      // Calculate birth year for age calculations
+      const birthYear = localProfile.birthDate 
+        ? new Date(localProfile.birthDate).getFullYear() 
+        : null;
+
+      // Calculate FI milestones along the journey
+      const fiMilestones = calculateFiMilestones(projections, scenarioSettings, birthYear);
+
       return {
         scenario,
         projections,
@@ -320,6 +339,7 @@ export function useScenarios(): UseScenariosReturn {
         currentMonthlySwr: firstRow?.monthlySwr ?? 0,
         dynamicProjections,
         hasDynamicIncome,
+        fiMilestones,
       };
     });
   }, [latestEntry, selectedScenarios, localProfile, entries, realtimeTick]);
