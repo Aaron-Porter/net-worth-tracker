@@ -4140,7 +4140,17 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 <div className="grid grid-cols-4 gap-4 text-center">
                   <div>
                     <p className="text-xs text-slate-500">Net Income</p>
-                    <p className="text-lg font-mono text-emerald-400">{formatCurrency(liveBreakdown.taxes.netIncome)}</p>
+                    <SimpleTrackedValue
+                      value={liveBreakdown.taxes.netIncome}
+                      name="Net Income"
+                      description="Annual take-home pay after taxes"
+                      formula="Gross Income - Pre-Tax - All Taxes"
+                      inputs={[
+                        { name: 'Gross', value: liveBreakdown.taxes.grossIncome, unit: '$' },
+                        { name: 'Total Tax', value: liveBreakdown.taxes.totalTax, unit: '$' },
+                      ]}
+                      className="text-lg font-mono text-emerald-400"
+                    />
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Tax Rate</p>
@@ -4148,11 +4158,27 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Annual Spending</p>
-                    <p className="text-lg font-mono text-amber-400">{formatCurrency(liveBreakdown.annualSpending)}</p>
+                    <SimpleTrackedValue
+                      value={liveBreakdown.annualSpending}
+                      name="Annual Spending"
+                      description="Level-based annual spending budget"
+                      formula="Monthly Budget × 12"
+                      className="text-lg font-mono text-amber-400"
+                    />
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Total Savings</p>
-                    <p className="text-lg font-mono text-sky-400">{formatCurrency(liveBreakdown.totalAnnualSavings)}</p>
+                    <SimpleTrackedValue
+                      value={liveBreakdown.totalAnnualSavings}
+                      name="Total Annual Savings"
+                      description="Amount available for investments after spending"
+                      formula="Net Income - Annual Spending"
+                      inputs={[
+                        { name: 'Net Income', value: liveBreakdown.taxes.netIncome, unit: '$' },
+                        { name: 'Spending', value: liveBreakdown.annualSpending, unit: '$' },
+                      ]}
+                      className="text-lg font-mono text-sky-400"
+                    />
                   </div>
                 </div>
               </div>
@@ -4220,7 +4246,14 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 <input type="number" value={wizardState.grossIncome} onChange={(e) => setWizardState(s => ({ ...s, grossIncome: e.target.value }))} placeholder="100000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
               </div>
               {wizardState.grossIncome && (
-                <p className="mt-3 text-slate-400">That's <span className="text-emerald-400 font-mono">{formatCurrency(parseFloat(wizardState.grossIncome) / 12)}</span> per month before taxes.</p>
+                <p className="mt-3 text-slate-400">That's <SimpleTrackedValue
+                  value={parseFloat(wizardState.grossIncome) / 12}
+                  name="Monthly Income"
+                  description="Gross monthly income before taxes"
+                  formula="Annual Gross Income ÷ 12"
+                  inputs={[{ name: 'Annual Gross', value: parseFloat(wizardState.grossIncome), unit: '$' }]}
+                  className="text-emerald-400 font-mono"
+                /> per month before taxes.</p>
               )}
             </div>
             
@@ -4241,7 +4274,18 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
               {wizardState.grossIncome && parseFloat(wizardState.incomeGrowthRate) > 0 && (
                 <div className="mt-4 p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
                   <p className="text-sm text-emerald-400">
-                    In 10 years, your income would grow to approximately <strong>{formatCurrency(parseFloat(wizardState.grossIncome) * Math.pow(1 + parseFloat(wizardState.incomeGrowthRate) / 100, 10))}</strong>
+                    In 10 years, your income would grow to approximately <strong><SimpleTrackedValue
+                      value={parseFloat(wizardState.grossIncome) * Math.pow(1 + parseFloat(wizardState.incomeGrowthRate) / 100, 10)}
+                      name="Income in 10 Years"
+                      description="Projected annual income after 10 years of growth"
+                      formula={`Current Income × (1 + ${wizardState.incomeGrowthRate}%)^10`}
+                      inputs={[
+                        { name: 'Current Income', value: parseFloat(wizardState.grossIncome), unit: '$' },
+                        { name: 'Growth Rate', value: `${wizardState.incomeGrowthRate}%` },
+                        { name: 'Years', value: 10 },
+                      ]}
+                      className="text-emerald-400"
+                    /></strong>
                   </p>
                 </div>
               )}
