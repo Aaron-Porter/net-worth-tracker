@@ -480,8 +480,9 @@ interface FiMilestonesCardProps {
 }
 
 function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
-  const { fiMilestones, currentFiProgress } = primaryProjection;
+  const { fiMilestones, currentFiProgress, currentNetWorth, projections } = primaryProjection;
   const currentYear = new Date().getFullYear();
+  const currentFiTarget = projections[0]?.fiTarget ?? 0;
   
   // Filter milestones by type for display
   const percentageMilestones = fiMilestones.milestones.filter(m => m.type === 'percentage');
@@ -501,9 +502,16 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
       <div className="mb-6 bg-slate-900/50 rounded-xl p-4">
         <div className="flex items-center justify-between mb-3">
           <span className="text-slate-400 text-sm">Current FI Progress</span>
-          <span className="text-emerald-400 font-mono text-lg font-semibold">
-            {currentFiProgress.toFixed(1)}%
-          </span>
+          <SimpleTrackedValue 
+            value={currentFiProgress} 
+            name="Current FI Progress" 
+            description="Percentage of FI target achieved"
+            formula="(Current Net Worth ÷ FI Target) × 100"
+            inputs={[{ name: 'Net Worth', value: currentNetWorth.total, unit: '$' }, { name: 'FI Target', value: currentFiTarget, unit: '$' }]}
+            formatAs="percent"
+            decimals={1}
+            className="text-emerald-400 font-mono text-lg font-semibold"
+          />
         </div>
         
         {/* Progress bar with milestone markers */}
@@ -561,8 +569,8 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
                   description={`Amount needed to reach ${fiMilestones.nextMilestone.shortName}`}
                   formula={`${fiMilestones.nextMilestone.shortName} Target - Current Net Worth`}
                   inputs={[
-                    { name: 'Target Progress', value: `${fiMilestones.nextMilestone.targetValue}%` },
-                    { name: 'Current Progress', value: `${currentFiProgress.toFixed(1)}%` },
+                    { name: 'Target Progress', value: fiMilestones.nextMilestone.targetValue, unit: '%' },
+                    { name: 'Current Progress', value: Math.round(currentFiProgress * 10) / 10, unit: '%' },
                   ]}
                   className="text-slate-300 font-mono text-sm"
                 />
@@ -2687,7 +2695,15 @@ function UnifiedChartTooltip({ active, payload, label, timeUnit }: any) {
             {data.data.fiProgress !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">FI Progress:</span>
-                <span className="text-emerald-400 font-mono">{data.data.fiProgress.toFixed(1)}%</span>
+                <SimpleTrackedValue 
+                  value={data.data.fiProgress} 
+                  name={`Year ${data.data.year} FI Progress`} 
+                  description="Percentage of FI target achieved"
+                  formula="(Net Worth ÷ FI Target) × 100"
+                  formatAs="percent"
+                  decimals={1}
+                  className="text-emerald-400 font-mono"
+                />
               </div>
             )}
             {data.data.netWorth !== undefined && (
@@ -3154,7 +3170,15 @@ function LevelsTab({
                 formula="Predefined Level Threshold"
                 className="text-slate-500"
               />
-              <span className="text-violet-400">{levelInfo.progressToNext.toFixed(1)}%</span>
+              <SimpleTrackedValue 
+                value={levelInfo.progressToNext} 
+                name="Progress to Next Level"
+                description="How close you are to reaching the next FI level"
+                formula="(Net Worth - Current Threshold) ÷ (Next Threshold - Current Threshold) × 100"
+                formatAs="percent"
+                decimals={1}
+                className="text-violet-400"
+              />
               {trackedLevelValues.nextLevelThreshold && (
                 <TrackedValue value={trackedLevelValues.nextLevelThreshold} className="text-slate-500" />
               )}
@@ -3178,7 +3202,7 @@ function LevelsTab({
                 <TrackedValue value={trackedLevelValues.baseBudget} className="font-mono text-amber-400" />
               </div>
               <div className="flex justify-between text-slate-500">
-                <span>From net worth ({(levelInfo.spendingRate * 100).toFixed(1)}%):</span>
+                <span>From net worth (<SimpleTrackedValue value={levelInfo.spendingRate * 100} name="Spending Rate" description="Percentage of net worth added to monthly budget" formula="Scenario Spending Growth Rate" formatAs="percent" decimals={1} className="text-slate-500" />):</span>
                 <span className="font-mono text-emerald-400">+<TrackedValue value={trackedLevelValues.netWorthPortion} className="text-emerald-400" /></span>
               </div>
             </div>

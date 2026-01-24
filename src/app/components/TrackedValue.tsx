@@ -38,8 +38,10 @@ interface SimpleTrackedValueProps {
   decimals?: number;
   /** Additional CSS classes */
   className?: string;
-  /** Unit for display */
+  /** Unit for display (deprecated - use formatAs instead) */
   unit?: string;
+  /** Format type: 'currency', 'percent', or 'number' */
+  formatAs?: 'currency' | 'percent' | 'number';
 }
 
 // ============================================================================
@@ -270,7 +272,11 @@ export function SimpleTrackedValue({
   decimals = 2,
   className = '',
   unit = '$',
+  formatAs,
 }: SimpleTrackedValueProps) {
+  // Determine the display unit based on formatAs or legacy unit prop
+  const displayUnit = formatAs === 'percent' ? '%' : formatAs === 'number' ? '' : (formatAs === 'currency' || unit === '$') ? '$' : unit
+
   const trackedValue: TrackedValueType = {
     value,
     trace: {
@@ -281,17 +287,23 @@ export function SimpleTrackedValue({
       formula,
       inputs: inputs.map(i => ({ ...i, value: i.value })),
       result: value,
-      unit,
+      unit: displayUnit,
       timestamp: Date.now(),
     },
   }
+
+  // Custom formatter for percentages
+  const formatter = formatAs === 'percent' 
+    ? (v: number) => `${v.toFixed(decimals)}%`
+    : undefined
 
   return (
     <TrackedValue
       value={trackedValue}
       decimals={decimals}
       className={className}
-      showCurrency={unit === '$'}
+      showCurrency={displayUnit === '$'}
+      formatter={formatter}
     />
   )
 }
