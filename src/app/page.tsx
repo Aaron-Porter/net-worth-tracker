@@ -2091,8 +2091,11 @@ function ProjectionsTable({
 }
 
 // Custom tooltip for unified chart
-function UnifiedChartTooltip({ active, payload, label }: any) {
+function UnifiedChartTooltip({ active, payload, label, timeUnit }: any) {
   if (!active || !payload || payload.length === 0) return null;
+
+  const spendingLabel = timeUnit === 'annual' ? 'Annual Spending' : 'Monthly Spending';
+  const savingsLabel = timeUnit === 'annual' ? 'Annual Savings' : 'Monthly Savings';
 
   // Group payload by scenario
   const scenarioData: Record<string, any> = {};
@@ -2130,13 +2133,13 @@ function UnifiedChartTooltip({ active, payload, label }: any) {
             )}
             {data.data.spending !== undefined && (
               <div className="flex justify-between gap-4">
-                <span className="text-slate-400">Monthly Spending:</span>
+                <span className="text-slate-400">{spendingLabel}:</span>
                 <span className="text-amber-400 font-mono">{formatCurrency(data.data.spending)}</span>
               </div>
             )}
             {data.data.savings !== undefined && (
               <div className="flex justify-between gap-4">
-                <span className="text-slate-400">Annual Savings:</span>
+                <span className="text-slate-400">{savingsLabel}:</span>
                 <span className="text-violet-400 font-mono">{formatCurrency(data.data.savings)}</span>
               </div>
             )}
@@ -2148,6 +2151,7 @@ function UnifiedChartTooltip({ active, payload, label }: any) {
 }
 
 type MetricType = 'fiProgress' | 'netWorth' | 'spending' | 'savings';
+type TimeUnit = 'annual' | 'monthly';
 
 interface MetricConfig {
   key: MetricType;
@@ -2157,7 +2161,7 @@ interface MetricConfig {
   formatter: (value: number) => string;
 }
 
-const METRICS: MetricConfig[] = [
+const getMetrics = (timeUnit: TimeUnit): MetricConfig[] => [
   {
     key: 'fiProgress',
     label: 'FI Progress',
@@ -2174,14 +2178,14 @@ const METRICS: MetricConfig[] = [
   },
   {
     key: 'spending',
-    label: 'Monthly Spending',
+    label: timeUnit === 'annual' ? 'Annual Spending' : 'Monthly Spending',
     yAxisId: 'left',
     color: '#f59e0b',
     formatter: (v) => formatCurrency(v)
   },
   {
     key: 'savings',
-    label: 'Annual Savings',
+    label: timeUnit === 'annual' ? 'Annual Savings' : 'Monthly Savings',
     yAxisId: 'left',
     color: '#8b5cf6',
     formatter: (v) => formatCurrency(v)
@@ -2201,12 +2205,17 @@ function ProjectionsChart({
 }) {
   const [selectedMetrics, setSelectedMetrics] = React.useState<Set<MetricType>>(new Set<MetricType>(['fiProgress']));
   const [brushRange, setBrushRange] = React.useState<{ startIndex: number; endIndex: number } | null>(null);
+  const [timeUnit, setTimeUnit] = React.useState<TimeUnit>('annual');
+
+  // Get metrics config based on current time unit
+  const metrics = React.useMemo(() => getMetrics(timeUnit), [timeUnit]);
 
   if (scenarioProjections.length === 0) {
     return <div className="text-slate-400">No projection data available</div>
   }
 
   // Prepare unified chart data with all metrics for all scenarios
+  // Convert spending/savings values based on selected time unit
   const unifiedChartData = React.useMemo(() => {
     const yearMap = new Map<number, any>();
 
@@ -2220,13 +2229,19 @@ function ProjectionsChart({
         // Store all metrics for this scenario at this year
         yearData[`${sp.scenario.name}_fiProgress`] = proj.fiProgress;
         yearData[`${sp.scenario.name}_netWorth`] = proj.netWorth;
-        yearData[`${sp.scenario.name}_spending`] = proj.monthlySpend;
-        yearData[`${sp.scenario.name}_savings`] = proj.annualSavings;
+        // Convert spending/savings based on time unit
+        if (timeUnit === 'annual') {
+          yearData[`${sp.scenario.name}_spending`] = proj.monthlySpend * 12; // Monthly to annual
+          yearData[`${sp.scenario.name}_savings`] = proj.annualSavings;
+        } else {
+          yearData[`${sp.scenario.name}_spending`] = proj.monthlySpend;
+          yearData[`${sp.scenario.name}_savings`] = proj.annualSavings / 12; // Annual to monthly
+        }
       });
     });
 
     return Array.from(yearMap.values()).sort((a, b) => a.year - b.year);
-  }, [scenarioProjections]);
+  }, [scenarioProjections, timeUnit]);
 
   const toggleMetric = (metric: MetricType) => {
     const newMetrics = new Set(selectedMetrics);
@@ -2240,10 +2255,10 @@ function ProjectionsChart({
 
   // Determine which Y-axes to show based on selected metrics
   const showLeftAxis = Array.from(selectedMetrics).some(m =>
-    METRICS.find(metric => metric.key === m)?.yAxisId === 'left'
+    metrics.find(metric => metric.key === m)?.yAxisId === 'left'
   );
   const showRightAxis = Array.from(selectedMetrics).some(m =>
-    METRICS.find(metric => metric.key === m)?.yAxisId === 'right'
+    metrics.find(metric => metric.key === m)?.yAxisId === 'right'
   );
 
   // Filter data based on brush range for display
@@ -2273,9 +2288,36 @@ function ProjectionsChart({
           </div>
         </div>
 
+        {/* Time Unit Toggle */}
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-slate-400">View:</span>
+          <div className="flex rounded-lg overflow-hidden border border-slate-600">
+            <button
+              onClick={() => setTimeUnit('annual')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                timeUnit === 'annual'
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Annual
+            </button>
+            <button
+              onClick={() => setTimeUnit('monthly')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                timeUnit === 'monthly'
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Monthly
+            </button>
+          </div>
+        </div>
+
         {/* Metric Toggles */}
         <div className="flex flex-wrap gap-3">
-          {METRICS.map(metric => (
+          {metrics.map(metric => (
             <button
               key={metric.key}
               onClick={() => toggleMetric(metric.key)}
@@ -2322,7 +2364,7 @@ function ProjectionsChart({
                     />
                   )}
 
-                  <Tooltip content={<UnifiedChartTooltip />} />
+                  <Tooltip content={<UnifiedChartTooltip timeUnit={timeUnit} />} />
                   <Legend />
 
                   {/* Add reference line for 100% FI if FI Progress is selected */}
@@ -2339,8 +2381,12 @@ function ProjectionsChart({
                   {/* Render lines for each selected metric for each scenario */}
                   {scenarioProjections.map((sp, scenarioIndex) => (
                     Array.from(selectedMetrics).map(metricKey => {
-                      const metric = METRICS.find(m => m.key === metricKey)!;
+                      const metric = metrics.find(m => m.key === metricKey)!;
                       const dataKey = `${sp.scenario.name}_${metricKey}`;
+
+                      // Use metric color as base, adjust opacity for secondary scenarios
+                      const baseColor = metric.color;
+                      const strokeColor = scenarioIndex === 0 ? baseColor : `${baseColor}99`; // 60% opacity for secondary
 
                       return (
                         <Line
@@ -2348,7 +2394,7 @@ function ProjectionsChart({
                           type="monotone"
                           dataKey={dataKey}
                           name={`${sp.scenario.name} - ${metric.label}`}
-                          stroke={sp.scenario.color}
+                          stroke={strokeColor}
                           strokeWidth={scenarioIndex === 0 ? 3 : 2}
                           strokeDasharray={scenarioIndex === 0 ? undefined : "5 5"}
                           dot={false}
