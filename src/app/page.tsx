@@ -12,7 +12,6 @@ import {
   formatCurrency,
   formatDate,
   getTimeSinceEntry,
-  LEVEL_THRESHOLDS,
   formatPercent,
   calculateScenarioIncome,
   STATE_TAX_RATES,
@@ -34,7 +33,6 @@ import { TrackedValue, SimpleTrackedValue } from './components/TrackedValue'
 import { 
   generateTrackedDashboardValues, 
   createTrackedAmount, 
-  createTrackedLevelValues,
   createTrackedProjectionValues,
   TrackedDashboardValues 
 } from '../lib/trackedScenarioValues'
@@ -52,7 +50,7 @@ import {
   ReferenceLine,
 } from 'recharts'
 
-type Tab = 'dashboard' | 'entries' | 'projections' | 'levels' | 'scenarios'
+type Tab = 'dashboard' | 'entries' | 'projections' | 'scenarios'
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useConvexAuth()
@@ -171,19 +169,6 @@ function AuthenticatedApp() {
               )}
             </button>
             <button
-              onClick={() => setActiveTab('levels')}
-              className={`px-3 py-3 sm:px-6 sm:py-4 font-medium transition-colors relative whitespace-nowrap ${
-                activeTab === 'levels'
-                  ? 'text-emerald-400'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Levels
-              {activeTab === 'levels' && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
-              )}
-            </button>
-            <button
               onClick={() => setActiveTab('scenarios')}
               className={`px-3 py-3 sm:px-6 sm:py-4 font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === 'scenarios'
@@ -248,14 +233,6 @@ function AuthenticatedApp() {
         />
       )}
 
-      {/* Levels Tab */}
-      {activeTab === 'levels' && (
-        <LevelsTab
-          latestEntry={scenariosHook.latestEntry}
-          primaryProjection={primaryProjection}
-          setActiveTab={setActiveTab}
-        />
-      )}
 
       {/* Scenarios Tab */}
       {activeTab === 'scenarios' && (
@@ -435,6 +412,35 @@ function DashboardTab({
                   className="text-amber-400 font-mono text-lg"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Monthly Spending Budget */}
+          <div className="mt-6">
+            <h3 className="text-sm font-medium text-slate-400 mb-3">
+              Monthly Spending Budget
+            </h3>
+            <div className="bg-slate-900/50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-slate-500 text-xs">Current Monthly Budget</p>
+                <TrackedValue 
+                  value={trackedValues.currentSpending}
+                  className="text-violet-400 font-mono text-2xl font-semibold"
+                />
+              </div>
+              <div className="text-xs space-y-2 pt-3 border-t border-slate-700">
+                <div className="flex justify-between text-slate-500">
+                  <span>Base budget (inflation-adjusted)</span>
+                  <span className="font-mono text-amber-400">{formatCurrency(primaryProjection.levelInfo.baseBudgetInflationAdjusted, 0)}</span>
+                </div>
+                <div className="flex justify-between text-slate-500">
+                  <span>+ {primaryProjection.scenario.spendingGrowthRate}% of net worth / 12</span>
+                  <span className="font-mono text-emerald-400">+{formatCurrency(primaryProjection.levelInfo.netWorthPortion, 0)}</span>
+                </div>
+              </div>
+              <p className="text-slate-600 text-xs mt-3">
+                Your spending allowance grows as your net worth increases
+              </p>
             </div>
           </div>
 
@@ -3283,228 +3289,6 @@ function ProjectionsChart({
             ))}
           </div>
         </div>
-      </div>
-    </div>
-  )
-}
-
-// ============================================================================
-// LEVELS TAB
-// ============================================================================
-
-interface LevelsTabProps {
-  latestEntry: ReturnType<typeof useScenarios>['latestEntry'];
-  primaryProjection: ScenarioProjection | null;
-  setActiveTab: (tab: Tab) => void;
-}
-
-function LevelsTab({
-  latestEntry,
-  primaryProjection,
-  setActiveTab,
-}: LevelsTabProps) {
-  // Generate tracked level values
-  const trackedLevelValues = useMemo(() => {
-    if (!primaryProjection) return null;
-    return createTrackedLevelValues(primaryProjection.levelInfo, primaryProjection.scenario);
-  }, [primaryProjection]);
-
-  if (!latestEntry || !primaryProjection || !trackedLevelValues) {
-    return (
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
-          Spending Levels
-        </h1>
-        <p className="text-slate-400 text-center mb-8">
-          Unlock higher monthly spending as your net worth grows
-        </p>
-        <div className="text-center py-12">
-          <p className="text-slate-400 mb-4">No net worth data found.</p>
-          <button
-            onClick={() => setActiveTab('entries')}
-            className="text-emerald-400 hover:text-emerald-300 underline"
-          >
-            Add your first entry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const { levelInfo, scenario } = primaryProjection;
-
-  return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
-        Spending Levels
-      </h1>
-      <p className="text-slate-400 text-center mb-8">
-        Unlock higher monthly spending as your net worth grows
-      </p>
-
-      {/* Budget Summary */}
-      <div className="bg-slate-800/50 rounded-xl p-4 mb-6 border border-slate-700">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: scenario.color }} />
-              <span className="text-sm text-slate-300 font-medium">{scenario.name}</span>
-            </div>
-            <p className="text-sm text-slate-300">
-              Budget Formula: <TrackedValue value={trackedLevelValues.baseBudget} className="text-amber-400" /> base + <TrackedValue value={trackedLevelValues.netWorthPortion} className="text-emerald-400" /> from net worth = <TrackedValue value={trackedLevelValues.monthlyBudget} className="text-violet-400 font-mono" />/mo
-            </p>
-          </div>
-          <button
-            onClick={() => setActiveTab('scenarios')}
-            className="text-xs text-slate-400 hover:text-slate-200 underline"
-          >
-            Edit Scenario
-          </button>
-        </div>
-      </div>
-
-      {/* Current Level Hero Card */}
-      <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur rounded-2xl p-8 shadow-xl border border-violet-500/30 mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <p className="text-slate-400 text-sm mb-1">Current Level</p>
-            <h2 className="text-3xl font-bold text-white">
-              Level {levelInfo.currentLevel.level}: {levelInfo.currentLevel.name}
-            </h2>
-          </div>
-          <div className="text-right">
-            <p className="text-slate-400 text-sm mb-1">Net Worth</p>
-            <TrackedValue value={trackedLevelValues.netWorth} className="text-2xl font-mono text-emerald-400" />
-          </div>
-        </div>
-
-        {/* Progress to Next Level */}
-        {levelInfo.nextLevel ? (
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-slate-400 text-sm">Progress to Level {levelInfo.nextLevel.level}: {levelInfo.nextLevel.name}</span>
-              <span className="text-slate-300 text-sm font-mono">
-                <TrackedValue value={trackedLevelValues.amountToNext} className="text-slate-300" /> to go
-              </span>
-            </div>
-            <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-violet-500 to-purple-500 rounded-full transition-all duration-500"
-                style={{ width: `${levelInfo.progressToNext}%` }}
-              />
-            </div>
-            <div className="flex justify-between mt-2 text-xs text-slate-500">
-              <SimpleTrackedValue
-                value={levelInfo.currentLevel.threshold}
-                name="Current Level Threshold"
-                description={`Net worth threshold for Level ${levelInfo.currentLevel.level} (${levelInfo.currentLevel.name})`}
-                formula="Predefined Level Threshold"
-                className="text-slate-500"
-              />
-              <SimpleTrackedValue 
-                value={levelInfo.progressToNext} 
-                name="Progress to Next Level"
-                description="How close you are to reaching the next FI level"
-                formula="(Net Worth - Current Threshold) ÷ (Next Threshold - Current Threshold) × 100"
-                formatAs="percent"
-                decimals={1}
-                className="text-violet-400"
-              />
-              {trackedLevelValues.nextLevelThreshold && (
-                <TrackedValue value={trackedLevelValues.nextLevelThreshold} className="text-slate-500" />
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="mb-6 text-center py-4">
-            <span className="text-2xl">🎉</span>
-            <p className="text-violet-400 font-medium mt-2">Maximum Level Achieved!</p>
-          </div>
-        )}
-
-        {/* Unlocked Spending Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div className="bg-slate-900/50 rounded-xl p-4">
-            <p className="text-slate-500 text-xs mb-1">Your Unlocked Monthly Budget</p>
-            <TrackedValue value={trackedLevelValues.monthlyBudget} className="text-3xl font-mono text-violet-400" />
-            <div className="mt-2 text-xs space-y-1">
-              <div className="flex justify-between text-slate-500">
-                <span>Base (inflation-adjusted):</span>
-                <TrackedValue value={trackedLevelValues.baseBudget} className="font-mono text-amber-400" />
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>From net worth (<SimpleTrackedValue value={levelInfo.spendingRate * 100} name="Spending Rate" description="Percentage of net worth added to monthly budget" formula="Scenario Spending Growth Rate" formatAs="percent" decimals={1} className="text-slate-500" />):</span>
-                <span className="font-mono text-emerald-400">+<TrackedValue value={trackedLevelValues.netWorthPortion} className="text-emerald-400" /></span>
-              </div>
-            </div>
-          </div>
-          <div className="bg-slate-900/50 rounded-xl p-4">
-            <p className="text-slate-500 text-xs mb-1">Annual Budget</p>
-            <TrackedValue value={trackedLevelValues.annualBudget} className="text-3xl font-mono text-violet-400" />
-            <p className="text-slate-600 text-xs mt-2">
-              Based on {scenario.name} scenario settings
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* All Levels Table */}
-      <h3 className="text-xl font-semibold text-slate-200 mb-4">All Levels</h3>
-      <div className="bg-slate-800/30 rounded-xl border border-slate-700 overflow-hidden max-h-[70vh] overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-        <table className="w-full text-sm">
-          <thead className="bg-slate-800 sticky top-0 z-10">
-            <tr className="border-b border-slate-700">
-              <th className="text-left text-slate-400 font-medium py-3 px-4">Level</th>
-              <th className="text-right text-slate-400 font-medium py-3 px-4">Net Worth Required</th>
-              <th className="text-right text-slate-400 font-medium py-3 px-4">Monthly Budget</th>
-              <th className="text-right text-slate-400 font-medium py-3 px-4">Annual Budget</th>
-            </tr>
-          </thead>
-          <tbody>
-            {levelInfo.levelsWithStatus.map((level) => (
-              <tr 
-                key={level.level}
-                className={`border-b border-slate-700/50 ${
-                  level.isCurrent ? 'bg-violet-500/10' : level.isUnlocked ? 'bg-emerald-500/5' : ''
-                } ${level.isNext ? 'bg-violet-500/5' : ''}`}
-              >
-                <td className="py-2 px-4">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      level.isCurrent
-                        ? 'bg-violet-500/30 text-violet-300'
-                        : level.isUnlocked
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : level.isNext
-                            ? 'bg-violet-500/10 text-violet-400'
-                            : 'bg-slate-700/50 text-slate-500'
-                    }`}>
-                      {level.level}
-                    </span>
-                    <span className={`font-medium ${level.isUnlocked ? 'text-slate-200' : 'text-slate-500'}`}>
-                      {level.name}
-                    </span>
-                    {level.isCurrent && <span className="text-xs text-violet-400">← Current</span>}
-                    {level.isNext && <span className="text-xs text-violet-400/70">← Next</span>}
-                  </div>
-                </td>
-                <td className="py-2 px-4 text-right font-mono text-slate-400">
-                  {level.threshold === 0 ? '-' : <SimpleTrackedValue value={level.threshold} name={`${level.name} Threshold`} description={`Net worth required to reach ${level.name} level`} formula="FI Target × Level Multiplier" decimals={0} className="text-slate-400" />}
-                </td>
-                <td className={`py-2 px-4 text-right font-mono ${
-                  level.isCurrent ? 'text-violet-400 font-semibold' : level.isUnlocked ? 'text-emerald-400' : 'text-slate-500'
-                }`}>
-                  <SimpleTrackedValue value={level.monthlyBudget} name={`${level.name} Monthly Budget`} description={`Monthly spending budget at ${level.name} level`} formula={`Base Budget + (Threshold × SWR ÷ 12)`} decimals={0} className={level.isCurrent ? 'text-violet-400 font-semibold' : level.isUnlocked ? 'text-emerald-400' : 'text-slate-500'} />
-                </td>
-                <td className={`py-2 px-4 text-right font-mono ${
-                  level.isCurrent ? 'text-violet-400/80' : level.isUnlocked ? 'text-emerald-400/80' : 'text-slate-600'
-                }`}>
-                  <SimpleTrackedValue value={level.monthlyBudget * 12} name={`${level.name} Annual Budget`} description={`Annual spending at ${level.name} level`} formula="Monthly Budget × 12" decimals={0} className={level.isCurrent ? 'text-violet-400/80' : level.isUnlocked ? 'text-emerald-400/80' : 'text-slate-600'} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   )
