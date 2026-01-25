@@ -28,6 +28,7 @@ import {
   calculateRunwayYears,
   calculateDollarMultiplier,
   calculateRunwayAndCoastInfo,
+  calculateProjectedRetirementIncome,
 } from '../lib/calculations'
 import { TrackedValue, SimpleTrackedValue } from './components/TrackedValue'
 import { 
@@ -41,6 +42,8 @@ import {
   createTrackedCoastMilestone,
   createTrackedLifestyleMilestone,
   createTrackedCrossoverMilestone,
+  createTrackedRetirementIncomeMilestone,
+  createTrackedRetirementIncomeInfo,
   TrackedDashboardValues 
 } from '../lib/trackedScenarioValues'
 import {
@@ -542,6 +545,18 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
   const percentageMilestones = fiMilestones.milestones.filter(m => m.type === 'percentage');
   const lifestyleMilestones = fiMilestones.milestones.filter(m => m.type === 'lifestyle');
   const specialMilestones = fiMilestones.milestones.filter(m => m.type === 'special');
+  const retirementIncomeMilestones = fiMilestones.milestones.filter(m => m.type === 'retirement_income');
+  
+  // Calculate tracked retirement income info
+  const trackedRetirementIncome = useMemo(() => {
+    return createTrackedRetirementIncomeInfo(
+      currentNetWorth.total,
+      currentAge,
+      retirementAge,
+      scenario.currentRate,
+      scenario.swr
+    );
+  }, [currentNetWorth.total, currentAge, retirementAge, scenario.currentRate, scenario.swr]);
   
   return (
     <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
@@ -732,6 +747,61 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
         </div>
       </div>
       
+      {/* Retirement Income Milestones - The Key Metric */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-slate-400">
+            Retirement Income Milestones
+          </h3>
+          <div className="text-right">
+            <span className="text-xs text-slate-500">Projected: </span>
+            <TrackedValue 
+              value={trackedRetirementIncome.projectedAnnualIncome}
+              showCurrency={true}
+              formatter={(v) => `$${Math.round(v).toLocaleString()}/yr`}
+              className="text-sm font-mono text-amber-400"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mb-2">
+          If you stopped saving today, what income could you withdraw at retirement (age {retirementAge})?
+        </p>
+        <p className="text-xs text-amber-400/80 mb-3">
+          💡 Every $1 you save today = <TrackedValue 
+            value={trackedRetirementIncome.dollarMultiplier}
+            showCurrency={false}
+            formatter={(v) => `$${v.toFixed(2)}`}
+            className="font-mono font-semibold text-amber-400"
+          /> at retirement
+        </p>
+        <div className="space-y-2">
+          {/* Only show upcoming/unachieved milestones, sorted by target value */}
+          {retirementIncomeMilestones
+            .filter(m => !m.isAchieved)
+            .slice(0, 5) // Show next 5 upcoming milestones
+            .map(milestone => (
+            <TrackedMilestoneRow 
+              key={milestone.id} 
+              milestone={milestone} 
+              currentYear={currentYear}
+              currentNetWorth={currentNetWorth.total}
+              currentMonthlySpend={currentMonthlySpend}
+              currentFiTarget={currentFiTarget}
+              currentFiProgress={currentFiProgress}
+              currentAge={currentAge}
+              retirementAge={retirementAge}
+              scenario={scenario}
+            />
+          ))}
+          {/* Show count of achieved milestones */}
+          {retirementIncomeMilestones.filter(m => m.isAchieved).length > 0 && (
+            <div className="text-xs text-emerald-400 mt-2 pt-2 border-t border-slate-700">
+              ✓ {retirementIncomeMilestones.filter(m => m.isAchieved).length} retirement income milestones achieved
+            </div>
+          )}
+        </div>
+      </div>
+      
       {/* Percentage Milestones */}
       <div className="mb-6">
         <h3 className="text-sm font-medium text-slate-400 mb-3">
@@ -896,6 +966,20 @@ function TrackedMilestoneRow({
         milestone.targetValue,
         currentNetWorth,
         currentMonthlySpend,
+        scenario.swr,
+        milestone.netWorthAtMilestone,
+        milestone.year,
+        currentYear
+      );
+    } else if (milestone.type === 'retirement_income') {
+      return createTrackedRetirementIncomeMilestone(
+        milestone.id,
+        milestone.shortName,
+        milestone.targetValue,
+        currentNetWorth,
+        currentAge,
+        retirementAge,
+        scenario.currentRate,
         scenario.swr,
         milestone.netWorthAtMilestone,
         milestone.year,
