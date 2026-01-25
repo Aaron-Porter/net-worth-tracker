@@ -91,6 +91,11 @@ function AuthenticatedApp() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [projectionsView, setProjectionsView] = useState<'table' | 'chart'>('table')
   const [newAmount, setNewAmount] = useState<string>('')
+  // Asset type breakdown for entries
+  const [newCashChecking, setNewCashChecking] = useState<string>('')
+  const [newCashSavings, setNewCashSavings] = useState<string>('')
+  const [newInvestments, setNewInvestments] = useState<string>('')
+  const [useAssetBreakdown, setUseAssetBreakdown] = useState<boolean>(false)
 
   // Get the primary scenario (first selected) for dashboard display
   const primaryProjection = scenariosHook.scenarioProjections[0] || null;
@@ -103,14 +108,35 @@ function AuthenticatedApp() {
   }, [scenariosHook.isLoading, scenariosHook.hasScenarios, scenariosHook]);
 
   const handleAddEntry = async () => {
-    const amount = parseFloat(newAmount.replace(/,/g, ''))
-    if (isNaN(amount) || amount <= 0) return
+    if (useAssetBreakdown) {
+      // Parse individual asset amounts
+      const cashChecking = parseFloat(newCashChecking.replace(/,/g, '')) || 0
+      const cashSavings = parseFloat(newCashSavings.replace(/,/g, '')) || 0
+      const investments = parseFloat(newInvestments.replace(/,/g, '')) || 0
+      const totalAmount = cashChecking + cashSavings + investments
+      
+      if (totalAmount <= 0) return
 
-    await addEntry({
-      amount,
-      timestamp: Date.now(),
-    })
-    setNewAmount('')
+      await addEntry({
+        amount: totalAmount,
+        timestamp: Date.now(),
+        cashChecking: cashChecking > 0 ? cashChecking : undefined,
+        cashSavings: cashSavings > 0 ? cashSavings : undefined,
+        investments: investments > 0 ? investments : undefined,
+      })
+      setNewCashChecking('')
+      setNewCashSavings('')
+      setNewInvestments('')
+    } else {
+      const amount = parseFloat(newAmount.replace(/,/g, ''))
+      if (isNaN(amount) || amount <= 0) return
+
+      await addEntry({
+        amount,
+        timestamp: Date.now(),
+      })
+      setNewAmount('')
+    }
   }
 
   const handleDeleteEntry = async (id: Id<"netWorthEntries">) => {
@@ -220,6 +246,14 @@ function AuthenticatedApp() {
           entries={scenariosHook.entries}
           newAmount={newAmount}
           setNewAmount={setNewAmount}
+          newCashChecking={newCashChecking}
+          setNewCashChecking={setNewCashChecking}
+          newCashSavings={newCashSavings}
+          setNewCashSavings={setNewCashSavings}
+          newInvestments={newInvestments}
+          setNewInvestments={setNewInvestments}
+          useAssetBreakdown={useAssetBreakdown}
+          setUseAssetBreakdown={setUseAssetBreakdown}
           formatNetWorthInput={formatNetWorthInput}
           handleAddEntry={handleAddEntry}
           handleDeleteEntry={handleDeleteEntry}
@@ -1091,6 +1125,14 @@ interface EntriesTabProps {
   entries: ReturnType<typeof useScenarios>['entries'];
   newAmount: string;
   setNewAmount: (value: string) => void;
+  newCashChecking: string;
+  setNewCashChecking: (value: string) => void;
+  newCashSavings: string;
+  setNewCashSavings: (value: string) => void;
+  newInvestments: string;
+  setNewInvestments: (value: string) => void;
+  useAssetBreakdown: boolean;
+  setUseAssetBreakdown: (value: boolean) => void;
   formatNetWorthInput: (value: string) => string;
   handleAddEntry: () => void;
   handleDeleteEntry: (id: Id<"netWorthEntries">) => void;
@@ -1101,10 +1143,22 @@ function EntriesTab({
   entries,
   newAmount,
   setNewAmount,
+  newCashChecking,
+  setNewCashChecking,
+  newCashSavings,
+  setNewCashSavings,
+  newInvestments,
+  setNewInvestments,
+  useAssetBreakdown,
+  setUseAssetBreakdown,
   formatNetWorthInput,
   handleAddEntry,
   handleDeleteEntry,
 }: EntriesTabProps) {
+  // Calculate total from breakdown
+  const breakdownTotal = (parseFloat(newCashChecking.replace(/,/g, '')) || 0) +
+                         (parseFloat(newCashSavings.replace(/,/g, '')) || 0) +
+                         (parseFloat(newInvestments.replace(/,/g, '')) || 0);
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
@@ -1116,32 +1170,132 @@ function EntriesTab({
 
       {/* Add New Entry */}
       <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
-        <h2 className="text-lg font-semibold text-slate-300 mb-4">
-          {entries.length === 0 ? 'Add Your Net Worth' : 'Add New Entry'}
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-300">
+            {entries.length === 0 ? 'Add Your Net Worth' : 'Add New Entry'}
+          </h2>
+          <button
+            onClick={() => setUseAssetBreakdown(!useAssetBreakdown)}
+            className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
+              useAssetBreakdown
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-slate-700/50 text-slate-400 border border-slate-600 hover:bg-slate-700'
+            }`}
+          >
+            {useAssetBreakdown ? 'Use Total Only' : 'Break Down by Type'}
+          </button>
+        </div>
+        
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Current Net Worth
-            </label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
-                $
-              </span>
-              <input
-                type="text"
-                value={newAmount}
-                onChange={(e) => setNewAmount(formatNetWorthInput(e.target.value))}
-                placeholder="100,000"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-8 pr-4 text-xl font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                onKeyDown={(e) => e.key === 'Enter' && handleAddEntry()}
-              />
+          {!useAssetBreakdown ? (
+            // Simple mode: single total amount
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Total Net Worth
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
+                  $
+                </span>
+                <input
+                  type="text"
+                  value={newAmount}
+                  onChange={(e) => setNewAmount(formatNetWorthInput(e.target.value))}
+                  placeholder="100,000"
+                  className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-8 pr-4 text-xl font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddEntry()}
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            // Breakdown mode: separate inputs for each asset type
+            <>
+              <div className="grid gap-4">
+                {/* Cash in Checking */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                      Cash in Checking
+                      <span className="text-slate-500 text-xs">(typically 0% growth)</span>
+                    </span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      $
+                    </span>
+                    <input
+                      type="text"
+                      value={newCashChecking}
+                      onChange={(e) => setNewCashChecking(formatNetWorthInput(e.target.value))}
+                      placeholder="5,000"
+                      className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2.5 pl-8 pr-4 font-mono focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Cash in Savings */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                      Cash in Savings / HYSA
+                      <span className="text-slate-500 text-xs">(typically 4-5% growth)</span>
+                    </span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      $
+                    </span>
+                    <input
+                      type="text"
+                      value={newCashSavings}
+                      onChange={(e) => setNewCashSavings(formatNetWorthInput(e.target.value))}
+                      placeholder="20,000"
+                      className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2.5 pl-8 pr-4 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Investments */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                      Investments
+                      <span className="text-slate-500 text-xs">(stocks, bonds, etc.)</span>
+                    </span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      $
+                    </span>
+                    <input
+                      type="text"
+                      value={newInvestments}
+                      onChange={(e) => setNewInvestments(formatNetWorthInput(e.target.value))}
+                      placeholder="75,000"
+                      className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2.5 pl-8 pr-4 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Total from breakdown */}
+              <div className="pt-3 border-t border-slate-700">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-400">Total Net Worth</span>
+                  <span className="text-xl font-mono text-white">
+                    {formatCurrency(breakdownTotal)}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
 
           <button
             onClick={handleAddEntry}
-            disabled={!newAmount || parseFloat(newAmount) <= 0}
+            disabled={useAssetBreakdown ? breakdownTotal <= 0 : (!newAmount || parseFloat(newAmount) <= 0)}
             className="w-full py-4 rounded-lg font-semibold text-lg transition-all bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {entries.length === 0 ? 'Start Tracking' : 'Add Entry'}
@@ -1156,58 +1310,91 @@ function EntriesTab({
             Entry History
           </h2>
           <div className="space-y-3">
-            {entries.map((entry, index) => (
-              <div
-                key={entry._id}
-                className={`flex items-center justify-between p-4 rounded-lg ${
-                  index === 0
-                    ? 'bg-emerald-900/30 border border-emerald-500/30'
-                    : 'bg-slate-900/50'
-                }`}
-              >
-                <div>
-                  <SimpleTrackedValue
-                    value={entry.amount}
-                    name="Net Worth Entry"
-                    description={`Net worth recorded on ${formatDate(entry.timestamp)}`}
-                    formula="Recorded Value"
-                    inputs={[
-                      { name: 'Date', value: formatDate(entry.timestamp) },
-                      { name: 'Entry #', value: entries.length - index },
-                    ]}
-                    className="font-mono text-lg text-white"
-                  />
-                  <p className="text-slate-400 text-sm">
-                    {formatDate(entry.timestamp)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {index === 0 && (
-                    <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">
-                      Current
-                    </span>
-                  )}
-                  <button
-                    onClick={() => handleDeleteEntry(entry._id as Id<"netWorthEntries">)}
-                    className="text-slate-500 hover:text-red-400 transition-colors p-1"
-                    title="Delete entry"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                        clipRule="evenodd"
+            {entries.map((entry, index) => {
+              const hasBreakdown = entry.cashChecking !== undefined || 
+                                   entry.cashSavings !== undefined || 
+                                   entry.investments !== undefined;
+              return (
+                <div
+                  key={entry._id}
+                  className={`p-4 rounded-lg ${
+                    index === 0
+                      ? 'bg-emerald-900/30 border border-emerald-500/30'
+                      : 'bg-slate-900/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <SimpleTrackedValue
+                        value={entry.amount}
+                        name="Net Worth Entry"
+                        description={`Net worth recorded on ${formatDate(entry.timestamp)}`}
+                        formula="Recorded Value"
+                        inputs={[
+                          { name: 'Date', value: formatDate(entry.timestamp) },
+                          { name: 'Entry #', value: entries.length - index },
+                        ]}
+                        className="font-mono text-lg text-white"
                       />
-                    </svg>
-                  </button>
+                      <p className="text-slate-400 text-sm">
+                        {formatDate(entry.timestamp)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {index === 0 && (
+                        <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">
+                          Current
+                        </span>
+                      )}
+                      <button
+                        onClick={() => handleDeleteEntry(entry._id as Id<"netWorthEntries">)}
+                        className="text-slate-500 hover:text-red-400 transition-colors p-1"
+                        title="Delete entry"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-5 w-5"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  {/* Show asset breakdown if available */}
+                  {hasBreakdown && (
+                    <div className="mt-3 pt-3 border-t border-slate-700/50 grid grid-cols-3 gap-2 text-sm">
+                      {entry.cashChecking !== undefined && entry.cashChecking > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                          <span className="text-slate-400">Checking:</span>
+                          <span className="font-mono text-slate-300">{formatCurrency(entry.cashChecking)}</span>
+                        </div>
+                      )}
+                      {entry.cashSavings !== undefined && entry.cashSavings > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                          <span className="text-slate-400">Savings:</span>
+                          <span className="font-mono text-slate-300">{formatCurrency(entry.cashSavings)}</span>
+                        </div>
+                      )}
+                      {entry.investments !== undefined && entry.investments > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                          <span className="text-slate-400">Investments:</span>
+                          <span className="font-mono text-slate-300">{formatCurrency(entry.investments)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -1234,6 +1421,8 @@ function ScenarioManagementPanel({
       name: `Scenario ${scenariosHook.scenarios.length + 1}`,
       yearlyContribution: 0,
       currentRate: 7,
+      cashCheckingRate: 0,
+      cashSavingsRate: 4,
       swr: 4,
       inflationRate: 3,
       baseMonthlyBudget: 3000,
@@ -1423,6 +1612,8 @@ function ScenarioEditor({
     baseMonthlyBudget: scenario.baseMonthlyBudget?.toString() || '3000',
     spendingGrowthRate: scenario.spendingGrowthRate?.toString() || '0.5',
     currentRate: scenario.currentRate?.toString() || '7',
+    cashCheckingRate: scenario.cashCheckingRate?.toString() || '0',
+    cashSavingsRate: scenario.cashSavingsRate?.toString() || '4',
     swr: scenario.swr?.toString() || '4',
     inflationRate: scenario.inflationRate?.toString() || '3',
   });
@@ -1463,6 +1654,8 @@ function ScenarioEditor({
       const updates: any = {
         name: form.name || 'New Scenario',
         currentRate: parseFloat(form.currentRate) || 7,
+        cashCheckingRate: parseFloat(form.cashCheckingRate) || 0,
+        cashSavingsRate: parseFloat(form.cashSavingsRate) || 4,
         swr: parseFloat(form.swr) || 4,
         inflationRate: parseFloat(form.inflationRate) || 3,
         baseMonthlyBudget: parseFloat(form.baseMonthlyBudget) || 3000,
@@ -1571,36 +1764,78 @@ function ScenarioEditor({
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Return Rate (%)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.currentRate}
-                  onChange={(e) => setForm({ ...form, currentRate: e.target.value })}
-                  className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
+            <div className="space-y-4">
+              {/* Growth Rates by Asset Type */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                      Investment Return (%)
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.currentRate}
+                    onChange={(e) => setForm({ ...form, currentRate: e.target.value })}
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                      Savings/HYSA (%)
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.cashSavingsRate}
+                    onChange={(e) => setForm({ ...form, cashSavingsRate: e.target.value })}
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                      Checking (%)
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.cashCheckingRate}
+                    onChange={(e) => setForm({ ...form, cashCheckingRate: e.target.value })}
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">SWR (%)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.swr}
-                  onChange={(e) => setForm({ ...form, swr: e.target.value })}
-                  className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Inflation (%)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.inflationRate}
-                  onChange={(e) => setForm({ ...form, inflationRate: e.target.value })}
-                  className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
+              
+              {/* Other Investment Settings */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">SWR (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.swr}
+                    onChange={(e) => setForm({ ...form, swr: e.target.value })}
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Inflation (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.inflationRate}
+                    onChange={(e) => setForm({ ...form, inflationRate: e.target.value })}
+                    className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
               </div>
             </div>
           </section>
@@ -4025,6 +4260,8 @@ interface ScenarioWizardState {
   baseMonthlyBudget: string;
   spendingGrowthRate: string;
   currentRate: string;
+  cashCheckingRate: string;
+  cashSavingsRate: string;
   swr: string;
   inflationRate: string;
 }
@@ -4042,6 +4279,8 @@ const DEFAULT_WIZARD_STATE: ScenarioWizardState = {
   baseMonthlyBudget: '3000',
   spendingGrowthRate: '2',
   currentRate: '7',
+  cashCheckingRate: '0',
+  cashSavingsRate: '4',
   swr: '4',
   inflationRate: '3',
 };
@@ -4110,6 +4349,8 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
       preTaxOther: scenario.preTaxOther?.toString() || '',
       baseMonthlyBudget: scenario.baseMonthlyBudget.toString(),
       spendingGrowthRate: scenario.spendingGrowthRate.toString(),
+      cashCheckingRate: scenario.cashCheckingRate?.toString() || '0',
+      cashSavingsRate: scenario.cashSavingsRate?.toString() || '4',
       currentRate: scenario.currentRate.toString(),
       swr: scenario.swr.toString(),
       inflationRate: scenario.inflationRate.toString(),
@@ -4131,6 +4372,8 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
     const scenarioData = {
       name: wizardState.name.trim() || `Scenario ${new Date().toLocaleDateString()}`,
       currentRate: parseFloat(wizardState.currentRate) || 7,
+      cashCheckingRate: parseFloat(wizardState.cashCheckingRate) || 0,
+      cashSavingsRate: parseFloat(wizardState.cashSavingsRate) || 4,
       swr: parseFloat(wizardState.swr) || 4,
       yearlyContribution: Math.max(0, totalYearlySavings),
       inflationRate: parseFloat(wizardState.inflationRate) || 3,
@@ -4864,9 +5107,9 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
       {/* STEP 5: Investment Assumptions */}
       {wizardStep === 'investments' && (
         <>
-          <WizardHeader title="Investment assumptions" subtitle="How do you expect your investments to perform?" step={5} />
+          <WizardHeader title="Growth Rate Assumptions" subtitle="Set expected returns for different asset types" step={5} />
           <div className="mb-4">
-            <p className="text-sm text-slate-500 mb-2">Quick presets:</p>
+            <p className="text-sm text-slate-500 mb-2">Quick presets (for investments):</p>
             <div className="flex gap-2">
               {SCENARIO_TEMPLATES.map(t => (
                 <button key={t.name} onClick={() => applyInvestmentTemplate(t)} className="px-3 py-1.5 text-sm bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700">{t.name}</button>
@@ -4874,11 +5117,39 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             </div>
           </div>
           <div className="space-y-4">
+            {/* Asset-Specific Growth Rates */}
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <h4 className="text-md font-semibold text-slate-200 mb-4 flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-emerald-400"></span>
+                Investment Returns
+              </h4>
               <label className="block text-sm font-medium text-slate-300 mb-2">Expected Annual Return (%)</label>
-              <input type="number" value={wizardState.currentRate} onChange={(e) => setWizardState(s => ({ ...s, currentRate: e.target.value }))} placeholder="7" step="0.5" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              <input type="number" value={wizardState.currentRate} onChange={(e) => setWizardState(s => ({ ...s, currentRate: e.target.value }))} placeholder="7" step="0.5" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500" />
               <p className="mt-2 text-xs text-slate-500">Historical S&P 500 average: ~7% after inflation</p>
             </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                <h4 className="text-md font-semibold text-slate-200 mb-4 flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-blue-400"></span>
+                  Savings / HYSA
+                </h4>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Interest Rate (%)</label>
+                <input type="number" value={wizardState.cashSavingsRate} onChange={(e) => setWizardState(s => ({ ...s, cashSavingsRate: e.target.value }))} placeholder="4" step="0.1" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <p className="mt-2 text-xs text-slate-500">Current HYSA rates: ~4-5%</p>
+              </div>
+              
+              <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                <h4 className="text-md font-semibold text-slate-200 mb-4 flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-slate-400"></span>
+                  Checking Account
+                </h4>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Interest Rate (%)</label>
+                <input type="number" value={wizardState.cashCheckingRate} onChange={(e) => setWizardState(s => ({ ...s, cashCheckingRate: e.target.value }))} placeholder="0" step="0.1" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-slate-500" />
+                <p className="mt-2 text-xs text-slate-500">Most checking: 0-0.1%</p>
+              </div>
+            </div>
+            
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
               <label className="block text-sm font-medium text-slate-300 mb-2">Safe Withdrawal Rate (%)</label>
               <input type="number" value={wizardState.swr} onChange={(e) => setWizardState(s => ({ ...s, swr: e.target.value }))} placeholder="4" step="0.5" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />

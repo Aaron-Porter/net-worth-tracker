@@ -22,6 +22,10 @@ export const add = mutation({
   args: {
     amount: v.number(),
     timestamp: v.number(),
+    // Optional breakdown by asset type
+    cashChecking: v.optional(v.number()),
+    cashSavings: v.optional(v.number()),
+    investments: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -31,6 +35,9 @@ export const add = mutation({
       userId,
       amount: args.amount,
       timestamp: args.timestamp,
+      cashChecking: args.cashChecking,
+      cashSavings: args.cashSavings,
+      investments: args.investments,
     });
   },
 });

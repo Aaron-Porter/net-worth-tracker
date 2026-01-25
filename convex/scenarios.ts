@@ -53,7 +53,9 @@ function getNextAvailableColor(existingScenarios: { color: string }[]): string {
 const DEFAULT_SCENARIO = {
   name: "Base Plan",
   description: "Your primary financial projection",
-  currentRate: 7,
+  currentRate: 7, // Investment growth rate
+  cashCheckingRate: 0, // Checking account rate (typically 0%)
+  cashSavingsRate: 4, // HYSA/savings rate (typically 4-5%)
   swr: 4,
   yearlyContribution: 0,
   inflationRate: 3,
@@ -131,6 +133,8 @@ export const create = mutation({
     description: v.optional(v.string()),
     color: v.optional(v.string()),
     currentRate: v.number(),
+    cashCheckingRate: v.optional(v.number()),
+    cashSavingsRate: v.optional(v.number()),
     swr: v.number(),
     yearlyContribution: v.number(),
     inflationRate: v.number(),
@@ -176,6 +180,8 @@ export const create = mutation({
       isSelected,
       order,
       currentRate: args.currentRate,
+      cashCheckingRate: args.cashCheckingRate,
+      cashSavingsRate: args.cashSavingsRate,
       swr: args.swr,
       yearlyContribution: args.yearlyContribution,
       inflationRate: args.inflationRate,
@@ -224,6 +230,8 @@ export const createDefault = mutation({
       isSelected: true,
       order: 0, // First scenario gets order 0
       currentRate: DEFAULT_SCENARIO.currentRate,
+      cashCheckingRate: DEFAULT_SCENARIO.cashCheckingRate,
+      cashSavingsRate: DEFAULT_SCENARIO.cashSavingsRate,
       swr: DEFAULT_SCENARIO.swr,
       yearlyContribution: DEFAULT_SCENARIO.yearlyContribution,
       inflationRate: DEFAULT_SCENARIO.inflationRate,
@@ -251,6 +259,8 @@ export const update = mutation({
     color: v.optional(v.string()),
     isSelected: v.optional(v.boolean()),
     currentRate: v.optional(v.number()),
+    cashCheckingRate: v.optional(v.number()),
+    cashSavingsRate: v.optional(v.number()),
     swr: v.optional(v.number()),
     yearlyContribution: v.optional(v.number()),
     inflationRate: v.optional(v.number()),
@@ -372,6 +382,8 @@ export const duplicate = mutation({
       isSelected: false, // Don't auto-select duplicates
       order: newOrder,
       currentRate: scenario.currentRate,
+      cashCheckingRate: scenario.cashCheckingRate,
+      cashSavingsRate: scenario.cashSavingsRate,
       swr: scenario.swr,
       yearlyContribution: scenario.yearlyContribution,
       inflationRate: scenario.inflationRate,

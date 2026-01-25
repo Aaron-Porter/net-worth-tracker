@@ -10,7 +10,9 @@
 // ============================================================================
 
 export interface UserSettings {
-  currentRate: number;        // Expected annual return rate (e.g., 7 for 7%)
+  currentRate: number;        // Expected annual return rate for investments (e.g., 7 for 7%)
+  cashCheckingRate?: number;  // Annual rate for checking accounts (e.g., 0 for 0%)
+  cashSavingsRate?: number;   // Annual rate for savings/HYSA accounts (e.g., 4 for 4%)
   swr: number;                // Safe withdrawal rate (e.g., 4 for 4%)
   yearlyContribution: number; // Annual contribution amount
   birthDate: string;          // YYYY-MM-DD format
@@ -26,6 +28,10 @@ export interface NetWorthEntry {
   userId: string;
   amount: number;
   timestamp: number;
+  // Separate asset types with different growth rates
+  cashChecking?: number;  // Cash in checking accounts
+  cashSavings?: number;   // Cash in savings/HYSA accounts
+  investments?: number;   // Investments (stocks, bonds, etc.)
 }
 
 export interface ProjectionRow {
@@ -84,6 +90,10 @@ export interface GrowthRates {
   perYear: number;
   yearlyAppreciation: number;
   yearlyContributions: number;
+  // Breakdown by asset type (yearly appreciation)
+  cashCheckingYearly?: number;
+  cashSavingsYearly?: number;
+  investmentsYearly?: number;
 }
 
 export interface LevelThreshold {
@@ -123,6 +133,14 @@ export interface RealTimeNetWorth {
   baseAmount: number;
   appreciation: number;
   contributions: number;
+  // Breakdown by asset type (current values including appreciation)
+  cashCheckingCurrent?: number;
+  cashSavingsCurrent?: number;
+  investmentsCurrent?: number;
+  // Appreciation by asset type
+  cashCheckingAppreciation?: number;
+  cashSavingsAppreciation?: number;
+  investmentsAppreciation?: number;
 }
 
 export interface CalculatedFinancials {
@@ -250,6 +268,8 @@ export const LEVEL_THRESHOLDS: readonly LevelThreshold[] = [
 
 export const DEFAULT_SETTINGS: UserSettings = {
   currentRate: 7,
+  cashCheckingRate: 0,  // Checking accounts typically earn 0%
+  cashSavingsRate: 4,   // HYSA typically earns 4-5%
   swr: 4,
   yearlyContribution: 0,
   birthDate: '',
@@ -776,26 +796,74 @@ export function calculateRealTimeNetWorth(
   const now = Date.now();
   const elapsed = now - latestEntry.timestamp;
   const yearsElapsed = elapsed / MS_PER_YEAR;
-  const yearlyRate = settings.currentRate / 100;
   
-  // Simple interest approximation for real-time display
-  // (Using compound would cause jumpy updates)
-  const msRate = yearlyRate / MS_PER_YEAR;
-  const appreciation = latestEntry.amount * msRate * elapsed;
+  // Get rates for each asset type (defaulting to investment rate for backward compatibility)
+  const investmentRate = settings.currentRate / 100;
+  const checkingRate = (settings.cashCheckingRate ?? 0) / 100;
+  const savingsRate = (settings.cashSavingsRate ?? 4) / 100;
+  
+  // Calculate appreciation for each asset type if breakdown is available
+  const hasBreakdown = latestEntry.cashChecking !== undefined || 
+                       latestEntry.cashSavings !== undefined || 
+                       latestEntry.investments !== undefined;
+  
+  let totalAppreciation = 0;
+  let cashCheckingAppreciation = 0;
+  let cashSavingsAppreciation = 0;
+  let investmentsAppreciation = 0;
+  let cashCheckingCurrent = 0;
+  let cashSavingsCurrent = 0;
+  let investmentsCurrent = 0;
+  
+  if (hasBreakdown) {
+    // Calculate appreciation separately for each asset type
+    const checking = latestEntry.cashChecking ?? 0;
+    const savings = latestEntry.cashSavings ?? 0;
+    const investments = latestEntry.investments ?? 0;
+    
+    // Simple interest approximation for real-time display
+    const checkingMsRate = checkingRate / MS_PER_YEAR;
+    const savingsMsRate = savingsRate / MS_PER_YEAR;
+    const investmentMsRate = investmentRate / MS_PER_YEAR;
+    
+    cashCheckingAppreciation = checking * checkingMsRate * elapsed;
+    cashSavingsAppreciation = savings * savingsMsRate * elapsed;
+    investmentsAppreciation = investments * investmentMsRate * elapsed;
+    
+    cashCheckingCurrent = checking + cashCheckingAppreciation;
+    cashSavingsCurrent = savings + cashSavingsAppreciation;
+    investmentsCurrent = investments + investmentsAppreciation;
+    
+    totalAppreciation = cashCheckingAppreciation + cashSavingsAppreciation + investmentsAppreciation;
+  } else {
+    // Fallback: use investment rate for entire amount (backward compatible)
+    const msRate = investmentRate / MS_PER_YEAR;
+    totalAppreciation = latestEntry.amount * msRate * elapsed;
+    investmentsAppreciation = totalAppreciation;
+    investmentsCurrent = latestEntry.amount + totalAppreciation;
+  }
   
   let contributions = 0;
   if (includeContributions && settings.yearlyContribution > 0) {
-    // Continuous contribution approximation
+    // Continuous contribution approximation (use investment rate for contributions)
+    const msRate = investmentRate / MS_PER_YEAR;
     contributions = settings.yearlyContribution * yearsElapsed;
     // Add average growth on contributions (half the time period)
     contributions += contributions * msRate * (elapsed / 2);
   }
   
   return {
-    total: latestEntry.amount + appreciation + contributions,
+    total: latestEntry.amount + totalAppreciation + contributions,
     baseAmount: latestEntry.amount,
-    appreciation,
+    appreciation: totalAppreciation,
     contributions,
+    // Breakdown by asset type
+    cashCheckingCurrent: hasBreakdown ? cashCheckingCurrent : undefined,
+    cashSavingsCurrent: hasBreakdown ? cashSavingsCurrent : undefined,
+    investmentsCurrent: hasBreakdown ? investmentsCurrent : undefined,
+    cashCheckingAppreciation: hasBreakdown ? cashCheckingAppreciation : undefined,
+    cashSavingsAppreciation: hasBreakdown ? cashSavingsAppreciation : undefined,
+    investmentsAppreciation: hasBreakdown ? investmentsAppreciation : undefined,
   };
 }
 
@@ -805,9 +873,41 @@ export function calculateRealTimeNetWorth(
 export function calculateGrowthRates(
   currentNetWorth: number,
   settings: UserSettings,
-  includeContributions: boolean = false
+  includeContributions: boolean = false,
+  assetBreakdown?: {
+    cashChecking?: number;
+    cashSavings?: number;
+    investments?: number;
+  }
 ): GrowthRates {
-  const yearlyAppreciation = currentNetWorth * (settings.currentRate / 100);
+  // Calculate yearly appreciation by asset type if breakdown is provided
+  let yearlyAppreciation: number;
+  let cashCheckingYearly: number | undefined;
+  let cashSavingsYearly: number | undefined;
+  let investmentsYearly: number | undefined;
+  
+  if (assetBreakdown && (assetBreakdown.cashChecking !== undefined || 
+      assetBreakdown.cashSavings !== undefined || 
+      assetBreakdown.investments !== undefined)) {
+    const checking = assetBreakdown.cashChecking ?? 0;
+    const savings = assetBreakdown.cashSavings ?? 0;
+    const investments = assetBreakdown.investments ?? 0;
+    
+    const checkingRate = (settings.cashCheckingRate ?? 0) / 100;
+    const savingsRate = (settings.cashSavingsRate ?? 4) / 100;
+    const investmentRate = settings.currentRate / 100;
+    
+    cashCheckingYearly = checking * checkingRate;
+    cashSavingsYearly = savings * savingsRate;
+    investmentsYearly = investments * investmentRate;
+    
+    yearlyAppreciation = cashCheckingYearly + cashSavingsYearly + investmentsYearly;
+  } else {
+    // Fallback: use investment rate for entire amount
+    yearlyAppreciation = currentNetWorth * (settings.currentRate / 100);
+    investmentsYearly = yearlyAppreciation;
+  }
+  
   const yearlyContributions = includeContributions ? settings.yearlyContribution : 0;
   const yearlyTotal = yearlyAppreciation + yearlyContributions;
   
@@ -819,6 +919,9 @@ export function calculateGrowthRates(
     perYear: yearlyTotal,
     yearlyAppreciation,
     yearlyContributions,
+    cashCheckingYearly,
+    cashSavingsYearly,
+    investmentsYearly,
   };
 }
 

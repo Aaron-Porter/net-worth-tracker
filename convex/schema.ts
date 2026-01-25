@@ -13,8 +13,12 @@ export default defineSchema({
 
   netWorthEntries: defineTable({
     userId: v.id("users"),
-    amount: v.number(),
+    amount: v.number(), // Total net worth (sum of all asset types, kept for backward compatibility)
     timestamp: v.number(),
+    // Separate asset types with different growth rates
+    cashChecking: v.optional(v.number()), // Cash in checking accounts (low/no interest)
+    cashSavings: v.optional(v.number()),  // Cash in savings/HYSA accounts (moderate interest)
+    investments: v.optional(v.number()),  // Investments (stocks, bonds, etc. - higher growth)
   }).index("by_user", ["userId"]),
 
   // Scenarios are the primary entity - each contains a complete set of financial assumptions
@@ -27,7 +31,9 @@ export default defineSchema({
     order: v.optional(v.number()), // Display order (0-based), optional for backward compatibility
     
     // Investment assumptions
-    currentRate: v.number(), // Expected annual return rate
+    currentRate: v.number(), // Expected annual return rate for investments (e.g., 7%)
+    cashCheckingRate: v.optional(v.number()), // Annual rate for checking accounts (e.g., 0%)
+    cashSavingsRate: v.optional(v.number()),  // Annual rate for savings/HYSA (e.g., 4%)
     swr: v.number(), // Safe withdrawal rate
     inflationRate: v.number(), // Expected inflation rate
     
