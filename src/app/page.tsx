@@ -34,6 +34,13 @@ import {
   generateTrackedDashboardValues, 
   createTrackedAmount, 
   createTrackedProjectionValues,
+  createTrackedRunwayInfo,
+  createTrackedCoastInfo,
+  createTrackedPercentageMilestone,
+  createTrackedRunwayMilestone,
+  createTrackedCoastMilestone,
+  createTrackedLifestyleMilestone,
+  createTrackedCrossoverMilestone,
   TrackedDashboardValues 
 } from '../lib/trackedScenarioValues'
 import {
@@ -493,12 +500,14 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
   const currentFiTarget = projections[0]?.fiTarget ?? 0;
   const currentMonthlySpend = projections[0]?.monthlySpend ?? 0;
   
+  // Get birth year from projections if available
+  const firstRow = projections[0];
+  const birthYear = firstRow?.age ? currentYear - firstRow.age : null;
+  const currentAge = birthYear ? currentYear - birthYear : null;
+  const retirementAge = 65;
+  
   // Calculate runway and coast info for context display
   const runwayAndCoastInfo = useMemo(() => {
-    // Get birth year from projections if available
-    const firstRow = projections[0];
-    const birthYear = firstRow?.age ? currentYear - firstRow.age : null;
-    
     return calculateRunwayAndCoastInfo(
       currentNetWorth.total,
       currentMonthlySpend,
@@ -507,7 +516,25 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
       scenario.inflationRate,
       scenario.swr
     );
-  }, [currentNetWorth.total, currentMonthlySpend, projections, scenario, currentYear]);
+  }, [currentNetWorth.total, currentMonthlySpend, birthYear, scenario]);
+  
+  // Create tracked runway values
+  const trackedRunway = useMemo(() => {
+    return createTrackedRunwayInfo(currentNetWorth.total, currentMonthlySpend);
+  }, [currentNetWorth.total, currentMonthlySpend]);
+  
+  // Create tracked coast values
+  const trackedCoast = useMemo(() => {
+    return createTrackedCoastInfo(
+      currentNetWorth.total,
+      currentMonthlySpend,
+      currentAge,
+      retirementAge,
+      scenario.currentRate,
+      scenario.inflationRate,
+      scenario.swr
+    );
+  }, [currentNetWorth.total, currentMonthlySpend, currentAge, scenario]);
   
   // Filter milestones by type for display
   const runwayMilestones = fiMilestones.milestones.filter(m => m.type === 'runway');
@@ -616,20 +643,40 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
           </h3>
           <div className="text-right">
             <span className="text-xs text-slate-500">Current: </span>
-            <span className="text-sm font-mono text-emerald-400">
-              {runwayAndCoastInfo.currentRunwayYears >= 100 
-                ? '∞' 
-                : runwayAndCoastInfo.currentRunwayYears >= 1 
-                  ? `${runwayAndCoastInfo.currentRunwayYears.toFixed(1)} years`
-                  : `${Math.round(runwayAndCoastInfo.currentRunwayMonths)} months`
-              }
-            </span>
+            {runwayAndCoastInfo.currentRunwayYears >= 100 ? (
+              <span className="text-sm font-mono text-emerald-400">∞</span>
+            ) : runwayAndCoastInfo.currentRunwayYears >= 1 ? (
+              <TrackedValue 
+                value={trackedRunway.runwayYears}
+                showCurrency={false}
+                formatter={(v) => `${v.toFixed(1)} years`}
+                className="text-sm font-mono text-emerald-400"
+              />
+            ) : (
+              <TrackedValue 
+                value={trackedRunway.runwayMonths}
+                showCurrency={false}
+                formatter={(v) => `${Math.round(v)} months`}
+                className="text-sm font-mono text-emerald-400"
+              />
+            )}
           </div>
         </div>
         <p className="text-xs text-slate-500 mb-3">How long you could survive without income</p>
         <div className="space-y-2">
           {runwayMilestones.map(milestone => (
-            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+            <TrackedMilestoneRow 
+              key={milestone.id} 
+              milestone={milestone} 
+              currentYear={currentYear}
+              currentNetWorth={currentNetWorth.total}
+              currentMonthlySpend={currentMonthlySpend}
+              currentFiTarget={currentFiTarget}
+              currentFiProgress={currentFiProgress}
+              currentAge={currentAge}
+              retirementAge={retirementAge}
+              scenario={scenario}
+            />
           ))}
         </div>
       </div>
@@ -642,21 +689,45 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
           </h3>
           <div className="text-right">
             <span className="text-xs text-slate-500">Coast to: </span>
-            <span className="text-sm font-mono text-violet-400">
-              {runwayAndCoastInfo.coastFiPercent.toFixed(0)}% FI
-            </span>
+            <TrackedValue 
+              value={trackedCoast.coastFiPercent}
+              showCurrency={false}
+              formatter={(v) => `${v.toFixed(0)}% FI`}
+              className="text-sm font-mono text-violet-400"
+            />
           </div>
         </div>
         <p className="text-xs text-slate-500 mb-2">If you stopped contributing today (by age {runwayAndCoastInfo.retirementAge})</p>
         <p className="text-xs text-amber-400/80 mb-3">
-          💡 Every $1 you save today = <span className="font-mono font-semibold">${runwayAndCoastInfo.dollarMultiplier.toFixed(2)}</span> at retirement
+          💡 Every $1 you save today = <TrackedValue 
+            value={trackedCoast.dollarMultiplier}
+            showCurrency={false}
+            formatter={(v) => `$${v.toFixed(2)}`}
+            className="font-mono font-semibold text-amber-400"
+          /> at retirement
           {runwayAndCoastInfo.yearsToRetirement > 0 && (
-            <span className="text-slate-500"> ({runwayAndCoastInfo.yearsToRetirement} years of compounding)</span>
+            <span className="text-slate-500"> (<TrackedValue 
+              value={trackedCoast.yearsToRetirement}
+              showCurrency={false}
+              formatter={(v) => `${Math.round(v)}`}
+              className="text-slate-500"
+            /> years of compounding)</span>
           )}
         </p>
         <div className="space-y-2">
           {coastMilestones.map(milestone => (
-            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+            <TrackedMilestoneRow 
+              key={milestone.id} 
+              milestone={milestone} 
+              currentYear={currentYear}
+              currentNetWorth={currentNetWorth.total}
+              currentMonthlySpend={currentMonthlySpend}
+              currentFiTarget={currentFiTarget}
+              currentFiProgress={currentFiProgress}
+              currentAge={currentAge}
+              retirementAge={retirementAge}
+              scenario={scenario}
+            />
           ))}
         </div>
       </div>
@@ -668,7 +739,18 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
         </h3>
         <div className="space-y-2">
           {percentageMilestones.map(milestone => (
-            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+            <TrackedMilestoneRow 
+              key={milestone.id} 
+              milestone={milestone} 
+              currentYear={currentYear}
+              currentNetWorth={currentNetWorth.total}
+              currentMonthlySpend={currentMonthlySpend}
+              currentFiTarget={currentFiTarget}
+              currentFiProgress={currentFiProgress}
+              currentAge={currentAge}
+              retirementAge={retirementAge}
+              scenario={scenario}
+            />
           ))}
         </div>
       </div>
@@ -680,7 +762,18 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
         </h3>
         <div className="space-y-2">
           {lifestyleMilestones.map(milestone => (
-            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+            <TrackedMilestoneRow 
+              key={milestone.id} 
+              milestone={milestone} 
+              currentYear={currentYear}
+              currentNetWorth={currentNetWorth.total}
+              currentMonthlySpend={currentMonthlySpend}
+              currentFiTarget={currentFiTarget}
+              currentFiProgress={currentFiProgress}
+              currentAge={currentAge}
+              retirementAge={retirementAge}
+              scenario={scenario}
+            />
           ))}
         </div>
       </div>
@@ -692,7 +785,18 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
         </h3>
         <div className="space-y-2">
           {specialMilestones.map(milestone => (
-            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+            <TrackedMilestoneRow 
+              key={milestone.id} 
+              milestone={milestone} 
+              currentYear={currentYear}
+              currentNetWorth={currentNetWorth.total}
+              currentMonthlySpend={currentMonthlySpend}
+              currentFiTarget={currentFiTarget}
+              currentFiProgress={currentFiProgress}
+              currentAge={currentAge}
+              retirementAge={retirementAge}
+              scenario={scenario}
+            />
           ))}
         </div>
       </div>
@@ -701,21 +805,214 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
 }
 
 interface MilestoneRowProps {
-  milestone: {
-    id: string;
-    name: string;
-    shortName: string;
-    description: string;
-    color: string;
-    year: number | null;
-    age: number | null;
-    yearsFromNow: number | null;
-    isAchieved: boolean;
-    netWorthAtMilestone: number | null;
-  };
+  milestone: FiMilestone;
   currentYear: number;
 }
 
+interface TrackedMilestoneRowProps extends MilestoneRowProps {
+  currentNetWorth: number;
+  currentMonthlySpend: number;
+  currentFiTarget: number;
+  currentFiProgress: number;
+  currentAge: number | null;
+  retirementAge: number;
+  scenario: {
+    currentRate: number;
+    inflationRate: number;
+    swr: number;
+  };
+}
+
+function TrackedMilestoneRow({ 
+  milestone, 
+  currentYear,
+  currentNetWorth,
+  currentMonthlySpend,
+  currentFiTarget,
+  currentFiProgress,
+  currentAge,
+  retirementAge,
+  scenario,
+}: TrackedMilestoneRowProps) {
+  const [showDescription, setShowDescription] = React.useState(false);
+  
+  // Create tracked milestone info based on type
+  const trackedInfo = useMemo(() => {
+    if (milestone.type === 'percentage') {
+      return createTrackedPercentageMilestone(
+        milestone.id,
+        milestone.shortName,
+        milestone.targetValue,
+        currentNetWorth,
+        currentFiTarget,
+        currentFiProgress,
+        milestone.netWorthAtMilestone,
+        milestone.year,
+        currentYear
+      );
+    } else if (milestone.type === 'runway') {
+      const currentRunwayYears = currentMonthlySpend > 0 ? currentNetWorth / (currentMonthlySpend * 12) : 0;
+      return createTrackedRunwayMilestone(
+        milestone.id,
+        milestone.shortName,
+        milestone.targetValue,
+        currentNetWorth,
+        currentMonthlySpend,
+        currentRunwayYears,
+        milestone.netWorthAtMilestone,
+        milestone.year,
+        currentYear
+      );
+    } else if (milestone.type === 'coast') {
+      const coastInfo = createTrackedCoastInfo(
+        currentNetWorth,
+        currentMonthlySpend,
+        currentAge,
+        retirementAge,
+        scenario.currentRate,
+        scenario.inflationRate,
+        scenario.swr
+      );
+      return createTrackedCoastMilestone(
+        milestone.id,
+        milestone.shortName,
+        milestone.targetValue,
+        currentNetWorth,
+        currentMonthlySpend,
+        coastInfo.coastFiPercent.value,
+        currentAge,
+        retirementAge,
+        scenario.currentRate,
+        scenario.inflationRate,
+        scenario.swr,
+        milestone.netWorthAtMilestone,
+        milestone.year,
+        currentYear
+      );
+    } else if (milestone.type === 'lifestyle') {
+      return createTrackedLifestyleMilestone(
+        milestone.id,
+        milestone.shortName,
+        milestone.targetValue,
+        currentNetWorth,
+        currentMonthlySpend,
+        scenario.swr,
+        milestone.netWorthAtMilestone,
+        milestone.year,
+        currentYear
+      );
+    } else if (milestone.id === 'crossover') {
+      // For crossover, we need interest and contributions
+      // We'll use simplified values here
+      const currentInterest = currentNetWorth * (scenario.currentRate / 100);
+      const currentContributions = 0; // Would need actual contribution data
+      return createTrackedCrossoverMilestone(
+        currentInterest,
+        currentContributions,
+        milestone.netWorthAtMilestone,
+        milestone.year,
+        currentYear
+      );
+    }
+    // Default: return null for unsupported types
+    return null;
+  }, [milestone, currentNetWorth, currentMonthlySpend, currentFiTarget, currentFiProgress, currentAge, retirementAge, scenario, currentYear]);
+  
+  return (
+    <div 
+      className={`rounded-lg p-3 transition-colors cursor-pointer ${
+        milestone.isAchieved 
+          ? 'bg-emerald-900/30 border border-emerald-500/30' 
+          : 'bg-slate-900/50 hover:bg-slate-900/70'
+      }`}
+      onClick={() => setShowDescription(!showDescription)}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div 
+            className={`w-3 h-3 rounded-full ${milestone.isAchieved ? 'bg-emerald-400' : 'bg-slate-600'}`}
+            style={!milestone.isAchieved ? { borderColor: milestone.color, borderWidth: 2 } : { backgroundColor: milestone.color }}
+          />
+          <div>
+            <span className={`text-sm font-medium ${milestone.isAchieved ? 'text-emerald-300' : 'text-slate-300'}`}>
+              {milestone.shortName}
+            </span>
+            {milestone.isAchieved && (
+              <span className="ml-2 text-xs text-emerald-400">Achieved</span>
+            )}
+          </div>
+        </div>
+        
+        <div className="text-right">
+          {milestone.year ? (
+            <>
+              {trackedInfo?.yearsToMilestone ? (
+                <TrackedValue 
+                  value={trackedInfo.yearsToMilestone}
+                  showCurrency={false}
+                  formatter={(v) => `${milestone.year}`}
+                  className={`text-sm font-mono ${milestone.isAchieved ? 'text-emerald-400' : 'text-slate-400'}`}
+                />
+              ) : (
+                <span className={`text-sm font-mono ${milestone.isAchieved ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  {milestone.year}
+                </span>
+              )}
+              {milestone.age && (
+                <span className="text-xs text-slate-500 ml-2">
+                  (age {milestone.age})
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-xs text-slate-500">Not projected</span>
+          )}
+        </div>
+      </div>
+      
+      {showDescription && (
+        <div className="mt-2 text-xs text-slate-400 pl-6 space-y-2">
+          <p>{milestone.description}</p>
+          
+          {/* Target value with full calculation trace */}
+          {trackedInfo?.targetValue && (
+            <div className="bg-slate-800/50 rounded p-2">
+              <span className="text-slate-500">Target: </span>
+              <TrackedValue 
+                value={trackedInfo.targetValue}
+                className="text-slate-300"
+              />
+            </div>
+          )}
+          
+          {/* Amount needed if not achieved */}
+          {!milestone.isAchieved && trackedInfo?.amountNeeded && (
+            <div className="bg-slate-800/50 rounded p-2">
+              <span className="text-slate-500">Amount needed: </span>
+              <TrackedValue 
+                value={trackedInfo.amountNeeded}
+                className="text-amber-400"
+              />
+            </div>
+          )}
+          
+          {/* Net worth at milestone */}
+          {trackedInfo?.netWorthAtMilestone && (
+            <div className="bg-slate-800/50 rounded p-2">
+              <span className="text-slate-500">Net worth at milestone: </span>
+              <TrackedValue 
+                value={trackedInfo.netWorthAtMilestone}
+                className="text-slate-300"
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Legacy MilestoneRow for backwards compatibility
 function MilestoneRow({ milestone, currentYear }: MilestoneRowProps) {
   const [showDescription, setShowDescription] = React.useState(false);
   
