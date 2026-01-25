@@ -24,10 +24,17 @@ import {
   BracketBreakdown,
   calculateSwrAmounts,
   calculateFiTarget,
-  calculateLevelBasedSpending,
   FiMilestone,
   FI_MILESTONE_DEFINITIONS,
 } from '../lib/calculations'
+import { TrackedValue, SimpleTrackedValue } from './components/TrackedValue'
+import { 
+  generateTrackedDashboardValues, 
+  createTrackedAmount, 
+  createTrackedLevelValues,
+  createTrackedProjectionValues,
+  TrackedDashboardValues 
+} from '../lib/trackedScenarioValues'
 import {
   LineChart,
   Line,
@@ -274,6 +281,12 @@ function DashboardTab({
   selectedScenarios,
   setActiveTab,
 }: DashboardTabProps) {
+  // Generate tracked values for calculation transparency
+  const trackedValues = useMemo(() => {
+    if (!latestEntry || !primaryProjection) return null;
+    return generateTrackedDashboardValues(primaryProjection, latestEntry.timestamp);
+  }, [latestEntry, primaryProjection]);
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
@@ -284,7 +297,7 @@ function DashboardTab({
       </p>
 
       {/* Current Total Display */}
-      {latestEntry && primaryProjection ? (
+      {latestEntry && primaryProjection && trackedValues ? (
         <div className="mb-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-emerald-500/30">
           {/* Scenario indicator */}
           <div className="flex justify-center mb-4">
@@ -304,18 +317,30 @@ function DashboardTab({
             Current Net Worth
           </h2>
           <div className="text-center">
-            <span className="text-4xl md:text-5xl font-bold font-mono bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
-              {formatCurrency(primaryProjection.currentNetWorth.total, 6)}
-            </span>
+            <TrackedValue 
+              value={trackedValues.currentNetWorth}
+              decimals={6}
+              className="text-4xl md:text-5xl font-bold font-mono bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent"
+            />
           </div>
+          <p className="text-xs text-slate-500 text-center mt-1">
+            Click any number to see calculation details
+          </p>
           <div className="mt-4 flex justify-center gap-8 text-sm">
             <div className="text-center">
               <p className="text-slate-500">Base Amount</p>
-              <p className="text-slate-300 font-mono">{formatCurrency(primaryProjection.currentNetWorth.baseAmount)}</p>
+              <TrackedValue 
+                value={trackedValues.baseAmount}
+                className="text-slate-300 font-mono"
+              />
             </div>
             <div className="text-center">
               <p className="text-slate-500">Appreciation</p>
-              <p className="text-emerald-400 font-mono">+{formatCurrency(primaryProjection.currentNetWorth.appreciation, 4)}</p>
+              <span className="text-emerald-400 font-mono">+<TrackedValue 
+                value={trackedValues.appreciation}
+                decimals={4}
+                className="text-emerald-400 font-mono"
+              /></span>
             </div>
           </div>
           <p className="text-slate-500 text-center mt-4 text-xs">
@@ -335,7 +360,7 @@ function DashboardTab({
       )}
 
       {/* Metrics Section */}
-      {latestEntry && primaryProjection && (
+      {latestEntry && primaryProjection && trackedValues && (
         <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
           <h2 className="text-lg font-semibold text-slate-300 mb-4">
             Metrics
@@ -349,33 +374,40 @@ function DashboardTab({
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Second</p>
-                <p className="text-emerald-400 font-mono">
-                  {formatCurrency(primaryProjection.growthRates.perSecond, 6)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.growthPerSecond}
+                  decimals={6}
+                  className="text-emerald-400 font-mono"
+                />
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Minute</p>
-                <p className="text-emerald-400 font-mono">
-                  {formatCurrency(primaryProjection.growthRates.perMinute, 4)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.growthPerMinute}
+                  decimals={4}
+                  className="text-emerald-400 font-mono"
+                />
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Hour</p>
-                <p className="text-emerald-400 font-mono">
-                  {formatCurrency(primaryProjection.growthRates.perHour)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.growthPerHour}
+                  className="text-emerald-400 font-mono"
+                />
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Per Day</p>
-                <p className="text-emerald-400 font-mono">
-                  {formatCurrency(primaryProjection.growthRates.perDay)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.growthPerDay}
+                  className="text-emerald-400 font-mono"
+                />
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3 col-span-2 sm:col-span-2">
                 <p className="text-slate-500 text-xs">Per Year</p>
-                <p className="text-emerald-400 font-mono text-lg">
-                  {formatCurrency(primaryProjection.growthRates.perYear)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.growthPerYear}
+                  className="text-emerald-400 font-mono text-lg"
+                />
               </div>
             </div>
           </div>
@@ -388,15 +420,42 @@ function DashboardTab({
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Annual</p>
-                <p className="text-amber-400 font-mono text-lg">
-                  {formatCurrency(primaryProjection.currentNetWorth.total * (primaryProjection.scenario.swr / 100))}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.annualSwr}
+                  className="text-amber-400 font-mono text-lg"
+                />
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Monthly</p>
-                <p className="text-amber-400 font-mono text-lg">
-                  {formatCurrency(primaryProjection.currentMonthlySwr)}
-                </p>
+                <TrackedValue 
+                  value={trackedValues.monthlySwr}
+                  className="text-amber-400 font-mono text-lg"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* FI Progress */}
+          <div className="mt-6">
+            <h3 className="text-sm font-medium text-slate-400 mb-3">
+              Financial Independence
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <p className="text-slate-500 text-xs">FI Target</p>
+                <TrackedValue 
+                  value={trackedValues.fiTarget}
+                  className="text-violet-400 font-mono text-lg"
+                />
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <p className="text-slate-500 text-xs">FI Progress</p>
+                <TrackedValue 
+                  value={trackedValues.fiProgress}
+                  showCurrency={false}
+                  formatter={(v) => `${v.toFixed(1)}%`}
+                  className="text-violet-400 font-mono text-lg"
+                />
               </div>
             </div>
           </div>
@@ -420,8 +479,9 @@ interface FiMilestonesCardProps {
 }
 
 function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
-  const { fiMilestones, currentFiProgress } = primaryProjection;
+  const { fiMilestones, currentFiProgress, currentNetWorth, projections } = primaryProjection;
   const currentYear = new Date().getFullYear();
+  const currentFiTarget = projections[0]?.fiTarget ?? 0;
   
   // Filter milestones by type for display
   const percentageMilestones = fiMilestones.milestones.filter(m => m.type === 'percentage');
@@ -441,9 +501,16 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
       <div className="mb-6 bg-slate-900/50 rounded-xl p-4">
         <div className="flex items-center justify-between mb-3">
           <span className="text-slate-400 text-sm">Current FI Progress</span>
-          <span className="text-emerald-400 font-mono text-lg font-semibold">
-            {currentFiProgress.toFixed(1)}%
-          </span>
+          <SimpleTrackedValue 
+            value={currentFiProgress} 
+            name="Current FI Progress" 
+            description="Percentage of FI target achieved"
+            formula="(Current Net Worth ÷ FI Target) × 100"
+            inputs={[{ name: 'Net Worth', value: currentNetWorth.total, unit: '$' }, { name: 'FI Target', value: currentFiTarget, unit: '$' }]}
+            formatAs="percent"
+            decimals={1}
+            className="text-emerald-400 font-mono text-lg font-semibold"
+          />
         </div>
         
         {/* Progress bar with milestone markers */}
@@ -495,9 +562,17 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-slate-300 font-mono text-sm">
-                  {formatCurrency(fiMilestones.amountToNext)}
-                </p>
+                <SimpleTrackedValue
+                  value={fiMilestones.amountToNext}
+                  name="Amount to Next Milestone"
+                  description={`Amount needed to reach ${fiMilestones.nextMilestone.shortName}`}
+                  formula={`${fiMilestones.nextMilestone.shortName} Target - Current Net Worth`}
+                  inputs={[
+                    { name: 'Target Progress', value: fiMilestones.nextMilestone.targetValue, unit: '%' },
+                    { name: 'Current Progress', value: Math.round(currentFiProgress * 10) / 10, unit: '%' },
+                  ]}
+                  className="text-slate-300 font-mono text-sm"
+                />
                 <p className="text-slate-500 text-xs">to go</p>
               </div>
             </div>
@@ -611,7 +686,17 @@ function MilestoneRow({ milestone, currentYear }: MilestoneRowProps) {
           {milestone.description}
           {milestone.netWorthAtMilestone && (
             <span className="block mt-1 text-slate-500">
-              Net worth at milestone: {formatCurrency(milestone.netWorthAtMilestone)}
+              Net worth at milestone: <SimpleTrackedValue
+                value={milestone.netWorthAtMilestone}
+                name={`${milestone.shortName} Net Worth`}
+                description={`Projected net worth when reaching ${milestone.shortName}`}
+                formula="Projected value at milestone achievement"
+                inputs={[
+                  { name: 'Milestone', value: milestone.shortName },
+                  { name: 'Year', value: milestone.year || 'N/A' },
+                ]}
+                className="text-slate-500"
+              />
             </span>
           )}
         </p>
@@ -703,9 +788,17 @@ function EntriesTab({
                 }`}
               >
                 <div>
-                  <p className="font-mono text-lg text-white">
-                    {formatCurrency(entry.amount)}
-                  </p>
+                  <SimpleTrackedValue
+                    value={entry.amount}
+                    name="Net Worth Entry"
+                    description={`Net worth recorded on ${formatDate(entry.timestamp)}`}
+                    formula="Recorded Value"
+                    inputs={[
+                      { name: 'Date', value: formatDate(entry.timestamp) },
+                      { name: 'Entry #', value: entries.length - index },
+                    ]}
+                    className="font-mono text-lg text-white"
+                  />
                   <p className="text-slate-400 text-sm">
                     {formatDate(entry.timestamp)}
                   </p>
@@ -837,7 +930,7 @@ function ScenarioManagementPanel({
                 </span>
                 {scenario.grossIncome && (
                   <span>
-                    Income: <span className="text-sky-400">{formatCurrency(scenario.grossIncome)}</span>
+                    Income: <SimpleTrackedValue value={scenario.grossIncome} name="Gross Income" description="Annual income for this scenario" formula="User Input" className="text-sky-400" />
                   </span>
                 )}
               </div>
@@ -1255,60 +1348,144 @@ function ScenarioEditor({
                   <div className="bg-slate-900/50 rounded-lg p-4 space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-400">Gross Income</span>
-                      <span className="font-mono text-slate-200">{formatCurrency(liveBreakdown.taxes.grossIncome)}</span>
+                      <SimpleTrackedValue
+                        value={liveBreakdown.taxes.grossIncome}
+                        name="Gross Income"
+                        description="Total annual income before any deductions"
+                        formula="Annual Salary + Other Income"
+                        className="font-mono text-slate-200"
+                      />
                     </div>
 
                     {liveBreakdown.taxes.totalPreTaxContributions > 0 && (
                       <>
                         <div className="flex justify-between text-sm">
                           <span className="text-slate-400">− Pre-tax Contributions</span>
-                          <span className="font-mono text-emerald-400">−{formatCurrency(liveBreakdown.taxes.totalPreTaxContributions)}</span>
+                          <span className="font-mono text-emerald-400">−<SimpleTrackedValue
+                            value={liveBreakdown.taxes.totalPreTaxContributions}
+                            name="Pre-Tax Contributions"
+                            description="Total pre-tax retirement contributions reducing taxable income"
+                            formula="401k + Traditional IRA + HSA + Other"
+                            className="font-mono text-emerald-400"
+                          /></span>
                         </div>
                         <div className="flex justify-between text-sm border-t border-slate-700 pt-2">
                           <span className="text-slate-400">Adjusted Gross Income</span>
-                          <span className="font-mono text-slate-200">{formatCurrency(liveBreakdown.taxes.adjustedGrossIncome)}</span>
+                          <SimpleTrackedValue
+                            value={liveBreakdown.taxes.adjustedGrossIncome}
+                            name="Adjusted Gross Income (AGI)"
+                            description="Gross income minus pre-tax contributions"
+                            formula="Gross Income - Pre-Tax Contributions"
+                            inputs={[
+                              { name: 'Gross Income', value: liveBreakdown.taxes.grossIncome, unit: '$' },
+                              { name: 'Pre-Tax', value: liveBreakdown.taxes.totalPreTaxContributions, unit: '$' },
+                            ]}
+                            className="font-mono text-slate-200"
+                          />
                         </div>
                       </>
                     )}
 
                     <div className="flex justify-between text-sm border-t border-slate-700 pt-2">
                       <span className="text-slate-400">− Total Taxes</span>
-                      <span className="font-mono text-red-400">−{formatCurrency(liveBreakdown.taxes.totalTax)}</span>
+                      <span className="font-mono text-red-400">−<SimpleTrackedValue
+                        value={liveBreakdown.taxes.totalTax}
+                        name="Total Taxes"
+                        description="Combined federal, state, and FICA taxes"
+                        formula="Federal Tax + State Tax + Social Security + Medicare"
+                        inputs={[
+                          { name: 'Federal', value: liveBreakdown.taxes.federalTax, unit: '$' },
+                          { name: 'State', value: liveBreakdown.taxes.stateTax, unit: '$' },
+                          { name: 'FICA', value: liveBreakdown.taxes.fica.totalFicaTax, unit: '$' },
+                        ]}
+                        className="font-mono text-red-400"
+                      /></span>
                     </div>
 
                     <div className="flex justify-between text-sm text-xs text-slate-500 pl-4">
-                      <span>Federal: {formatCurrency(liveBreakdown.taxes.federalTax)}</span>
-                      <span>State: {formatCurrency(liveBreakdown.taxes.stateTax)}</span>
-                      <span>FICA: {formatCurrency(liveBreakdown.taxes.fica.totalFicaTax)}</span>
+                      <span>Federal: <SimpleTrackedValue
+                        value={liveBreakdown.taxes.federalTax}
+                        name="Federal Income Tax"
+                        description="Federal income tax calculated using progressive brackets"
+                        formula="Sum of (Taxable Income in Bracket × Bracket Rate)"
+                        className="text-slate-500"
+                      /></span>
+                      <span>State: <SimpleTrackedValue
+                        value={liveBreakdown.taxes.stateTax}
+                        name="State Income Tax"
+                        description="State income tax based on your state's rates"
+                        formula="State Tax Calculation"
+                        className="text-slate-500"
+                      /></span>
+                      <span>FICA: <SimpleTrackedValue
+                        value={liveBreakdown.taxes.fica.totalFicaTax}
+                        name="FICA Taxes"
+                        description="Social Security and Medicare taxes"
+                        formula="Social Security Tax + Medicare Tax"
+                        className="text-slate-500"
+                      /></span>
                     </div>
 
                     <div className="flex justify-between items-center border-t border-slate-700 pt-2">
                       <div>
                         <span className="text-sm font-medium text-emerald-400">Net Income</span>
                         <p className="text-xs text-slate-500">
-                          Effective Tax Rate: {formatPercent(liveBreakdown.taxes.effectiveTotalRate)}
+                          Effective Tax Rate: <SimpleTrackedValue value={liveBreakdown.taxes.effectiveTotalRate} name="Effective Tax Rate" description="Total taxes as a percentage of gross income" formula="Total Taxes ÷ Gross Income × 100" inputs={[{ name: 'Taxes', value: liveBreakdown.taxes.totalTax, unit: '$' }, { name: 'Gross', value: liveBreakdown.taxes.grossIncome, unit: '$' }]} formatAs="percent" decimals={1} className="text-slate-500" />
                         </p>
                       </div>
-                      <span className="text-lg font-mono text-emerald-400">{formatCurrency(liveBreakdown.taxes.netIncome)}</span>
+                      <SimpleTrackedValue
+                        value={liveBreakdown.taxes.netIncome}
+                        name="Net Income"
+                        description="Take-home pay after all taxes and deductions"
+                        formula="Gross Income - Pre-Tax Contributions - Total Taxes"
+                        inputs={[
+                          { name: 'Gross Income', value: liveBreakdown.taxes.grossIncome, unit: '$' },
+                          { name: 'Pre-Tax', value: liveBreakdown.taxes.totalPreTaxContributions, unit: '$' },
+                          { name: 'Total Taxes', value: liveBreakdown.taxes.totalTax, unit: '$' },
+                        ]}
+                        className="text-lg font-mono text-emerald-400"
+                      />
                     </div>
 
                     <div className="border-t border-slate-700 pt-3 space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">− Annual Spending</span>
-                        <span className="font-mono text-amber-400">−{formatCurrency(liveBreakdown.annualSpending)}</span>
+                        <span className="font-mono text-amber-400">−<SimpleTrackedValue
+                          value={liveBreakdown.annualSpending}
+                          name="Annual Spending"
+                          description="Level-based annual spending budget"
+                          formula="Monthly Budget × 12"
+                          className="font-mono text-amber-400"
+                        /></span>
                       </div>
                       <div className="flex justify-between items-center border-t border-emerald-500/30 pt-2">
                         <div>
                           <span className="text-sm font-medium text-emerald-400">Total Annual Savings</span>
                           <p className="text-xs text-slate-500">
-                            {formatCurrency(liveBreakdown.monthlySavingsAvailable)}/month
+                            <SimpleTrackedValue
+                              value={liveBreakdown.monthlySavingsAvailable}
+                              name="Monthly Savings"
+                              description="Monthly savings available after spending"
+                              formula="(Net Income - Annual Spending) ÷ 12"
+                              className="text-slate-500"
+                            />/month
                           </p>
                         </div>
-                        <span className="text-lg font-mono text-emerald-400">{formatCurrency(liveBreakdown.totalAnnualSavings)}</span>
+                        <SimpleTrackedValue
+                          value={liveBreakdown.totalAnnualSavings}
+                          name="Total Annual Savings"
+                          description="Amount saved per year after taxes and spending"
+                          formula="Net Income - Annual Spending"
+                          inputs={[
+                            { name: 'Net Income', value: liveBreakdown.taxes.netIncome, unit: '$' },
+                            { name: 'Annual Spending', value: liveBreakdown.annualSpending, unit: '$' },
+                          ]}
+                          className="text-lg font-mono text-emerald-400"
+                        />
                       </div>
 
                       <p className="text-xs text-center text-slate-500 pt-2">
-                        Savings Rate: <span className="text-emerald-400 font-semibold">{formatPercent(liveBreakdown.savingsRateOfGross)}</span> of gross income
+                        Savings Rate: <SimpleTrackedValue value={liveBreakdown.savingsRateOfGross} name="Savings Rate" description="Percentage of gross income going to savings" formula="Total Annual Savings ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-emerald-400 font-semibold" /> of gross income
                       </p>
                     </div>
                   </div>
@@ -1872,129 +2049,144 @@ function ProjectionsTable({
   
   const primaryProjection = scenarioProjections[0];
 
+  // Type for display rows that can be either yearly or monthly
+  interface DisplayRow {
+    year: number;
+    displayYear?: string; // Only for monthly view
+    monthIndex?: number;  // Only for monthly view (0-11)
+    age: number | null;
+    yearsFromEntry: number;
+    netWorth: number;
+    interest: number;
+    contributed: number;
+    annualSwr: number;
+    monthlySwr: number;
+    weeklySwr: number;
+    dailySwr: number;
+    monthlySpend: number;
+    annualSpending: number;
+    annualSavings: number;
+    fiTarget: number;
+    fiProgress: number;
+    coastFiYear: number | null;
+    coastFiAge: number | null;
+    isFiYear: boolean;
+    isCrossover: boolean;
+    swrCoversSpend: boolean;
+    grossIncome?: number;
+    totalTax?: number;
+    netIncome?: number;
+    preTaxContributions?: number;
+  }
+
   // Transform projections based on view mode
-  const displayRows = useMemo(() => {
+  const displayRows = useMemo((): DisplayRow[] => {
     if (viewMode === 'yearly') {
-      return primaryProjection.projections;
+      // Map yearly projections to DisplayRow format
+      return primaryProjection.projections.map(row => ({
+        year: row.year,
+        age: row.age,
+        yearsFromEntry: row.yearsFromEntry,
+        netWorth: row.netWorth,
+        interest: row.interest,
+        contributed: row.contributed,
+        annualSwr: row.annualSwr,
+        monthlySwr: row.monthlySwr,
+        weeklySwr: row.weeklySwr,
+        dailySwr: row.dailySwr,
+        monthlySpend: row.monthlySpend,
+        annualSpending: row.annualSpending,
+        annualSavings: row.annualSavings,
+        fiTarget: row.fiTarget,
+        fiProgress: row.fiProgress,
+        coastFiYear: row.coastFiYear,
+        coastFiAge: row.coastFiAge,
+        isFiYear: row.isFiYear,
+        isCrossover: row.isCrossover,
+        swrCoversSpend: row.swrCoversSpend,
+        grossIncome: row.grossIncome,
+        totalTax: row.totalTax,
+        netIncome: row.netIncome,
+        preTaxContributions: row.preTaxContributions,
+      }));
     }
 
-    // For monthly view, expand each year into 12 months
-    const monthlyRows: any[] = [];
+    // For monthly view, use the actual monthly projections data
+    // This provides accurate month-by-month spending that updates with net worth
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    // Create settings object for spending calculations
-    const settings = {
-      currentRate: primaryProjection.scenario.currentRate,
-      swr: primaryProjection.scenario.swr,
-      yearlyContribution: primaryProjection.scenario.yearlyContribution,
-      birthDate: birthDate,
-      monthlySpend: 0, // Not used - spending comes from levels system
-      inflationRate: primaryProjection.scenario.inflationRate,
-      baseMonthlyBudget: primaryProjection.scenario.baseMonthlyBudget,
-      spendingGrowthRate: primaryProjection.scenario.spendingGrowthRate,
-      incomeGrowthRate: primaryProjection.scenario.incomeGrowthRate,
-    };
-
-    // Calculate base spending (at year 0) for savings calculation
-    const baseMonthlySpend = calculateLevelBasedSpending(
-      primaryProjection.currentNetWorth.total,
-      settings,
-      0
-    );
-    const baseAnnualSpend = baseMonthlySpend * 12;
-
-    for (let i = 0; i < primaryProjection.projections.length; i++) {
-      const currentRow = primaryProjection.projections[i];
-      const previousRow = i > 0 ? primaryProjection.projections[i - 1] : null;
-
-      // Calculate yearly contribution with income growth for this year
-      const incomeGrowthRate = primaryProjection.scenario.incomeGrowthRate || 0;
-      const growthMultiplier = Math.pow(1 + incomeGrowthRate / 100, i);
-      const yearlyContributionGrown = primaryProjection.scenario.yearlyContribution * growthMultiplier;
-
-      // Generate 12 months for this year
-      for (let month = 0; month < 12; month++) {
-        // monthFraction represents progress through the year (0 = start, 1 = end)
-        // For end-of-month values: Jan = 1/12, Feb = 2/12, ..., Dec = 12/12
-        const monthFraction = (month + 1) / 12;
-        const year = currentRow.year as number;
-
-        // Interpolate from start of year to end of year
-        // For first year, start = current net worth; for others, start = previous year's end
-        const startOfYearNetWorth = i === 0 ? primaryProjection.currentNetWorth.total : previousRow!.netWorth;
-        const startOfYearFiProgress = i === 0 ? 0 : previousRow!.fiProgress;
-
-        const interpolate = (startValue: number, endValue: number) => {
-          return startValue + (endValue - startValue) * monthFraction;
-        };
-
-        // Calculate interpolated age
-        let interpolatedAge = currentRow.age;
-        if (interpolatedAge !== null && birthYear !== null) {
-          interpolatedAge = year - birthYear + monthFraction;
-        }
-
-        // Calculate interpolated net worth for this month
-        const monthNetWorth = interpolate(startOfYearNetWorth, currentRow.netWorth);
-
-        // Calculate years from now for this month (for inflation adjustment)
-        const yearsFromNow = i + monthFraction;
-
-        // Calculate monthly spending based on interpolated net worth
-        const monthlySpend = calculateLevelBasedSpending(
-          monthNetWorth,
-          settings,
-          yearsFromNow
-        );
-        const annualSpending = monthlySpend * 12;
-
-        // Calculate savings: yearly contribution (with growth) minus spending increase from base
-        const spendingIncrease = annualSpending - baseAnnualSpend;
-        const annualSavings = yearlyContributionGrown - spendingIncrease;
-
-        // Calculate SWR amounts based on interpolated net worth
-        const monthSwrAmounts = calculateSwrAmounts(monthNetWorth, primaryProjection.scenario.swr);
-
-        // Calculate FI target and progress based on monthly spend
-        const monthFiTarget = calculateFiTarget(monthlySpend, primaryProjection.scenario.swr);
-        const monthFiProgress = monthFiTarget > 0 ? (monthNetWorth / monthFiTarget) * 100 : 0;
-
-        // Check if SWR covers spend for this month
-        const monthSwrCoversSpend = monthlySpend > 0 && monthSwrAmounts.monthly >= monthlySpend;
-
-        monthlyRows.push({
-          year: year,
-          displayYear: `${monthNames[month]} ${year}`,
-          monthIndex: month,
-          age: interpolatedAge,
-          yearsFromEntry: i === 0 ? monthFraction : (i + monthFraction),
-          netWorth: monthNetWorth,
-          interest: currentRow.interest * monthFraction,
-          contributed: currentRow.contributed * monthFraction,
-          annualSwr: monthSwrAmounts.annual,
-          monthlySwr: monthSwrAmounts.monthly,
-          weeklySwr: monthSwrAmounts.weekly,
-          dailySwr: monthSwrAmounts.daily,
-          monthlySpend: monthlySpend,
-          annualSpending: annualSpending,
-          annualSavings: annualSavings,
-          fiTarget: monthFiTarget,
-          fiProgress: monthFiProgress,
-          coastFiYear: currentRow.coastFiYear,
-          coastFiAge: currentRow.coastFiAge,
-          isFiYear: currentRow.isFiYear && month === 11, // Mark last month (December) of FI year
-          isCrossover: currentRow.isCrossover && month === 11,
-          swrCoversSpend: monthSwrCoversSpend,
-          grossIncome: currentRow.grossIncome,
-          totalTax: currentRow.totalTax,
-          netIncome: currentRow.netIncome,
-          preTaxContributions: currentRow.preTaxContributions,
-        });
-      }
+    
+    if (!primaryProjection.monthlyProjections || primaryProjection.monthlyProjections.length === 0) {
+      // Fallback: if no monthly projections, return yearly
+      return primaryProjection.projections.map(row => ({
+        year: row.year,
+        age: row.age,
+        yearsFromEntry: row.yearsFromEntry,
+        netWorth: row.netWorth,
+        interest: row.interest,
+        contributed: row.contributed,
+        annualSwr: row.annualSwr,
+        monthlySwr: row.monthlySwr,
+        weeklySwr: row.weeklySwr,
+        dailySwr: row.dailySwr,
+        monthlySpend: row.monthlySpend,
+        annualSpending: row.annualSpending,
+        annualSavings: row.annualSavings,
+        fiTarget: row.fiTarget,
+        fiProgress: row.fiProgress,
+        coastFiYear: row.coastFiYear,
+        coastFiAge: row.coastFiAge,
+        isFiYear: row.isFiYear,
+        isCrossover: row.isCrossover,
+        swrCoversSpend: row.swrCoversSpend,
+        grossIncome: row.grossIncome,
+        totalTax: row.totalTax,
+        netIncome: row.netIncome,
+        preTaxContributions: row.preTaxContributions,
+      }));
     }
 
-    return monthlyRows;
-  }, [viewMode, primaryProjection.projections, primaryProjection.currentNetWorth.total, primaryProjection.scenario, birthDate, birthYear]);
+    // Convert monthly projections to display rows
+    return primaryProjection.monthlyProjections.map((month, idx): DisplayRow => {
+      // Find the corresponding yearly row for additional data (income, taxes, etc.)
+      const yearlyRow = primaryProjection.projections.find(p => p.year === month.year);
+      
+      // Calculate age for this month
+      let age: number | null = null;
+      if (birthYear) {
+        age = month.year - birthYear + (month.month - 1) / 12;
+      }
+
+      return {
+        year: month.year,
+        displayYear: `${monthNames[month.month - 1]} ${month.year}`,
+        monthIndex: month.month - 1,
+        age,
+        yearsFromEntry: month.yearsFromStart,
+        netWorth: month.netWorth,
+        interest: month.cumulativeInterest,
+        contributed: month.cumulativeContributions,
+        annualSwr: month.monthlySwr * 12,
+        monthlySwr: month.monthlySwr,
+        weeklySwr: month.monthlySwr / 4.33,
+        dailySwr: month.monthlySwr / 30,
+        monthlySpend: month.monthlySpending,
+        annualSpending: month.monthlySpending * 12,
+        annualSavings: month.monthlySavings * 12,
+        fiTarget: month.fiTarget,
+        fiProgress: month.fiProgress,
+        coastFiYear: yearlyRow?.coastFiYear ?? null,
+        coastFiAge: yearlyRow?.coastFiAge ?? null,
+        isFiYear: month.swrCoversSpend && idx > 0 && !primaryProjection.monthlyProjections[idx - 1]?.swrCoversSpend,
+        isCrossover: false, // TODO: calculate if needed
+        swrCoversSpend: month.swrCoversSpend,
+        // Tax data from yearly row
+        grossIncome: yearlyRow?.grossIncome,
+        totalTax: yearlyRow?.totalTax,
+        netIncome: yearlyRow?.netIncome,
+        preTaxContributions: yearlyRow?.preTaxContributions,
+      };
+    });
+  }, [viewMode, primaryProjection.projections, primaryProjection.monthlyProjections, birthYear]);
 
   return (
     <div className="flex-1 overflow-auto space-y-4">
@@ -2085,8 +2277,16 @@ function ProjectionsTable({
                         <td className="py-2.5 px-4 text-right font-mono text-slate-500">
                           {diff !== null && !metric.isInput ? (
                             <span className={diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400/70' : ''}>
-                              {metric.format === 'currency' && (diff > 0 ? '+' : '')}{
-                                metric.format === 'currency' ? formatCurrency(diff) :
+                              {metric.format === 'currency' && (diff > 0 ? '+' : '')}
+                              {metric.format === 'currency' ? (
+                                <SimpleTrackedValue 
+                                  value={diff} 
+                                  name={`${metric.label} Difference`} 
+                                  description={`Difference between first and last scenario for ${metric.label}`}
+                                  formula="Last Scenario Value - First Scenario Value"
+                                  className={diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400/70' : ''}
+                                />
+                              ) :
                                 metric.format === 'percent' ? `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%` :
                                 metric.format === 'years' ? `${diff > 0 ? '+' : ''}${diff}y` :
                                 `${diff > 0 ? '+' : ''}${diff}`
@@ -2214,24 +2414,35 @@ function ProjectionsTable({
                     const isFirstScenario = scenarioIndex === 0;
                     const isLastScenario = scenarioIndex === scenarioProjections.length - 1;
 
-                    // For monthly view, we need to interpolate from start to end of year
+                    // Get net worth and FI status
                     let netWorthValue = 0;
                     let isFiYear = false;
 
-                    if (viewMode === 'monthly') {
-                      const currentYearRow = sp.projections.find(p => p.year === lookupYear);
-                      const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
-
-                      // monthFraction for end-of-month: Jan=1/12, Feb=2/12, ..., Dec=12/12
-                      const monthFraction = ((row.monthIndex || 0) + 1) / 12;
-
-                      if (currentYearRow) {
-                        // For first year, start from current net worth; otherwise from previous year's end
-                        const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
-                        netWorthValue = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
+                    if (viewMode === 'monthly' && sp.monthlyProjections?.length) {
+                      // Find the matching month in this scenario's monthly projections
+                      const monthData = sp.monthlyProjections.find(
+                        m => m.year === lookupYear && m.month === ((row.monthIndex || 0) + 1)
+                      );
+                      
+                      if (monthData) {
+                        netWorthValue = monthData.netWorth;
+                        // Mark as FI year if this is the first month where SWR covers spend
+                        const prevMonthIndex = sp.monthlyProjections.findIndex(
+                          m => m.year === lookupYear && m.month === ((row.monthIndex || 0) + 1)
+                        );
+                        const prevMonth = prevMonthIndex > 0 ? sp.monthlyProjections[prevMonthIndex - 1] : null;
+                        isFiYear = monthData.swrCoversSpend && (!prevMonth || !prevMonth.swrCoversSpend);
+                      } else {
+                        // Fallback to interpolation
+                        const currentYearRow = sp.projections.find(p => p.year === lookupYear);
+                        const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
+                        const monthFraction = ((row.monthIndex || 0) + 1) / 12;
+                        if (currentYearRow) {
+                          const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
+                          netWorthValue = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
+                        }
+                        isFiYear = (currentYearRow?.isFiYear ?? false) && (row.monthIndex || 0) === 11;
                       }
-
-                      isFiYear = (currentYearRow?.isFiYear ?? false) && (row.monthIndex || 0) === 11;
                     } else {
                       const scenarioRow = sp.projections.find(p => p.year === lookupYear);
                       netWorthValue = scenarioRow?.netWorth || 0;
@@ -2239,61 +2450,57 @@ function ProjectionsTable({
                     }
 
                     // Calculate other values
+                    // For monthly view, use actual monthly projections data (where spending updates each month)
+                    // For yearly view, use yearly projections
                     const scenarioRow = sp.projections.find(p => p.year === lookupYear);
-                    const spendingValue = scenarioRow?.annualSpending || 0;
-                    const spendingDisplayValue = viewMode === 'monthly' ? spendingValue / 12 : spendingValue;
-
-                    const savings = scenarioRow?.annualSavings || 0;
-                    const savingsDisplayValue = viewMode === 'monthly' ? savings / 12 : savings;
-
-                    // SWR calculation
+                    
+                    let spendingDisplayValue = 0;
+                    let savingsDisplayValue = 0;
                     let monthlySwr = 0;
                     let swrCoversSpend = false;
                     let swrDisplayValue = 0;
-
-                    if (viewMode === 'monthly') {
-                      const currentYearRow = sp.projections.find(p => p.year === lookupYear);
-                      const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
-
-                      if (currentYearRow) {
-                        // Calculate interpolated net worth for this month
-                        const monthFraction = ((row.monthIndex || 0) + 1) / 12;
-                        const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
-                        const monthNetWorth = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
-
-                        // Calculate SWR based on interpolated net worth
-                        const swrAmounts = calculateSwrAmounts(monthNetWorth, sp.scenario.swr);
-                        monthlySwr = swrAmounts.monthly;
-                        swrCoversSpend = currentYearRow.monthlySpend > 0 && monthlySwr >= currentYearRow.monthlySpend;
-                        swrDisplayValue = monthlySwr;
-                      }
-                    } else {
-                      monthlySwr = scenarioRow?.monthlySwr || 0;
-                      swrCoversSpend = scenarioRow?.swrCoversSpend || false;
-                      swrDisplayValue = monthlySwr * 12;
-                    }
-
-                    // FI Progress calculation
                     let fiProgress = 0;
-                    if (viewMode === 'monthly') {
-                      const currentYearRow = sp.projections.find(p => p.year === lookupYear);
-                      const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
+                    let fiTarget = 0;
 
-                      if (currentYearRow) {
-                        // Calculate interpolated net worth for this month
-                        const monthFraction = ((row.monthIndex || 0) + 1) / 12;
-                        const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
-                        const monthNetWorth = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
-
-                        // Calculate FI target and progress based on interpolated net worth
-                        const fiTarget = calculateFiTarget(currentYearRow.monthlySpend, sp.scenario.swr);
-                        fiProgress = fiTarget > 0 ? (monthNetWorth / fiTarget) * 100 : 0;
+                    if (viewMode === 'monthly' && sp.monthlyProjections?.length) {
+                      // Find the matching month in this scenario's monthly projections
+                      const monthData = sp.monthlyProjections.find(
+                        m => m.year === lookupYear && m.month === ((row.monthIndex || 0) + 1)
+                      );
+                      
+                      if (monthData) {
+                        // Use actual monthly spending (calculated based on that month's net worth)
+                        spendingDisplayValue = monthData.monthlySpending;
+                        savingsDisplayValue = monthData.monthlySavings;
+                        monthlySwr = monthData.monthlySwr;
+                        swrDisplayValue = monthData.monthlySwr;
+                        swrCoversSpend = monthData.swrCoversSpend;
+                        fiTarget = monthData.fiTarget;
+                        fiProgress = monthData.fiProgress;
+                      } else {
+                        // Fallback to yearly data divided by 12
+                        spendingDisplayValue = (scenarioRow?.annualSpending || 0) / 12;
+                        savingsDisplayValue = (scenarioRow?.annualSavings || 0) / 12;
+                        monthlySwr = scenarioRow?.monthlySwr || 0;
+                        swrDisplayValue = monthlySwr;
+                        swrCoversSpend = scenarioRow?.swrCoversSpend || false;
+                        fiTarget = scenarioRow?.fiTarget || 0;
+                        fiProgress = scenarioRow?.fiProgress || 0;
                       }
                     } else {
+                      // Yearly view - use yearly projections
+                      spendingDisplayValue = scenarioRow?.annualSpending || 0;
+                      savingsDisplayValue = scenarioRow?.annualSavings || 0;
+                      monthlySwr = scenarioRow?.monthlySwr || 0;
+                      swrDisplayValue = monthlySwr * 12; // Show annual SWR
+                      swrCoversSpend = scenarioRow?.swrCoversSpend || false;
+                      fiTarget = scenarioRow?.fiTarget || 0;
                       fiProgress = scenarioRow?.fiProgress || 0;
                     }
 
-                    // Income values
+                    const savings = savingsDisplayValue;
+
+                    // Income values (still from yearly, divided by 12 for monthly)
                     const income = scenarioRow?.grossIncome || 0;
                     const hasIncome = sp.hasDynamicIncome && income > 0;
                     const incomeDisplayValue = viewMode === 'monthly' ? income / 12 : income;
@@ -2344,30 +2551,80 @@ function ProjectionsTable({
                         </td>
                         {/* Net Worth */}
                         <td className="py-2 px-3 text-right font-mono" style={{ color: sp.scenario.color }}>
-                          {formatCurrency(netWorthValue)}
+                          <SimpleTrackedValue
+                            value={netWorthValue}
+                            name={`Net Worth (${displayYearValue})`}
+                            description={`Projected net worth for ${sp.scenario.name} in ${displayYearValue}`}
+                            formula="Previous NW × (1 + Rate) + Contributions - Spending"
+                            inputs={[
+                              { name: 'Return Rate', value: `${sp.scenario.currentRate}%` },
+                              { name: 'Scenario', value: sp.scenario.name },
+                            ]}
+                            className="font-mono"
+                          />
                           {isFiYear && <span className="ml-1 text-xs text-emerald-400">FI</span>}
                         </td>
                         {/* Spending */}
                         <td className="py-2 px-3 text-right font-mono text-rose-400/80">
-                          {formatCurrency(spendingDisplayValue)}
+                          <SimpleTrackedValue
+                            value={spendingDisplayValue}
+                            name={`Spending (${displayYearValue})`}
+                            description={`Level-based spending budget for ${displayYearValue}`}
+                            formula={`Base Budget (inflation-adj) + Net Worth × ${sp.scenario.spendingGrowthRate}%`}
+                            inputs={[
+                              { name: 'Period', value: viewMode === 'monthly' ? 'Monthly' : 'Annual' },
+                              { name: 'Base Budget', value: sp.scenario.baseMonthlyBudget, unit: '$' },
+                            ]}
+                            className="font-mono text-rose-400/80"
+                          />
                         </td>
                         {/* Savings */}
                         <td className={`py-2 px-3 text-right font-mono ${
                           savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'
                         }`}>
-                          {formatCurrency(savingsDisplayValue)}
+                          <SimpleTrackedValue
+                            value={savingsDisplayValue}
+                            name={`Savings (${displayYearValue})`}
+                            description={`Net savings after spending for ${displayYearValue}`}
+                            formula="Income - Taxes - Spending"
+                            inputs={[
+                              { name: 'Period', value: viewMode === 'monthly' ? 'Monthly' : 'Annual' },
+                            ]}
+                            className={`font-mono ${savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'}`}
+                          />
                         </td>
                         {/* SWR */}
                         <td className={`py-2 px-3 text-right font-mono ${
                           swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'
                         }`}>
-                          {formatCurrency(swrDisplayValue)}
+                          <SimpleTrackedValue
+                            value={swrDisplayValue}
+                            name={`SWR (${displayYearValue})`}
+                            description={`Safe withdrawal amount for ${displayYearValue} at ${sp.scenario.swr}% SWR`}
+                            formula={`Net Worth × ${sp.scenario.swr}%${viewMode === 'monthly' ? ' ÷ 12' : ''}`}
+                            inputs={[
+                              { name: 'Net Worth', value: netWorthValue, unit: '$' },
+                              { name: 'SWR', value: `${sp.scenario.swr}%` },
+                            ]}
+                            className={`font-mono ${swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'}`}
+                          />
                         </td>
                         {/* FI Progress */}
                         <td className={`py-2 px-3 text-right font-mono ${
                           fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'
                         }`}>
-                          {fiProgress.toFixed(1)}%
+                          <SimpleTrackedValue
+                            value={fiProgress}
+                            name={`FI Progress (${displayYearValue})`}
+                            description={`Progress towards financial independence for ${displayYearValue}`}
+                            formula={`(Net Worth ÷ FI Target) × 100`}
+                            inputs={[
+                              { name: 'Net Worth', value: netWorthValue, unit: '$' },
+                              { name: 'FI Target', value: fiTarget, unit: '$' },
+                            ]}
+                            unit="%"
+                            className={`font-mono ${fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}
+                          />
                         </td>
                         {/* Income columns (only if any scenario has income data) */}
                         {scenarioProjections.some(sp => sp.hasDynamicIncome) && (
@@ -2375,17 +2632,41 @@ function ProjectionsTable({
                             <td className={`py-2 px-3 text-right font-mono ${
                               hasIncome ? 'text-sky-400/80' : 'text-slate-500'
                             }`}>
-                              {hasIncome ? formatCurrency(incomeDisplayValue) : '-'}
+                              {hasIncome ? (
+                                <SimpleTrackedValue
+                                  value={incomeDisplayValue}
+                                  name={`Income (${displayYearValue})`}
+                                  description={`Gross income for ${displayYearValue}`}
+                                  formula={`Base Income × (1 + ${sp.scenario.incomeGrowthRate || 0}%)^years`}
+                                  className="font-mono text-sky-400/80"
+                                />
+                              ) : '-'}
                             </td>
                             <td className={`py-2 px-3 text-right font-mono ${
                               hasTax ? 'text-red-400/80' : 'text-slate-500'
                             }`}>
-                              {hasTax ? formatCurrency(taxDisplayValue) : '-'}
+                              {hasTax ? (
+                                <SimpleTrackedValue
+                                  value={taxDisplayValue}
+                                  name={`Taxes (${displayYearValue})`}
+                                  description={`Total taxes (Federal + State + FICA) for ${displayYearValue}`}
+                                  formula="Federal Tax + State Tax + FICA"
+                                  className="font-mono text-red-400/80"
+                                />
+                              ) : '-'}
                             </td>
                             <td className={`py-2 px-3 text-right font-mono ${
                               hasNetIncome ? 'text-emerald-400/80' : 'text-slate-500'
                             }`}>
-                              {hasNetIncome ? formatCurrency(netIncomeDisplayValue) : '-'}
+                              {hasNetIncome ? (
+                                <SimpleTrackedValue
+                                  value={netIncomeDisplayValue}
+                                  name={`Net Income (${displayYearValue})`}
+                                  description={`Take-home pay after taxes for ${displayYearValue}`}
+                                  formula="Gross Income - Pre-Tax Contributions - Total Taxes"
+                                  className="font-mono text-emerald-400/80"
+                                />
+                              ) : '-'}
                             </td>
                           </>
                         )}
@@ -2434,25 +2715,33 @@ function UnifiedChartTooltip({ active, payload, label, timeUnit }: any) {
             {data.data.fiProgress !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">FI Progress:</span>
-                <span className="text-emerald-400 font-mono">{data.data.fiProgress.toFixed(1)}%</span>
+                <SimpleTrackedValue 
+                  value={data.data.fiProgress} 
+                  name={`Year ${data.data.year} FI Progress`} 
+                  description="Percentage of FI target achieved"
+                  formula="(Net Worth ÷ FI Target) × 100"
+                  formatAs="percent"
+                  decimals={1}
+                  className="text-emerald-400 font-mono"
+                />
               </div>
             )}
             {data.data.netWorth !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">Net Worth:</span>
-                <span className="text-sky-400 font-mono">{formatCurrency(data.data.netWorth)}</span>
+                <SimpleTrackedValue value={data.data.netWorth} name={`Year ${data.data.year} Net Worth`} description="Projected net worth at this point" formula="Prior Year × (1 + Return) + Savings" className="text-sky-400 font-mono" />
               </div>
             )}
             {data.data.spending !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">{spendingLabel}:</span>
-                <span className="text-amber-400 font-mono">{formatCurrency(data.data.spending)}</span>
+                <SimpleTrackedValue value={data.data.spending} name={`Year ${data.data.year} ${spendingLabel}`} description="Projected spending at this point" formula="Base + (Net Worth × Rate)" className="text-amber-400 font-mono" />
               </div>
             )}
             {data.data.savings !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">{savingsLabel}:</span>
-                <span className="text-violet-400 font-mono">{formatCurrency(data.data.savings)}</span>
+                <SimpleTrackedValue value={data.data.savings} name={`Year ${data.data.year} ${savingsLabel}`} description="Projected savings at this point" formula="Income - Taxes - Spending" className="text-violet-400 font-mono" />
               </div>
             )}
           </div>
@@ -2776,7 +3065,7 @@ function ProjectionsChart({
                   </div>
                   <div className="flex justify-between">
                     <span>Contribution:</span>
-                    <span className="text-sky-400">{formatCurrency(sp.scenario.yearlyContribution)}/yr</span>
+                    <span className="text-sky-400"><SimpleTrackedValue value={sp.scenario.yearlyContribution} name="Yearly Contribution" description="Annual savings contribution" formula="User Input" className="text-sky-400" />/yr</span>
                   </div>
                 </div>
               </div>
@@ -2803,7 +3092,13 @@ function LevelsTab({
   primaryProjection,
   setActiveTab,
 }: LevelsTabProps) {
-  if (!latestEntry || !primaryProjection) {
+  // Generate tracked level values
+  const trackedLevelValues = useMemo(() => {
+    if (!primaryProjection) return null;
+    return createTrackedLevelValues(primaryProjection.levelInfo, primaryProjection.scenario);
+  }, [primaryProjection]);
+
+  if (!latestEntry || !primaryProjection || !trackedLevelValues) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
@@ -2845,7 +3140,7 @@ function LevelsTab({
               <span className="text-sm text-slate-300 font-medium">{scenario.name}</span>
             </div>
             <p className="text-sm text-slate-300">
-              Budget Formula: <span className="text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)} base</span> + <span className="text-emerald-400">{formatCurrency(levelInfo.netWorthPortion)} from net worth</span> = <span className="text-violet-400 font-mono">{formatCurrency(levelInfo.unlockedAtNetWorth)}/mo</span>
+              Budget Formula: <TrackedValue value={trackedLevelValues.baseBudget} className="text-amber-400" /> base + <TrackedValue value={trackedLevelValues.netWorthPortion} className="text-emerald-400" /> from net worth = <TrackedValue value={trackedLevelValues.monthlyBudget} className="text-violet-400 font-mono" />/mo
             </p>
           </div>
           <button
@@ -2868,7 +3163,7 @@ function LevelsTab({
           </div>
           <div className="text-right">
             <p className="text-slate-400 text-sm mb-1">Net Worth</p>
-            <p className="text-2xl font-mono text-emerald-400">{formatCurrency(levelInfo.netWorth)}</p>
+            <TrackedValue value={trackedLevelValues.netWorth} className="text-2xl font-mono text-emerald-400" />
           </div>
         </div>
 
@@ -2878,7 +3173,7 @@ function LevelsTab({
             <div className="flex items-center justify-between mb-2">
               <span className="text-slate-400 text-sm">Progress to Level {levelInfo.nextLevel.level}: {levelInfo.nextLevel.name}</span>
               <span className="text-slate-300 text-sm font-mono">
-                {formatCurrency(levelInfo.amountToNext)} to go
+                <TrackedValue value={trackedLevelValues.amountToNext} className="text-slate-300" /> to go
               </span>
             </div>
             <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
@@ -2888,9 +3183,25 @@ function LevelsTab({
               />
             </div>
             <div className="flex justify-between mt-2 text-xs text-slate-500">
-              <span>{formatCurrency(levelInfo.currentLevel.threshold)}</span>
-              <span className="text-violet-400">{levelInfo.progressToNext.toFixed(1)}%</span>
-              <span>{formatCurrency(levelInfo.nextLevel.threshold)}</span>
+              <SimpleTrackedValue
+                value={levelInfo.currentLevel.threshold}
+                name="Current Level Threshold"
+                description={`Net worth threshold for Level ${levelInfo.currentLevel.level} (${levelInfo.currentLevel.name})`}
+                formula="Predefined Level Threshold"
+                className="text-slate-500"
+              />
+              <SimpleTrackedValue 
+                value={levelInfo.progressToNext} 
+                name="Progress to Next Level"
+                description="How close you are to reaching the next FI level"
+                formula="(Net Worth - Current Threshold) ÷ (Next Threshold - Current Threshold) × 100"
+                formatAs="percent"
+                decimals={1}
+                className="text-violet-400"
+              />
+              {trackedLevelValues.nextLevelThreshold && (
+                <TrackedValue value={trackedLevelValues.nextLevelThreshold} className="text-slate-500" />
+              )}
             </div>
           </div>
         ) : (
@@ -2904,21 +3215,21 @@ function LevelsTab({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div className="bg-slate-900/50 rounded-xl p-4">
             <p className="text-slate-500 text-xs mb-1">Your Unlocked Monthly Budget</p>
-            <p className="text-3xl font-mono text-violet-400">{formatCurrency(levelInfo.unlockedAtNetWorth)}</p>
+            <TrackedValue value={trackedLevelValues.monthlyBudget} className="text-3xl font-mono text-violet-400" />
             <div className="mt-2 text-xs space-y-1">
               <div className="flex justify-between text-slate-500">
                 <span>Base (inflation-adjusted):</span>
-                <span className="font-mono text-amber-400">{formatCurrency(levelInfo.baseBudgetInflationAdjusted)}</span>
+                <TrackedValue value={trackedLevelValues.baseBudget} className="font-mono text-amber-400" />
               </div>
               <div className="flex justify-between text-slate-500">
-                <span>From net worth ({(levelInfo.spendingRate * 100).toFixed(1)}%):</span>
-                <span className="font-mono text-emerald-400">+{formatCurrency(levelInfo.netWorthPortion)}</span>
+                <span>From net worth (<SimpleTrackedValue value={levelInfo.spendingRate * 100} name="Spending Rate" description="Percentage of net worth added to monthly budget" formula="Scenario Spending Growth Rate" formatAs="percent" decimals={1} className="text-slate-500" />):</span>
+                <span className="font-mono text-emerald-400">+<TrackedValue value={trackedLevelValues.netWorthPortion} className="text-emerald-400" /></span>
               </div>
             </div>
           </div>
           <div className="bg-slate-900/50 rounded-xl p-4">
             <p className="text-slate-500 text-xs mb-1">Annual Budget</p>
-            <p className="text-3xl font-mono text-violet-400">{formatCurrency(levelInfo.unlockedAtNetWorth * 12)}</p>
+            <TrackedValue value={trackedLevelValues.annualBudget} className="text-3xl font-mono text-violet-400" />
             <p className="text-slate-600 text-xs mt-2">
               Based on {scenario.name} scenario settings
             </p>
@@ -2967,17 +3278,17 @@ function LevelsTab({
                   </div>
                 </td>
                 <td className="py-2 px-4 text-right font-mono text-slate-400">
-                  {level.threshold === 0 ? '-' : formatCurrency(level.threshold, 0)}
+                  {level.threshold === 0 ? '-' : <SimpleTrackedValue value={level.threshold} name={`${level.name} Threshold`} description={`Net worth required to reach ${level.name} level`} formula="FI Target × Level Multiplier" decimals={0} className="text-slate-400" />}
                 </td>
                 <td className={`py-2 px-4 text-right font-mono ${
                   level.isCurrent ? 'text-violet-400 font-semibold' : level.isUnlocked ? 'text-emerald-400' : 'text-slate-500'
                 }`}>
-                  {formatCurrency(level.monthlyBudget, 0)}
+                  <SimpleTrackedValue value={level.monthlyBudget} name={`${level.name} Monthly Budget`} description={`Monthly spending budget at ${level.name} level`} formula={`Base Budget + (Threshold × SWR ÷ 12)`} decimals={0} className={level.isCurrent ? 'text-violet-400 font-semibold' : level.isUnlocked ? 'text-emerald-400' : 'text-slate-500'} />
                 </td>
                 <td className={`py-2 px-4 text-right font-mono ${
                   level.isCurrent ? 'text-violet-400/80' : level.isUnlocked ? 'text-emerald-400/80' : 'text-slate-600'
                 }`}>
-                  {formatCurrency(level.monthlyBudget * 12, 0)}
+                  <SimpleTrackedValue value={level.monthlyBudget * 12} name={`${level.name} Annual Budget`} description={`Annual spending at ${level.name} level`} formula="Monthly Budget × 12" decimals={0} className={level.isCurrent ? 'text-violet-400/80' : level.isUnlocked ? 'text-emerald-400/80' : 'text-slate-600'} />
                 </td>
               </tr>
             ))}
@@ -3024,7 +3335,7 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
           </div>
           <div className="text-left">
             <h4 className="text-sm font-semibold text-slate-200">Tax Calculation Details</h4>
-            <p className="text-xs text-slate-500">See exactly how your {formatCurrency(taxes.totalTax)} tax burden is calculated</p>
+            <p className="text-xs text-slate-500">See exactly how your <SimpleTrackedValue value={taxes.totalTax} name="Total Tax Burden" description="Sum of all taxes: Federal + State + FICA" formula="Federal Tax + State Tax + Social Security + Medicare" className="text-slate-500" /> tax burden is calculated</p>
           </div>
         </div>
         <svg
@@ -3044,15 +3355,15 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
           <div className="grid grid-cols-3 gap-4 text-center pb-4 border-b border-slate-700">
             <div>
               <p className="text-xs text-slate-500 uppercase mb-1">Gross Income</p>
-              <p className="text-lg font-mono text-slate-200">{formatCurrency(taxes.grossIncome)}</p>
+              <SimpleTrackedValue value={taxes.grossIncome} name="Gross Income" description="Total income before any deductions" formula="Annual Salary + Other Income" className="text-lg font-mono text-slate-200" />
             </div>
             <div>
               <p className="text-xs text-slate-500 uppercase mb-1">Total Tax</p>
-              <p className="text-lg font-mono text-red-400">{formatCurrency(taxes.totalTax)}</p>
+              <SimpleTrackedValue value={taxes.totalTax} name="Total Tax" description="All taxes combined" formula="Federal + State + FICA" inputs={[{ name: 'Federal', value: taxes.federalTax, unit: '$' }, { name: 'State', value: taxes.stateTax, unit: '$' }, { name: 'FICA', value: taxes.fica.totalFicaTax, unit: '$' }]} className="text-lg font-mono text-red-400" />
             </div>
             <div>
               <p className="text-xs text-slate-500 uppercase mb-1">Net Income</p>
-              <p className="text-lg font-mono text-emerald-400">{formatCurrency(taxes.netIncome)}</p>
+              <SimpleTrackedValue value={taxes.netIncome} name="Net Income" description="Take-home pay after all deductions and taxes" formula="Gross - Pre-Tax - Total Taxes" inputs={[{ name: 'Gross', value: taxes.grossIncome, unit: '$' }, { name: 'Pre-Tax', value: taxes.totalPreTaxContributions, unit: '$' }, { name: 'Taxes', value: taxes.totalTax, unit: '$' }]} className="text-lg font-mono text-emerald-400" />
             </div>
           </div>
 
@@ -3066,35 +3377,35 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
               <div className="bg-slate-900/50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">Gross Income</span>
-                  <span className="font-mono text-slate-200">{formatCurrency(taxes.grossIncome)}</span>
+                  <SimpleTrackedValue value={taxes.grossIncome} name="Gross Income" description="Total income before deductions" formula="Annual Salary" className="font-mono text-slate-200" />
                 </div>
                 {taxes.preTaxContributions.traditional401k > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">− 401(k) Contribution</span>
-                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.traditional401k)}</span>
+                    <span className="font-mono text-emerald-400">−<SimpleTrackedValue value={taxes.preTaxContributions.traditional401k} name="401(k) Contribution" description="Pre-tax contribution to 401(k) retirement account" formula="User Input" className="text-emerald-400" /></span>
                   </div>
                 )}
                 {taxes.preTaxContributions.traditionalIRA > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">− Traditional IRA</span>
-                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.traditionalIRA)}</span>
+                    <span className="font-mono text-emerald-400">−<SimpleTrackedValue value={taxes.preTaxContributions.traditionalIRA} name="Traditional IRA" description="Pre-tax contribution to Traditional IRA" formula="User Input" className="text-emerald-400" /></span>
                   </div>
                 )}
                 {taxes.preTaxContributions.hsa > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">− HSA Contribution</span>
-                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.hsa)}</span>
+                    <span className="font-mono text-emerald-400">−<SimpleTrackedValue value={taxes.preTaxContributions.hsa} name="HSA Contribution" description="Pre-tax contribution to Health Savings Account" formula="User Input" className="text-emerald-400" /></span>
                   </div>
                 )}
                 {taxes.preTaxContributions.other > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">− Other Pre-tax</span>
-                    <span className="font-mono text-emerald-400">−{formatCurrency(taxes.preTaxContributions.other)}</span>
+                    <span className="font-mono text-emerald-400">−<SimpleTrackedValue value={taxes.preTaxContributions.other} name="Other Pre-tax" description="Other pre-tax deductions" formula="User Input" className="text-emerald-400" /></span>
                   </div>
                 )}
                 <div className="border-t border-slate-700 pt-2 flex justify-between text-sm font-medium">
                   <span className="text-slate-300">Adjusted Gross Income (AGI)</span>
-                  <span className="font-mono text-slate-200">{formatCurrency(taxes.adjustedGrossIncome)}</span>
+                  <SimpleTrackedValue value={taxes.adjustedGrossIncome} name="Adjusted Gross Income" description="Gross income minus pre-tax deductions" formula="Gross Income - Pre-Tax Contributions" inputs={[{ name: 'Gross', value: taxes.grossIncome, unit: '$' }, { name: 'Pre-Tax', value: taxes.totalPreTaxContributions, unit: '$' }]} className="font-mono text-slate-200" />
                 </div>
               </div>
             </div>
@@ -3115,17 +3426,21 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                   <span className="text-slate-400">
                     {taxes.totalPreTaxContributions > 0 ? 'Adjusted Gross Income' : 'Gross Income'}
                   </span>
-                  <span className="font-mono text-slate-200">
-                    {formatCurrency(taxes.totalPreTaxContributions > 0 ? taxes.adjustedGrossIncome : taxes.grossIncome)}
-                  </span>
+                  <SimpleTrackedValue 
+                    value={taxes.totalPreTaxContributions > 0 ? taxes.adjustedGrossIncome : taxes.grossIncome} 
+                    name={taxes.totalPreTaxContributions > 0 ? "Adjusted Gross Income" : "Gross Income"}
+                    description={taxes.totalPreTaxContributions > 0 ? "Income after pre-tax deductions" : "Total income before deductions"}
+                    formula={taxes.totalPreTaxContributions > 0 ? "Gross Income - Pre-Tax Contributions" : "Annual Salary"}
+                    className="font-mono text-slate-200" 
+                  />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">− Standard Deduction ({taxes.filingStatus.replace('_', ' ')})</span>
-                  <span className="font-mono text-blue-400">−{formatCurrency(taxes.federalStandardDeduction)}</span>
+                  <span className="font-mono text-blue-400">−<SimpleTrackedValue value={taxes.federalStandardDeduction} name="Federal Standard Deduction" description={`Standard deduction for ${taxes.filingStatus.replace('_', ' ')} filing status`} formula="IRS Standard Deduction Amount" className="text-blue-400" /></span>
                 </div>
                 <div className="border-t border-slate-700 pt-2 flex justify-between text-sm font-medium">
                   <span className="text-slate-300">Federal Taxable Income</span>
-                  <span className="font-mono text-slate-200">{formatCurrency(taxes.federalTaxableIncome)}</span>
+                  <SimpleTrackedValue value={taxes.federalTaxableIncome} name="Federal Taxable Income" description="Income subject to federal tax after deductions" formula="AGI - Standard Deduction" inputs={[{ name: 'AGI', value: taxes.adjustedGrossIncome, unit: '$' }, { name: 'Std Deduction', value: taxes.federalStandardDeduction, unit: '$' }]} className="font-mono text-slate-200" />
                 </div>
               </div>
 
@@ -3148,13 +3463,13 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                           />
                           <div className="absolute inset-0 flex items-center justify-between px-2">
                             <span className="text-slate-400">
-                              {formatCurrency(bracket.bracketMin, 0)} – {bracket.bracketMax === Infinity ? '∞' : formatCurrency(bracket.bracketMax, 0)}
+                              <SimpleTrackedValue value={bracket.bracketMin} name={`Bracket ${idx + 1} Min`} description={`Lower bound of ${formatPercent(bracket.rate, 0)} tax bracket`} formula="IRS Tax Bracket" decimals={0} className="text-slate-400" /> – {bracket.bracketMax === Infinity ? '∞' : <SimpleTrackedValue value={bracket.bracketMax} name={`Bracket ${idx + 1} Max`} description={`Upper bound of ${formatPercent(bracket.rate, 0)} tax bracket`} formula="IRS Tax Bracket" decimals={0} className="text-slate-400" />}
                             </span>
-                            <span className="text-slate-300 font-mono">{formatCurrency(bracket.taxableInBracket, 0)}</span>
+                            <SimpleTrackedValue value={bracket.taxableInBracket} name={`Taxable in ${formatPercent(bracket.rate, 0)} Bracket`} description={`Amount of income taxed at ${formatPercent(bracket.rate, 0)}`} formula={`min(Income in bracket, Bracket size)`} decimals={0} className="text-slate-300 font-mono" />
                           </div>
                         </div>
                         <div className="w-20 text-right font-mono text-red-400">
-                          {formatCurrency(bracket.taxFromBracket)}
+                          <SimpleTrackedValue value={bracket.taxFromBracket} name={`Tax from ${formatPercent(bracket.rate, 0)} Bracket`} description={`Tax calculated from income in this bracket`} formula={`${formatCurrency(bracket.taxableInBracket, 0)} × ${formatPercent(bracket.rate, 0)}`} className="text-red-400" />
                         </div>
                       </div>
                     ))}
@@ -3171,7 +3486,7 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                       (Marginal: {formatPercent(taxes.marginalFederalRate)} • Effective: {formatPercent(taxes.effectiveFederalRate)})
                     </span>
                   </div>
-                  <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.federalTax)}</span>
+                  <SimpleTrackedValue value={taxes.federalTax} name="Federal Income Tax" description="Total federal income tax from all brackets" formula="Sum of tax from each bracket" inputs={taxes.federalBracketBreakdown.map((b, i) => ({ name: `${formatPercent(b.rate, 0)} bracket`, value: b.taxFromBracket, unit: '$' }))} className="text-lg font-mono text-red-400" />
                 </div>
               </div>
             </div>
@@ -3199,23 +3514,23 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-400">Adjusted Gross Income</span>
-                      <span className="font-mono text-slate-200">{formatCurrency(taxes.adjustedGrossIncome)}</span>
+                      <SimpleTrackedValue value={taxes.adjustedGrossIncome} name="AGI for State Tax" description="Adjusted gross income used for state tax calculation" formula="Gross - Pre-Tax Contributions" className="font-mono text-slate-200" />
                     </div>
                     {taxes.stateStandardDeduction > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">− State Standard Deduction</span>
-                        <span className="font-mono text-purple-400">−{formatCurrency(taxes.stateStandardDeduction)}</span>
+                        <span className="font-mono text-purple-400">−<SimpleTrackedValue value={taxes.stateStandardDeduction} name="State Standard Deduction" description="State-specific standard deduction amount" formula="State Tax Rules" className="text-purple-400" /></span>
                       </div>
                     )}
                     {taxes.statePersonalExemption > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">− Personal Exemption</span>
-                        <span className="font-mono text-purple-400">−{formatCurrency(taxes.statePersonalExemption)}</span>
+                        <span className="font-mono text-purple-400">−<SimpleTrackedValue value={taxes.statePersonalExemption} name="Personal Exemption" description="State personal exemption amount" formula="State Tax Rules" className="text-purple-400" /></span>
                       </div>
                     )}
                     <div className="border-t border-slate-700 pt-2 flex justify-between text-sm font-medium">
                       <span className="text-slate-300">State Taxable Income</span>
-                      <span className="font-mono text-slate-200">{formatCurrency(taxes.stateTaxableIncome)}</span>
+                      <SimpleTrackedValue value={taxes.stateTaxableIncome} name="State Taxable Income" description="Income subject to state tax" formula="AGI - State Deductions - Exemptions" className="font-mono text-slate-200" />
                     </div>
                   </div>
 
@@ -3241,14 +3556,14 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                               <div className="absolute inset-0 flex items-center justify-between px-2">
                                 <span className="text-slate-400">
                                   {taxes.stateTaxType === 'flat' ? 'All income' : 
-                                    `${formatCurrency(bracket.bracketMin, 0)} – ${bracket.bracketMax === Infinity ? '∞' : formatCurrency(bracket.bracketMax, 0)}`
+                                    <><SimpleTrackedValue value={bracket.bracketMin} name={`State Bracket ${idx+1} Min`} description="Lower bound of state tax bracket" formula="State Tax Rules" decimals={0} className="text-slate-400" /> – {bracket.bracketMax === Infinity ? '∞' : <SimpleTrackedValue value={bracket.bracketMax} name={`State Bracket ${idx+1} Max`} description="Upper bound of state tax bracket" formula="State Tax Rules" decimals={0} className="text-slate-400" />}</>
                                   }
                                 </span>
-                                <span className="text-slate-300 font-mono">{formatCurrency(bracket.taxableInBracket, 0)}</span>
+                                <SimpleTrackedValue value={bracket.taxableInBracket} name={`Taxable in ${formatPercent(bracket.rate, 1)} State Bracket`} description="Amount of income taxed at this rate" formula="Income in bracket" decimals={0} className="text-slate-300 font-mono" />
                               </div>
                             </div>
                             <div className="w-20 text-right font-mono text-red-400">
-                              {formatCurrency(bracket.taxFromBracket)}
+                              <SimpleTrackedValue value={bracket.taxFromBracket} name={`State Tax from ${formatPercent(bracket.rate, 1)} Bracket`} description={`Tax at ${formatPercent(bracket.rate, 1)} rate`} formula={`${formatCurrency(bracket.taxableInBracket, 0)} × ${formatPercent(bracket.rate, 1)}`} className="text-red-400" />
                             </div>
                           </div>
                         ))}
@@ -3265,7 +3580,7 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                           (Marginal: {formatPercent(taxes.marginalStateRate)} • Effective: {formatPercent(taxes.effectiveStateRate)})
                         </span>
                       </div>
-                      <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.stateTax)}</span>
+                      <SimpleTrackedValue value={taxes.stateTax} name="State Income Tax" description="Total state income tax" formula="Sum of tax from state brackets" className="text-lg font-mono text-red-400" />
                     </div>
                   </div>
                 </div>
@@ -3289,19 +3604,19 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Wages Subject to SS</span>
                     <span className="font-mono text-slate-200">
-                      {formatCurrency(taxes.fica.socialSecurityWages)}
+                      <SimpleTrackedValue value={taxes.fica.socialSecurityWages} name="Social Security Wages" description="Wages subject to Social Security tax (capped at wage base)" formula={`min(Gross Income, SS Wage Cap)`} className="text-slate-200" />
                       {taxes.fica.wagesAboveSsCap > 0 && (
-                        <span className="text-slate-500 text-xs ml-1">(capped at {formatCurrency(taxes.fica.socialSecurityWageCap)})</span>
+                        <span className="text-slate-500 text-xs ml-1">(capped at <SimpleTrackedValue value={taxes.fica.socialSecurityWageCap} name="SS Wage Cap" description="Social Security wage base limit for the year" formula="IRS Annual Limit" className="text-slate-500" />)</span>
                       )}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">× {formatPercent(taxes.fica.socialSecurityRate)} rate</span>
-                    <span className="font-mono text-red-400">{formatCurrency(taxes.fica.socialSecurityTax)}</span>
+                    <SimpleTrackedValue value={taxes.fica.socialSecurityTax} name="Social Security Tax" description="Employee portion of Social Security tax" formula={`SS Wages × ${formatPercent(taxes.fica.socialSecurityRate)}`} inputs={[{ name: 'SS Wages', value: taxes.fica.socialSecurityWages, unit: '$' }, { name: 'Rate', value: `${taxes.fica.socialSecurityRate}%` }]} className="font-mono text-red-400" />
                   </div>
                   {taxes.fica.wagesAboveSsCap > 0 && (
                     <p className="text-xs text-emerald-400">
-                      You saved {formatCurrency(taxes.fica.wagesAboveSsCap * (taxes.fica.socialSecurityRate / 100))} because {formatCurrency(taxes.fica.wagesAboveSsCap)} of your income exceeds the SS wage cap
+                      You saved <SimpleTrackedValue value={taxes.fica.wagesAboveSsCap * (taxes.fica.socialSecurityRate / 100)} name="SS Tax Savings" description="Tax saved due to SS wage cap" formula={`Wages Above Cap × SS Rate`} className="text-emerald-400" /> because <SimpleTrackedValue value={taxes.fica.wagesAboveSsCap} name="Wages Above SS Cap" description="Income exceeding the Social Security wage base" formula="Gross - SS Wage Cap" className="text-emerald-400" /> of your income exceeds the SS wage cap
                     </p>
                   )}
                 </div>
@@ -3313,24 +3628,24 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">All Wages × {formatPercent(taxes.fica.medicareBaseRate)} base rate</span>
-                    <span className="font-mono text-red-400">{formatCurrency(taxes.fica.medicareBaseTax)}</span>
+                    <SimpleTrackedValue value={taxes.fica.medicareBaseTax} name="Medicare Base Tax" description="Base Medicare tax on all wages" formula={`Gross Income × ${formatPercent(taxes.fica.medicareBaseRate)}`} className="font-mono text-red-400" />
                   </div>
                   {taxes.fica.additionalMedicareTax > 0 && (
                     <>
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">
-                          Wages above {formatCurrency(taxes.fica.additionalMedicareThreshold)} × {formatPercent(taxes.fica.additionalMedicareRate)} additional rate
+                          Wages above <SimpleTrackedValue value={taxes.fica.additionalMedicareThreshold} name="Additional Medicare Threshold" description="Income threshold for additional Medicare tax" formula="IRS Threshold" className="text-slate-400" /> × {formatPercent(taxes.fica.additionalMedicareRate)} additional rate
                         </span>
-                        <span className="font-mono text-red-400">{formatCurrency(taxes.fica.additionalMedicareTax)}</span>
+                        <SimpleTrackedValue value={taxes.fica.additionalMedicareTax} name="Additional Medicare Tax" description="Additional Medicare tax on high earners" formula={`Wages Above Threshold × ${formatPercent(taxes.fica.additionalMedicareRate)}`} className="font-mono text-red-400" />
                       </div>
                       <p className="text-xs text-amber-400">
-                        Additional Medicare Tax applies to {formatCurrency(taxes.fica.additionalMedicareWages)} of income above the {formatCurrency(taxes.fica.additionalMedicareThreshold)} threshold
+                        Additional Medicare Tax applies to <SimpleTrackedValue value={taxes.fica.additionalMedicareWages} name="Wages Subject to Additional Medicare" description="Income above the threshold" formula="Gross - Threshold" className="text-amber-400" /> of income above the <SimpleTrackedValue value={taxes.fica.additionalMedicareThreshold} name="Additional Medicare Threshold" description="Income threshold" formula="IRS Rules" className="text-amber-400" /> threshold
                       </p>
                     </>
                   )}
                   <div className="flex justify-between text-sm font-medium border-t border-slate-700 pt-2">
                     <span className="text-slate-300">Total Medicare Tax</span>
-                    <span className="font-mono text-red-400">{formatCurrency(taxes.fica.totalMedicareTax)}</span>
+                    <SimpleTrackedValue value={taxes.fica.totalMedicareTax} name="Total Medicare Tax" description="Base Medicare + Additional Medicare tax" formula="Base Medicare + Additional Medicare" inputs={[{ name: 'Base', value: taxes.fica.medicareBaseTax, unit: '$' }, { name: 'Additional', value: taxes.fica.additionalMedicareTax, unit: '$' }]} className="font-mono text-red-400" />
                   </div>
                 </div>
               </div>
@@ -3344,7 +3659,7 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
                       (Effective: {formatPercent(taxes.fica.effectiveFicaRate)})
                     </span>
                   </div>
-                  <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.fica.totalFicaTax)}</span>
+                  <SimpleTrackedValue value={taxes.fica.totalFicaTax} name="Total FICA Tax" description="Combined Social Security and Medicare taxes" formula="Social Security Tax + Total Medicare Tax" inputs={[{ name: 'SS Tax', value: taxes.fica.socialSecurityTax, unit: '$' }, { name: 'Medicare', value: taxes.fica.totalMedicareTax, unit: '$' }]} className="text-lg font-mono text-red-400" />
                 </div>
               </div>
             </div>
@@ -3356,27 +3671,27 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">Federal Income Tax</span>
-                <span className="font-mono text-red-400">{formatCurrency(taxes.federalTax)}</span>
+                <SimpleTrackedValue value={taxes.federalTax} name="Federal Income Tax" description="Total federal income tax" formula="Sum of tax from all federal brackets" className="font-mono text-red-400" />
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">State Income Tax</span>
-                <span className="font-mono text-red-400">{formatCurrency(taxes.stateTax)}</span>
+                <SimpleTrackedValue value={taxes.stateTax} name="State Income Tax" description="Total state income tax" formula="Sum of tax from state brackets" className="font-mono text-red-400" />
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">Social Security</span>
-                <span className="font-mono text-red-400">{formatCurrency(taxes.fica.socialSecurityTax)}</span>
+                <SimpleTrackedValue value={taxes.fica.socialSecurityTax} name="Social Security Tax" description="Employee Social Security tax" formula={`min(Wages, SS Cap) × ${formatPercent(taxes.fica.socialSecurityRate)}`} className="font-mono text-red-400" />
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">Medicare</span>
-                <span className="font-mono text-red-400">{formatCurrency(taxes.fica.totalMedicareTax)}</span>
+                <SimpleTrackedValue value={taxes.fica.totalMedicareTax} name="Medicare Tax" description="Base + Additional Medicare tax" formula="Base Medicare + Additional Medicare" className="font-mono text-red-400" />
               </div>
               <div className="border-t border-red-500/30 pt-2 mt-2 flex justify-between font-medium">
                 <span className="text-slate-200">Total Tax Burden</span>
-                <span className="text-lg font-mono text-red-400">{formatCurrency(taxes.totalTax)}</span>
+                <SimpleTrackedValue value={taxes.totalTax} name="Total Tax Burden" description="All taxes combined" formula="Federal + State + Social Security + Medicare" inputs={[{ name: 'Federal', value: taxes.federalTax, unit: '$' }, { name: 'State', value: taxes.stateTax, unit: '$' }, { name: 'SS', value: taxes.fica.socialSecurityTax, unit: '$' }, { name: 'Medicare', value: taxes.fica.totalMedicareTax, unit: '$' }]} className="text-lg font-mono text-red-400" />
               </div>
               <div className="flex justify-between text-sm text-slate-500">
                 <span>Effective Total Tax Rate</span>
-                <span className="font-mono">{formatPercent(taxes.effectiveTotalRate)}</span>
+                <SimpleTrackedValue value={taxes.effectiveTotalRate} name="Effective Total Tax Rate" description="Total taxes as percentage of gross income" formula="Total Taxes ÷ Gross Income × 100" inputs={[{ name: 'Total Taxes', value: taxes.totalTax, unit: '$' }, { name: 'Gross Income', value: taxes.grossIncome, unit: '$' }]} formatAs="percent" decimals={1} className="font-mono text-slate-500" />
               </div>
             </div>
           </div>
@@ -3387,10 +3702,10 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
               <div>
                 <span className="text-sm font-medium text-emerald-400">Net Income After Taxes</span>
                 <p className="text-xs text-slate-500 mt-1">
-                  {formatCurrency(taxes.monthlyNetIncome)}/month • {formatCurrency(taxes.monthlyNetIncome / 4.33)}/week
+                  <SimpleTrackedValue value={taxes.monthlyNetIncome} name="Monthly Net Income" description="Monthly take-home pay" formula="Annual Net Income ÷ 12" className="text-slate-500" />/month • <SimpleTrackedValue value={taxes.monthlyNetIncome / 4.33} name="Weekly Net Income" description="Weekly take-home pay" formula="Monthly Net Income ÷ 4.33" className="text-slate-500" />/week
                 </p>
               </div>
-              <span className="text-2xl font-mono text-emerald-400">{formatCurrency(taxes.netIncome)}</span>
+              <SimpleTrackedValue value={taxes.netIncome} name="Annual Net Income" description="Total take-home pay after all taxes" formula="Gross Income - Pre-Tax Contributions - Total Taxes" inputs={[{ name: 'Gross', value: taxes.grossIncome, unit: '$' }, { name: 'Pre-Tax', value: taxes.totalPreTaxContributions, unit: '$' }, { name: 'Taxes', value: taxes.totalTax, unit: '$' }]} className="text-2xl font-mono text-emerald-400" />
             </div>
           </div>
         </div>
@@ -3623,8 +3938,8 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                     <div className="min-w-0">
                       <span className="font-medium text-slate-200">{scenario.name}</span>
                       <div className="flex gap-3 text-xs text-slate-500 mt-1">
-                        <span>Saves: <span className="text-sky-400">{formatCurrency(scenario.yearlyContribution)}/yr</span></span>
-                        {scenario.grossIncome && <span>Income: <span className="text-emerald-400">{formatCurrency(scenario.grossIncome)}</span></span>}
+                        <span>Saves: <SimpleTrackedValue value={scenario.yearlyContribution} name="Yearly Savings" description="Annual investment contribution" formula="User Input" className="text-sky-400" />/yr</span>
+                        {scenario.grossIncome && <span>Income: <SimpleTrackedValue value={scenario.grossIncome} name="Gross Income" description="Annual income for scenario" formula="User Input" className="text-emerald-400" /></span>}
                       </div>
                     </div>
                   </div>
@@ -3881,19 +4196,45 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 <div className="grid grid-cols-4 gap-4 text-center">
                   <div>
                     <p className="text-xs text-slate-500">Net Income</p>
-                    <p className="text-lg font-mono text-emerald-400">{formatCurrency(liveBreakdown.taxes.netIncome)}</p>
+                    <SimpleTrackedValue
+                      value={liveBreakdown.taxes.netIncome}
+                      name="Net Income"
+                      description="Annual take-home pay after taxes"
+                      formula="Gross Income - Pre-Tax - All Taxes"
+                      inputs={[
+                        { name: 'Gross', value: liveBreakdown.taxes.grossIncome, unit: '$' },
+                        { name: 'Total Tax', value: liveBreakdown.taxes.totalTax, unit: '$' },
+                      ]}
+                      className="text-lg font-mono text-emerald-400"
+                    />
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Tax Rate</p>
-                    <p className="text-lg font-mono text-red-400">{formatPercent(liveBreakdown.taxes.effectiveTotalRate)}</p>
+                    <SimpleTrackedValue value={liveBreakdown.taxes.effectiveTotalRate} name="Effective Tax Rate" description="Total taxes as percentage of gross income" formula="Total Taxes ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-lg font-mono text-red-400" />
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Annual Spending</p>
-                    <p className="text-lg font-mono text-amber-400">{formatCurrency(liveBreakdown.annualSpending)}</p>
+                    <SimpleTrackedValue
+                      value={liveBreakdown.annualSpending}
+                      name="Annual Spending"
+                      description="Level-based annual spending budget"
+                      formula="Monthly Budget × 12"
+                      className="text-lg font-mono text-amber-400"
+                    />
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Total Savings</p>
-                    <p className="text-lg font-mono text-sky-400">{formatCurrency(liveBreakdown.totalAnnualSavings)}</p>
+                    <SimpleTrackedValue
+                      value={liveBreakdown.totalAnnualSavings}
+                      name="Total Annual Savings"
+                      description="Amount available for investments after spending"
+                      formula="Net Income - Annual Spending"
+                      inputs={[
+                        { name: 'Net Income', value: liveBreakdown.taxes.netIncome, unit: '$' },
+                        { name: 'Spending', value: liveBreakdown.annualSpending, unit: '$' },
+                      ]}
+                      className="text-lg font-mono text-sky-400"
+                    />
                   </div>
                 </div>
               </div>
@@ -3961,7 +4302,14 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 <input type="number" value={wizardState.grossIncome} onChange={(e) => setWizardState(s => ({ ...s, grossIncome: e.target.value }))} placeholder="100000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
               </div>
               {wizardState.grossIncome && (
-                <p className="mt-3 text-slate-400">That's <span className="text-emerald-400 font-mono">{formatCurrency(parseFloat(wizardState.grossIncome) / 12)}</span> per month before taxes.</p>
+                <p className="mt-3 text-slate-400">That's <SimpleTrackedValue
+                  value={parseFloat(wizardState.grossIncome) / 12}
+                  name="Monthly Income"
+                  description="Gross monthly income before taxes"
+                  formula="Annual Gross Income ÷ 12"
+                  inputs={[{ name: 'Annual Gross', value: parseFloat(wizardState.grossIncome), unit: '$' }]}
+                  className="text-emerald-400 font-mono"
+                /> per month before taxes.</p>
               )}
             </div>
             
@@ -3982,7 +4330,18 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
               {wizardState.grossIncome && parseFloat(wizardState.incomeGrowthRate) > 0 && (
                 <div className="mt-4 p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
                   <p className="text-sm text-emerald-400">
-                    In 10 years, your income would grow to approximately <strong>{formatCurrency(parseFloat(wizardState.grossIncome) * Math.pow(1 + parseFloat(wizardState.incomeGrowthRate) / 100, 10))}</strong>
+                    In 10 years, your income would grow to approximately <strong><SimpleTrackedValue
+                      value={parseFloat(wizardState.grossIncome) * Math.pow(1 + parseFloat(wizardState.incomeGrowthRate) / 100, 10)}
+                      name="Income in 10 Years"
+                      description="Projected annual income after 10 years of growth"
+                      formula={`Current Income × (1 + ${wizardState.incomeGrowthRate}%)^10`}
+                      inputs={[
+                        { name: 'Current Income', value: parseFloat(wizardState.grossIncome), unit: '$' },
+                        { name: 'Growth Rate', value: `${wizardState.incomeGrowthRate}%` },
+                        { name: 'Years', value: 10 },
+                      ]}
+                      className="text-emerald-400"
+                    /></strong>
                   </p>
                 </div>
               )}
@@ -4029,7 +4388,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
               <div className="flex justify-between items-center mb-2">
                 <label className="text-sm font-medium text-slate-300">401(k) / 403(b) Contribution</label>
-                <span className="text-xs text-slate-500">Limit: {formatCurrency(CONTRIBUTION_LIMITS.traditional401k)}</span>
+                <span className="text-xs text-slate-500">Limit: <SimpleTrackedValue value={CONTRIBUTION_LIMITS.traditional401k} name="401(k) Limit" description="IRS annual contribution limit for 401(k)" formula="IRS Limit (2024)" className="text-slate-500" /></span>
               </div>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -4039,7 +4398,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
               <div className="flex justify-between items-center mb-2">
                 <label className="text-sm font-medium text-slate-300">Traditional IRA</label>
-                <span className="text-xs text-slate-500">Limit: {formatCurrency(CONTRIBUTION_LIMITS.traditionalIRA)}</span>
+                <span className="text-xs text-slate-500">Limit: <SimpleTrackedValue value={CONTRIBUTION_LIMITS.traditionalIRA} name="IRA Limit" description="IRS annual contribution limit for Traditional IRA" formula="IRS Limit (2024)" className="text-slate-500" /></span>
               </div>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -4049,7 +4408,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
               <div className="flex justify-between items-center mb-2">
                 <label className="text-sm font-medium text-slate-300">HSA (Health Savings Account)</label>
-                <span className="text-xs text-slate-500">Limit: {formatCurrency(CONTRIBUTION_LIMITS.hsa_individual)}-{formatCurrency(CONTRIBUTION_LIMITS.hsa_family)}</span>
+                <span className="text-xs text-slate-500">Limit: <SimpleTrackedValue value={CONTRIBUTION_LIMITS.hsa_individual} name="HSA Individual Limit" description="HSA limit for individual coverage" formula="IRS Limit (2024)" className="text-slate-500" />-<SimpleTrackedValue value={CONTRIBUTION_LIMITS.hsa_family} name="HSA Family Limit" description="HSA limit for family coverage" formula="IRS Limit (2024)" className="text-slate-500" /></span>
               </div>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -4058,7 +4417,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             </div>
             {incomeBreakdown && (
               <div className="bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/30">
-                <p className="text-sm text-emerald-400">Pre-tax savings reduce your taxable income by <strong>{formatCurrency(incomeBreakdown.totalPreTaxSavings)}</strong>, saving you approximately <strong>{formatCurrency(incomeBreakdown.totalPreTaxSavings * (incomeBreakdown.taxes.marginalFederalRate / 100))}</strong> in taxes.</p>
+                <p className="text-sm text-emerald-400">Pre-tax savings reduce your taxable income by <strong><SimpleTrackedValue value={incomeBreakdown.totalPreTaxSavings} name="Total Pre-tax Savings" description="Sum of all pre-tax contributions" formula="401(k) + IRA + HSA + Other" className="text-emerald-400" /></strong>, saving you approximately <strong><SimpleTrackedValue value={incomeBreakdown.totalPreTaxSavings * (incomeBreakdown.taxes.marginalFederalRate / 100)} name="Tax Savings" description="Estimated tax savings from pre-tax contributions" formula="Pre-tax Savings × Marginal Tax Rate" inputs={[{ name: 'Pre-tax', value: incomeBreakdown.totalPreTaxSavings, unit: '$' }, { name: 'Marginal Rate', value: `${incomeBreakdown.taxes.marginalFederalRate}%` }]} className="text-emerald-400" /></strong> in taxes.</p>
               </div>
             )}
           </div>
@@ -4102,7 +4461,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
                   <input type="number" value={wizardState.baseMonthlyBudget} onChange={(e) => setWizardState(s => ({ ...s, baseMonthlyBudget: e.target.value }))} placeholder="3000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
                 </div>
-                <p className="mt-2 text-sm text-slate-500">Annual base: {formatCurrency(baseBudget * 12)}</p>
+                <p className="mt-2 text-sm text-slate-500">Annual base: <SimpleTrackedValue value={baseBudget * 12} name="Annual Base Budget" description="Base budget multiplied by 12 months" formula="Monthly Base × 12" className="text-slate-500" /></p>
               </div>
 
               {/* Spending Growth Rate */}
@@ -4138,22 +4497,22 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                         <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
                         Base Budget
                       </span>
-                      <span className="font-mono text-amber-400">{formatCurrency(baseBudget)}/mo</span>
+                      <SimpleTrackedValue value={baseBudget} name="Base Budget" description="Fixed monthly spending floor" formula="User Input" className="font-mono text-amber-400" /><span className="text-amber-400">/mo</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400 flex items-center gap-2">
                         <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
                         Net Worth Portion
-                        <span className="text-xs text-slate-500">({spendingRate}% × {formatCurrency(currentNetWorth)} ÷ 12)</span>
+                        <span className="text-xs text-slate-500">({spendingRate}% × <SimpleTrackedValue value={currentNetWorth} name="Current Net Worth" description="Your current net worth" formula="Sum of all assets" decimals={0} className="text-slate-500" /> ÷ 12)</span>
                       </span>
-                      <span className="font-mono text-emerald-400">+{formatCurrency(netWorthPortion)}/mo</span>
+                      <span className="font-mono text-emerald-400">+<SimpleTrackedValue value={netWorthPortion} name="Net Worth Portion" description="Monthly spending from net worth" formula={`Net Worth × ${spendingRate}% ÷ 12`} className="text-emerald-400" />/mo</span>
                     </div>
                     <div className="border-t border-slate-600 pt-3 flex justify-between items-center">
                       <span className="text-slate-200 font-medium">Total Monthly Budget</span>
-                      <span className="text-2xl font-mono text-violet-400">{formatCurrency(totalUnlockedSpending)}</span>
+                      <SimpleTrackedValue value={totalUnlockedSpending} name="Total Monthly Budget" description="Your unlocked monthly spending" formula="Base Budget + Net Worth Portion" inputs={[{ name: 'Base', value: baseBudget, unit: '$' }, { name: 'NW Portion', value: netWorthPortion, unit: '$' }]} className="text-2xl font-mono text-violet-400" />
                     </div>
                     <p className="text-xs text-slate-500 pt-2">
-                      Annual spending: {formatCurrency(totalUnlockedSpending * 12)} • This grows automatically as your net worth increases
+                      Annual spending: <SimpleTrackedValue value={totalUnlockedSpending * 12} name="Annual Spending" description="Total unlocked monthly spending × 12" formula="Monthly Budget × 12" className="text-slate-500" /> • This grows automatically as your net worth increases
                     </p>
                   </div>
                 </div>
@@ -4164,16 +4523,21 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
                   <h4 className="text-sm font-medium text-slate-300 mb-4">Your Money Flow</h4>
                   <div className="space-y-3">
-                    <div className="flex justify-between"><span className="text-slate-400">Gross Income</span><span className="font-mono text-slate-200">{formatCurrency(incomeBreakdown.taxes.grossIncome)}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">- Pre-tax Savings</span><span className="font-mono text-emerald-400">-{formatCurrency(incomeBreakdown.totalPreTaxSavings)}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">- Total Taxes</span><span className="font-mono text-red-400">-{formatCurrency(incomeBreakdown.taxes.totalTax)}</span></div>
-                    <div className="border-t border-slate-600 pt-2 flex justify-between"><span className="text-slate-300">Net Income</span><span className="font-mono text-emerald-400">{formatCurrency(incomeBreakdown.taxes.netIncome)}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">- Annual Spending</span><span className="font-mono text-amber-400">-{formatCurrency(totalUnlockedSpending * 12)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Gross Income</span><SimpleTrackedValue value={incomeBreakdown.taxes.grossIncome} name="Gross Income" description="Annual income before deductions" formula="User Input" className="font-mono text-slate-200" /></div>
+                    <div className="flex justify-between"><span className="text-slate-400">- Pre-tax Savings</span><span className="font-mono text-emerald-400">-<SimpleTrackedValue value={incomeBreakdown.totalPreTaxSavings} name="Pre-tax Savings" description="401k + IRA + HSA + Other" formula="Sum of pre-tax contributions" className="text-emerald-400" /></span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">- Total Taxes</span><span className="font-mono text-red-400">-<SimpleTrackedValue value={incomeBreakdown.taxes.totalTax} name="Total Taxes" description="Federal + State + FICA taxes" formula="Sum of all taxes" className="text-red-400" /></span></div>
+                    <div className="border-t border-slate-600 pt-2 flex justify-between"><span className="text-slate-300">Net Income</span><SimpleTrackedValue value={incomeBreakdown.taxes.netIncome} name="Net Income" description="Take-home pay after taxes and pre-tax" formula="Gross - Pre-tax - Taxes" className="font-mono text-emerald-400" /></div>
+                    <div className="flex justify-between"><span className="text-slate-400">- Annual Spending</span><span className="font-mono text-amber-400">-<SimpleTrackedValue value={totalUnlockedSpending * 12} name="Annual Spending" description="Total monthly budget × 12" formula="Monthly Budget × 12" className="text-amber-400" /></span></div>
                     <div className="border-t border-slate-600 pt-2 flex justify-between font-medium">
                       <span className="text-slate-200">Post-tax Savings Available</span>
-                      <span className={`font-mono ${incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12 >= 0 ? 'text-sky-400' : 'text-red-400'}`}>
-                        {formatCurrency(Math.max(0, incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12))}
-                      </span>
+                      <SimpleTrackedValue 
+                        value={Math.max(0, incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12)} 
+                        name="Post-tax Savings" 
+                        description="Amount available for post-tax savings/investments" 
+                        formula="Net Income - Annual Spending"
+                        inputs={[{ name: 'Net Income', value: incomeBreakdown.taxes.netIncome, unit: '$' }, { name: 'Spending', value: totalUnlockedSpending * 12, unit: '$' }]}
+                        className={`font-mono ${incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12 >= 0 ? 'text-sky-400' : 'text-red-400'}`}
+                      />
                     </div>
                   </div>
                   {incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12 < 0 && (
@@ -4251,10 +4615,10 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 <div className="h-full bg-sky-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationPostTaxSavings}%` }} title="Post-tax Savings">{incomeBreakdown.allocationPostTaxSavings >= 8 && 'Savings'}</div>
               </div>
               <div className="grid grid-cols-4 gap-2 text-xs">
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span><span className="text-slate-400">Pre-tax: {formatPercent(incomeBreakdown.allocationPreTaxSavings)}</span></div>
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-red-500 rounded-full"></span><span className="text-slate-400">Taxes: {formatPercent(incomeBreakdown.allocationTaxes)}</span></div>
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-500 rounded-full"></span><span className="text-slate-400">Spending: {formatPercent(incomeBreakdown.allocationSpending)}</span></div>
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-sky-500 rounded-full"></span><span className="text-slate-400">Post-tax: {formatPercent(incomeBreakdown.allocationPostTaxSavings)}</span></div>
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span><span className="text-slate-400">Pre-tax: <SimpleTrackedValue value={incomeBreakdown.allocationPreTaxSavings} name="Pre-tax Allocation" description="Percentage of gross income to pre-tax savings" formula="Pre-tax Savings ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-red-500 rounded-full"></span><span className="text-slate-400">Taxes: <SimpleTrackedValue value={incomeBreakdown.allocationTaxes} name="Tax Allocation" description="Percentage of gross income to taxes" formula="Total Taxes ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-500 rounded-full"></span><span className="text-slate-400">Spending: <SimpleTrackedValue value={incomeBreakdown.allocationSpending} name="Spending Allocation" description="Percentage of gross income to spending" formula="Annual Spending ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
+                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-sky-500 rounded-full"></span><span className="text-slate-400">Post-tax: <SimpleTrackedValue value={incomeBreakdown.allocationPostTaxSavings} name="Post-tax Savings Allocation" description="Percentage of gross income to post-tax savings" formula="Post-tax Savings ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
               </div>
             </div>
 
@@ -4264,7 +4628,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-xs text-slate-500 uppercase mb-1">Base Budget</p>
-                  <p className="text-xl font-mono text-amber-400">{formatCurrency(baseBudget)}/mo</p>
+                  <p className="text-xl font-mono text-amber-400"><SimpleTrackedValue value={baseBudget} name="Base Budget" description="Fixed monthly spending floor" formula="User Input" className="text-amber-400" />/mo</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 uppercase mb-1">Growth Rate</p>
@@ -4273,12 +4637,12 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 uppercase mb-1">Current Total</p>
-                  <p className="text-xl font-mono text-emerald-400">{formatCurrency(totalUnlockedSpending)}/mo</p>
+                  <p className="text-xl font-mono text-emerald-400"><SimpleTrackedValue value={totalUnlockedSpending} name="Current Monthly Budget" description="Base + net worth portion" formula="Base + (Net Worth × Rate ÷ 12)" className="text-emerald-400" />/mo</p>
                 </div>
               </div>
               {spendingRate > 0 && (
                 <p className="text-xs text-slate-500 mt-4 text-center">
-                  As your net worth grows, your monthly budget will increase. At {formatCurrency(1000000)} net worth, your budget would be {formatCurrency(baseBudget + (1000000 * spendingRate / 100 / 12))}/mo.
+                  As your net worth grows, your monthly budget will increase. At <SimpleTrackedValue value={1000000} name="Example Net Worth" description="Example milestone net worth" formula="$1,000,000" decimals={0} className="text-slate-500" /> net worth, your budget would be <SimpleTrackedValue value={baseBudget + (1000000 * spendingRate / 100 / 12)} name="Projected Budget at $1M" description="Budget at $1M net worth" formula={`Base + ($1M × ${spendingRate}% ÷ 12)`} className="text-slate-500" />/mo.
                 </p>
               )}
             </div>
@@ -4287,13 +4651,13 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
                 <p className="text-xs text-slate-500 uppercase">Total Annual Savings (Year 1)</p>
-                <p className="text-2xl font-mono text-sky-400">{formatCurrency(incomeBreakdown.totalAnnualSavings)}</p>
-                <p className="text-xs text-slate-500 mt-1">{formatPercent(incomeBreakdown.savingsRateOfGross)} of gross income</p>
+                <SimpleTrackedValue value={incomeBreakdown.totalAnnualSavings} name="Total Annual Savings" description="Pre-tax + Post-tax savings in year 1" formula="Pre-tax Contributions + Post-tax Savings" inputs={[{ name: 'Pre-tax', value: incomeBreakdown.totalPreTaxSavings, unit: '$' }, { name: 'Post-tax', value: incomeBreakdown.postTaxSavingsAvailable, unit: '$' }]} className="text-2xl font-mono text-sky-400" />
+                <p className="text-xs text-slate-500 mt-1"><SimpleTrackedValue value={incomeBreakdown.savingsRateOfGross} name="Savings Rate" description="Percentage of gross income being saved" formula="Total Savings ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-500" /> of gross income</p>
               </div>
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
                 <p className="text-xs text-slate-500 uppercase">Effective Tax Rate</p>
-                <p className="text-2xl font-mono text-red-400">{formatPercent(incomeBreakdown.taxes.effectiveTotalRate)}</p>
-                <p className="text-xs text-slate-500 mt-1">{formatCurrency(incomeBreakdown.taxes.totalTax)} total taxes</p>
+                <SimpleTrackedValue value={incomeBreakdown.taxes.effectiveTotalRate} name="Effective Tax Rate" description="Total taxes as percentage of gross income" formula="Total Taxes ÷ Gross Income × 100" inputs={[{ name: 'Taxes', value: incomeBreakdown.taxes.totalTax, unit: '$' }, { name: 'Gross', value: incomeBreakdown.taxes.grossIncome, unit: '$' }]} formatAs="percent" decimals={1} className="text-2xl font-mono text-red-400" />
+                <p className="text-xs text-slate-500 mt-1"><SimpleTrackedValue value={incomeBreakdown.taxes.totalTax} name="Total Taxes" description="All taxes combined" formula="Federal + State + FICA" className="text-slate-500" /> total taxes</p>
               </div>
             </div>
 
@@ -4364,10 +4728,18 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                         {projections.map(p => (
                           <tr key={p.year} className="border-t border-slate-700">
                             <td className="py-2 text-slate-300">{p.year === 0 ? 'Now' : `Year ${p.year}`}</td>
-                            <td className="py-2 text-right font-mono text-emerald-400">{formatCurrency(p.income)}</td>
-                            <td className="py-2 text-right font-mono text-amber-400">{formatCurrency(p.spending)}</td>
-                            <td className={`py-2 text-right font-mono ${p.savings > 0 ? 'text-sky-400' : 'text-red-400'}`}>{formatCurrency(p.savings)}</td>
-                            <td className="py-2 text-right font-mono text-violet-400">{formatCurrency(p.netWorth)}</td>
+                            <td className="py-2 text-right font-mono text-emerald-400">
+                              <SimpleTrackedValue value={p.income} name={`Year ${p.year} Income`} description={p.year === 0 ? "Current gross income" : `Income after ${p.year} year(s) of growth`} formula={p.year === 0 ? "User Input" : `Year 0 Income × (1 + Growth Rate)^${p.year}`} className="text-emerald-400" />
+                            </td>
+                            <td className="py-2 text-right font-mono text-amber-400">
+                              <SimpleTrackedValue value={p.spending} name={`Year ${p.year} Spending`} description="Annual spending based on budget formula" formula="(Base + Net Worth Portion) × 12" className="text-amber-400" />
+                            </td>
+                            <td className={`py-2 text-right font-mono ${p.savings > 0 ? 'text-sky-400' : 'text-red-400'}`}>
+                              <SimpleTrackedValue value={p.savings} name={`Year ${p.year} Savings`} description="Amount saved for the year" formula="Net Income - Annual Spending" className={p.savings > 0 ? 'text-sky-400' : 'text-red-400'} />
+                            </td>
+                            <td className="py-2 text-right font-mono text-violet-400">
+                              <SimpleTrackedValue value={p.netWorth} name={`Year ${p.year} Net Worth`} description="Projected total net worth" formula="Prior Net Worth × (1 + Return) + Savings" className="text-violet-400" />
+                            </td>
                           </tr>
                         ))}
                       </tbody>

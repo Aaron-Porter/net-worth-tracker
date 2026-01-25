@@ -10,8 +10,10 @@ import {
   UserSettings,
   NetWorthEntry,
   ProjectionRow,
+  MonthlyProjectionRow,
   LevelInfo,
   generateProjections,
+  generateMonthlyProjections,
   calculateRealTimeNetWorth,
   calculateLevelInfo,
   calculateGrowthRates,
@@ -75,6 +77,8 @@ export interface ScenarioProjection {
   hasDynamicIncome: boolean;
   // FI Milestones along the journey
   fiMilestones: FiMilestonesInfo;
+  // Monthly projections (spending updates each month based on net worth)
+  monthlyProjections: MonthlyProjectionRow[];
 }
 
 export interface UserProfile {
@@ -326,6 +330,14 @@ export function useScenarios(): UseScenariosReturn {
       // Calculate FI milestones along the journey
       const fiMilestones = calculateFiMilestones(projections, scenarioSettings, birthYear);
 
+      // Generate monthly projections for more granular spending tracking
+      // Spending updates each month based on net worth (not just yearly)
+      const monthlyProjections = generateMonthlyProjections(
+        currentNetWorth.total,
+        scenarioSettings,
+        120 // 10 years of monthly data
+      );
+
       return {
         scenario,
         projections,
@@ -340,6 +352,7 @@ export function useScenarios(): UseScenariosReturn {
         dynamicProjections,
         hasDynamicIncome,
         fiMilestones,
+        monthlyProjections,
       };
     });
   }, [latestEntry, selectedScenarios, localProfile, entries, realtimeTick]);
