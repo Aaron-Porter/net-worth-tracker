@@ -400,14 +400,34 @@ export const calculationRegistry = new CalculationRegistry();
  */
 export function calculateFiTargetTracked(
   monthlySpend: number,
-  swr: number
+  swr: number,
+  monthlySpendSource?: { source: ValueSource; settingKey?: string; trace?: TrackedCalculation }
 ): TrackedValue {
   const builder = new CalculationBuilder('fi_target', 'FI Target', 'fi_target')
-    .setDescription('The net worth needed to achieve financial independence based on your spending and safe withdrawal rate')
-    .setFormula('FI Target = (Monthly Spend × 12) ÷ (SWR ÷ 100)')
-    .setUnit('$')
-    .addInput('Monthly Spend', monthlySpend, '$', 'Your monthly expenses')
-    .addInput('Safe Withdrawal Rate', swr, '%', 'Annual withdrawal rate that historically preserves principal');
+    .setDescription('The net worth needed to achieve financial independence. This is the amount where your investments can sustain your spending using the safe withdrawal rate.')
+    .setFormula('FI Target = (Monthly Spend × 12) ÷ SWR%')
+    .setUnit('$');
+
+  // Add monthly spend with appropriate source
+  if (monthlySpendSource?.trace) {
+    builder.addTrackedInput('Monthly Spend', { value: monthlySpend, trace: monthlySpendSource.trace }, 'Your current monthly spending level');
+  } else if (monthlySpendSource?.source) {
+    builder.addInputWithSource('Monthly Spend', monthlySpend, monthlySpendSource.source, { 
+      unit: '$', 
+      settingKey: monthlySpendSource.settingKey,
+      description: 'Your monthly spending'
+    });
+  } else {
+    builder.addInputWithSource('Monthly Spend', monthlySpend, 'calculated', { 
+      unit: '$', 
+      description: 'Your monthly spending (level-based or fixed)' 
+    });
+  }
+  
+  builder.addSetting('Safe Withdrawal Rate', swr, 'swr', { 
+    unit: '%', 
+    description: 'The percentage you can safely withdraw annually without depleting your portfolio' 
+  });
 
   if (monthlySpend <= 0 || swr <= 0) {
     return builder.build(0);
@@ -418,16 +438,16 @@ export function calculateFiTargetTracked(
   const fiTarget = annualSpend / swrDecimal;
 
   builder
-    .addStep('Calculate annual spending', 'Monthly Spend × 12', [
+    .addStep('Calculate annual spending', `$${monthlySpend.toLocaleString()}/mo × 12 months`, [
       { name: 'Monthly Spend', value: monthlySpend, unit: '$' }
-    ], annualSpend)
-    .addStep('Convert SWR to decimal', 'SWR ÷ 100', [
+    ], annualSpend, '$')
+    .addStep('Convert SWR to decimal', `${swr}% ÷ 100 = ${swrDecimal}`, [
       { name: 'SWR', value: swr, unit: '%' }
     ], swrDecimal)
-    .addStep('Calculate FI Target', 'Annual Spend ÷ SWR decimal', [
+    .addStep('Calculate FI Target', `$${annualSpend.toLocaleString()} ÷ ${swrDecimal} = $${fiTarget.toLocaleString()}`, [
       { name: 'Annual Spend', value: annualSpend, unit: '$' },
       { name: 'SWR decimal', value: swrDecimal }
-    ], fiTarget);
+    ], fiTarget, '$');
 
   const result = builder.build(fiTarget);
   calculationRegistry.register(result.trace);
