@@ -1318,6 +1318,185 @@ describe('Additional Accuracy Tests', () => {
 })
 
 // ============================================================================
+// NUMERICAL VERIFICATION TESTS - Catching Specific Calculation Bugs
+// ============================================================================
+
+describe('Numerical Verification Tests', () => {
+  describe('FI Target Calculation Accuracy', () => {
+    it('should calculate FI target exactly: FI = (monthlySpend * 12) / (SWR/100)', () => {
+      // Test case 1: $3,000/month with 4% SWR
+      // FI = ($3,000 * 12) / 0.04 = $36,000 / 0.04 = $900,000
+      expect(calculateFiTarget(3000, 4)).toBe(900000)
+      
+      // Test case 2: $5,000/month with 3.5% SWR
+      // FI = ($5,000 * 12) / 0.035 = $60,000 / 0.035 = $1,714,285.71
+      expect(calculateFiTarget(5000, 3.5)).toBeCloseTo(1714285.71, 0)
+      
+      // Test case 3: $10,000/month with 5% SWR
+      // FI = ($10,000 * 12) / 0.05 = $120,000 / 0.05 = $2,400,000
+      expect(calculateFiTarget(10000, 5)).toBe(2400000)
+    })
+  })
+
+  describe('SWR Calculation Accuracy', () => {
+    it('should calculate SWR amounts exactly', () => {
+      // $1,000,000 with 4% SWR
+      const swr = calculateSwrAmounts(1000000, 4)
+      
+      // Annual: $1,000,000 * 0.04 = $40,000
+      expect(swr.annual).toBe(40000)
+      
+      // Monthly: $40,000 / 12 = $3,333.33
+      expect(swr.monthly).toBeCloseTo(3333.33, 2)
+      
+      // Weekly: $40,000 / 52 = $769.23
+      expect(swr.weekly).toBeCloseTo(769.23, 2)
+      
+      // Daily: $40,000 / 365 = $109.59
+      expect(swr.daily).toBeCloseTo(109.59, 2)
+    })
+  })
+
+  describe('Runway Calculation Accuracy', () => {
+    it('should calculate runway exactly: runway = NW / (monthlySpend * 12)', () => {
+      // $100,000 NW / ($3,000 * 12) = $100,000 / $36,000 = 2.778 years
+      expect(calculateRunwayYears(100000, 3000)).toBeCloseTo(2.778, 2)
+      
+      // $500,000 NW / ($4,000 * 12) = $500,000 / $48,000 = 10.417 years
+      expect(calculateRunwayYears(500000, 4000)).toBeCloseTo(10.417, 2)
+      
+      // $1,000,000 NW / ($5,000 * 12) = $1,000,000 / $60,000 = 16.667 years
+      expect(calculateRunwayYears(1000000, 5000)).toBeCloseTo(16.667, 2)
+    })
+  })
+
+  describe('Coast FI Percentage Accuracy', () => {
+    it('should calculate coast FI percent correctly with compound growth', () => {
+      // Given:
+      // - Current NW: $150,000
+      // - Monthly spend: $4,000
+      // - Years to retirement: 20
+      // - Return rate: 7%
+      // - Inflation: 3%
+      // - SWR: 4%
+      
+      const coastPercent = calculateCoastFiPercent(150000, 4000, 20, 7, 3, 4)
+      
+      // Future NW: $150,000 * (1.07)^20 = $150,000 * 3.8697 = $580,455
+      // Future monthly spend: $4,000 * (1.03)^20 = $4,000 * 1.8061 = $7,224.45
+      // Future FI target: $7,224.45 * 12 / 0.04 = $2,167,335
+      // Coast %: $580,455 / $2,167,335 * 100 = 26.78%
+      
+      // Calculate expected values manually
+      const futureNW = 150000 * Math.pow(1.07, 20)
+      const futureSpend = 4000 * Math.pow(1.03, 20)
+      const futureFITarget = futureSpend * 12 / 0.04
+      const expectedCoastPercent = (futureNW / futureFITarget) * 100
+      
+      expect(coastPercent).toBeCloseTo(expectedCoastPercent, 2)
+    })
+  })
+
+  describe('Lifestyle Milestone Target Accuracy', () => {
+    it('should calculate lifestyle FI targets as exact multipliers', () => {
+      const monthlySpend = 4000
+      const swr = 4
+      
+      // Regular FI target: $4,000 * 12 / 0.04 = $1,200,000
+      const regularTarget = calculateFiTarget(monthlySpend, swr)
+      expect(regularTarget).toBe(1200000)
+      
+      // Lean FI (70%): $4,000 * 0.7 * 12 / 0.04 = $840,000
+      const leanTarget = calculateFiTarget(monthlySpend * 0.7, swr)
+      expect(leanTarget).toBe(840000)
+      
+      // Barista FI (85%): $4,000 * 0.85 * 12 / 0.04 = $1,020,000
+      const baristaTarget = calculateFiTarget(monthlySpend * 0.85, swr)
+      expect(baristaTarget).toBe(1020000)
+      
+      // Fat FI (150%): $4,000 * 1.5 * 12 / 0.04 = $1,800,000
+      const fatTarget = calculateFiTarget(monthlySpend * 1.5, swr)
+      expect(fatTarget).toBe(1800000)
+    })
+  })
+
+  describe('Dollar Multiplier Accuracy', () => {
+    it('should calculate compound growth multiplier correctly', () => {
+      // $1 at 7% for 10 years: (1.07)^10 = 1.9672
+      expect(calculateDollarMultiplier(10, 7)).toBeCloseTo(1.9672, 3)
+      
+      // $1 at 7% for 20 years: (1.07)^20 = 3.8697
+      expect(calculateDollarMultiplier(20, 7)).toBeCloseTo(3.8697, 3)
+      
+      // $1 at 7% for 30 years: (1.07)^30 = 7.6123
+      expect(calculateDollarMultiplier(30, 7)).toBeCloseTo(7.6123, 3)
+      
+      // $1 at 10% for 25 years: (1.10)^25 = 10.8347
+      expect(calculateDollarMultiplier(25, 10)).toBeCloseTo(10.8347, 3)
+    })
+  })
+
+  describe('Level-Based Spending Calculation Accuracy', () => {
+    it('should calculate spending correctly: base + (NW * rate/100 / 12)', () => {
+      // Base budget: $3,000
+      // Net worth: $500,000
+      // Spending rate: 2%
+      // Years elapsed: 0
+      // Inflation: 0
+      
+      // Expected: $3,000 + ($500,000 * 0.02 / 12) = $3,000 + $833.33 = $3,833.33
+      const settings = createMockSettings({
+        baseMonthlyBudget: 3000,
+        spendingGrowthRate: 2,
+        inflationRate: 0,
+      })
+      
+      const spending = calculateLevelBasedSpending(500000, settings, 0)
+      expect(spending).toBeCloseTo(3833.33, 2)
+    })
+
+    it('should apply inflation to base budget', () => {
+      // Base budget: $3,000
+      // Net worth: $500,000
+      // Spending rate: 2%
+      // Years elapsed: 5
+      // Inflation: 3%
+      
+      // Inflated base: $3,000 * (1.03)^5 = $3,000 * 1.1593 = $3,477.82
+      // NW portion: $500,000 * 0.02 / 12 = $833.33
+      // Total: $3,477.82 + $833.33 = $4,311.15
+      const settings = createMockSettings({
+        baseMonthlyBudget: 3000,
+        spendingGrowthRate: 2,
+        inflationRate: 3,
+      })
+      
+      const spending = calculateLevelBasedSpending(500000, settings, 5)
+      const inflatedBase = 3000 * Math.pow(1.03, 5)
+      const nwPortion = 500000 * 0.02 / 12
+      const expected = inflatedBase + nwPortion
+      
+      expect(spending).toBeCloseTo(expected, 2)
+    })
+  })
+
+  describe('FI Progress Percentage Accuracy', () => {
+    it('should calculate FI progress as (NW / FI Target * 100)', () => {
+      // Net worth: $600,000
+      // Monthly spend: $4,000
+      // FI Target: $1,200,000
+      // Progress: $600,000 / $1,200,000 * 100 = 50%
+      
+      const fiTarget = calculateFiTarget(4000, 4)
+      const progress = (600000 / fiTarget) * 100
+      
+      expect(fiTarget).toBe(1200000)
+      expect(progress).toBe(50)
+    })
+  })
+})
+
+// ============================================================================
 // INTEGRATION TESTS
 // ============================================================================
 
