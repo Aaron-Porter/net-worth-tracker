@@ -26,6 +26,9 @@ import {
   calculateFiTarget,
   FiMilestone,
   FI_MILESTONE_DEFINITIONS,
+  calculateShortTermTargets,
+  ShortTermTargetsInfo,
+  YearlyTarget,
 } from '../lib/calculations'
 import { TrackedValue, SimpleTrackedValue } from './components/TrackedValue'
 import { 
@@ -479,142 +482,454 @@ interface FiMilestonesCardProps {
 }
 
 function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
-  const { fiMilestones, currentFiProgress, currentNetWorth, projections } = primaryProjection;
+  const { fiMilestones, currentFiProgress, currentNetWorth, projections, scenario } = primaryProjection;
   const currentYear = new Date().getFullYear();
   const currentFiTarget = projections[0]?.fiTarget ?? 0;
+  const [activeSection, setActiveSection] = React.useState<'short-term' | 'fi-progress' | 'all'>('short-term');
+  
+  // Create settings object from scenario for calculations
+  const settings = useMemo(() => ({
+    currentRate: scenario.currentRate,
+    swr: scenario.swr,
+    yearlyContribution: scenario.yearlyContribution,
+    birthDate: '', // Will be set from profile if available
+    monthlySpend: scenario.baseMonthlyBudget,
+    inflationRate: scenario.inflationRate,
+    baseMonthlyBudget: scenario.baseMonthlyBudget,
+    spendingGrowthRate: scenario.spendingGrowthRate,
+    incomeGrowthRate: scenario.incomeGrowthRate,
+  }), [scenario]);
   
   // Filter milestones by type for display
   const percentageMilestones = fiMilestones.milestones.filter(m => m.type === 'percentage');
   const lifestyleMilestones = fiMilestones.milestones.filter(m => m.type === 'lifestyle');
   const specialMilestones = fiMilestones.milestones.filter(m => m.type === 'special');
+  const securityMilestones = fiMilestones.milestones.filter(m => m.type === 'security');
+  const compoundingMilestones = fiMilestones.milestones.filter(m => m.type === 'compounding');
+  
+  // Calculate short-term targets - get birthDate from profile via useScenarios context if available
+  const birthYear = projections[0]?.coastFiAge && projections[0]?.coastFiYear 
+    ? projections[0].coastFiYear - projections[0].coastFiAge 
+    : null;
+  const shortTermTargets = useMemo(() => 
+    calculateShortTermTargets(projections, settings, birthYear, fiMilestones),
+    [projections, settings, birthYear, fiMilestones]
+  );
+  
+  // Get next security milestone to highlight
+  const nextSecurityMilestone = securityMilestones.find(m => !m.isAchieved);
+  const nextCompoundingMilestone = compoundingMilestones.find(m => !m.isAchieved);
+  
+  // Calculate months of current runway
+  const monthlySpend = projections[0]?.monthlySpend || settings.monthlySpend || 3000;
+  const currentRunwayMonths = monthlySpend > 0 ? currentNetWorth.total / monthlySpend : 0;
   
   return (
     <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
-      <h2 className="text-lg font-semibold text-slate-300 mb-2">
-        FI Milestones
-      </h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-lg font-semibold text-slate-300">
+          Financial Milestones
+        </h2>
+        {/* Section toggle */}
+        <div className="flex gap-1 text-xs">
+          <button
+            onClick={() => setActiveSection('short-term')}
+            className={`px-3 py-1.5 rounded-lg transition-colors ${
+              activeSection === 'short-term' 
+                ? 'bg-emerald-600 text-white' 
+                : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+            }`}
+          >
+            Short-Term
+          </button>
+          <button
+            onClick={() => setActiveSection('fi-progress')}
+            className={`px-3 py-1.5 rounded-lg transition-colors ${
+              activeSection === 'fi-progress' 
+                ? 'bg-emerald-600 text-white' 
+                : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+            }`}
+          >
+            FI Progress
+          </button>
+          <button
+            onClick={() => setActiveSection('all')}
+            className={`px-3 py-1.5 rounded-lg transition-colors ${
+              activeSection === 'all' 
+                ? 'bg-emerald-600 text-white' 
+                : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+            }`}
+          >
+            All
+          </button>
+        </div>
+      </div>
       <p className="text-slate-500 text-sm mb-6">
-        Your journey to financial independence
+        {activeSection === 'short-term' 
+          ? 'Security milestones and 5-year targets for peace of mind'
+          : activeSection === 'fi-progress'
+            ? 'Your journey to financial independence'
+            : 'Complete view of all financial milestones'}
       </p>
       
-      {/* Current Progress Overview */}
-      <div className="mb-6 bg-slate-900/50 rounded-xl p-4">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-slate-400 text-sm">Current FI Progress</span>
-          <SimpleTrackedValue 
-            value={currentFiProgress} 
-            name="Current FI Progress" 
-            description="Percentage of FI target achieved"
-            formula="(Current Net Worth ÷ FI Target) × 100"
-            inputs={[{ name: 'Net Worth', value: currentNetWorth.total, unit: '$' }, { name: 'FI Target', value: currentFiTarget, unit: '$' }]}
-            formatAs="percent"
-            decimals={1}
-            className="text-emerald-400 font-mono text-lg font-semibold"
-          />
-        </div>
-        
-        {/* Progress bar with milestone markers */}
-        <div className="relative">
-          <div className="h-4 bg-slate-700 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500"
-              style={{ width: `${Math.min(100, currentFiProgress)}%` }}
-            />
-          </div>
-          
-          {/* Milestone markers */}
-          <div className="absolute top-0 left-0 right-0 h-4 flex items-center">
-            {[10, 25, 50, 75, 100].map(percent => (
-              <div
-                key={percent}
-                className="absolute h-4 w-0.5 bg-slate-600"
-                style={{ left: `${percent}%` }}
-                title={`${percent}% FI`}
-              />
-            ))}
-          </div>
-        </div>
-        
-        {/* Milestone labels */}
-        <div className="flex justify-between mt-2 text-xs text-slate-500">
-          <span>0%</span>
-          <span>25%</span>
-          <span>50%</span>
-          <span>75%</span>
-          <span>100%</span>
-        </div>
-        
-        {/* Next milestone info */}
-        {fiMilestones.nextMilestone && (
-          <div className="mt-4 pt-4 border-t border-slate-700">
-            <div className="flex items-center justify-between">
+      {/* SHORT-TERM SECTION */}
+      {(activeSection === 'short-term' || activeSection === 'all') && (
+        <>
+          {/* Current Runway Overview */}
+          <div className="mb-6 bg-gradient-to-r from-slate-900/80 to-slate-800/50 rounded-xl p-4 border border-slate-700">
+            <div className="flex items-center justify-between mb-3">
               <div>
-                <p className="text-slate-300 text-sm font-medium">
-                  Next: {fiMilestones.nextMilestone.shortName}
-                </p>
-                <p className="text-slate-500 text-xs">
-                  {fiMilestones.nextMilestone.yearsFromNow === 0 
-                    ? 'This year' 
-                    : fiMilestones.nextMilestone.yearsFromNow === 1
-                      ? 'Next year'
-                      : `In ${fiMilestones.nextMilestone.yearsFromNow} years`}
-                  {fiMilestones.nextMilestone.age && ` (age ${fiMilestones.nextMilestone.age})`}
-                </p>
+                <span className="text-slate-400 text-sm">Current Financial Runway</span>
+                <p className="text-slate-500 text-xs">How long your savings could cover expenses</p>
               </div>
               <div className="text-right">
-                <SimpleTrackedValue
-                  value={fiMilestones.amountToNext}
-                  name="Amount to Next Milestone"
-                  description={`Amount needed to reach ${fiMilestones.nextMilestone.shortName}`}
-                  formula={`${fiMilestones.nextMilestone.shortName} Target - Current Net Worth`}
-                  inputs={[
-                    { name: 'Target Progress', value: fiMilestones.nextMilestone.targetValue, unit: '%' },
-                    { name: 'Current Progress', value: Math.round(currentFiProgress * 10) / 10, unit: '%' },
-                  ]}
-                  className="text-slate-300 font-mono text-sm"
-                />
-                <p className="text-slate-500 text-xs">to go</p>
+                <span className="text-2xl font-bold text-emerald-400 font-mono">
+                  {currentRunwayMonths >= 12 
+                    ? `${(currentRunwayMonths / 12).toFixed(1)} years`
+                    : `${Math.floor(currentRunwayMonths)} months`}
+                </span>
               </div>
             </div>
+            
+            {/* Runway progress bar */}
+            <div className="relative">
+              <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-500 ${
+                    currentRunwayMonths >= 24 ? 'bg-gradient-to-r from-green-600 to-emerald-400' :
+                    currentRunwayMonths >= 12 ? 'bg-gradient-to-r from-teal-600 to-teal-400' :
+                    currentRunwayMonths >= 6 ? 'bg-gradient-to-r from-yellow-600 to-yellow-400' :
+                    'bg-gradient-to-r from-orange-600 to-orange-400'
+                  }`}
+                  style={{ width: `${Math.min(100, (currentRunwayMonths / 24) * 100)}%` }}
+                />
+              </div>
+              {/* Markers */}
+              <div className="absolute top-0 left-0 right-0 h-3 flex items-center">
+                {[3, 6, 12, 24].map(months => (
+                  <div
+                    key={months}
+                    className={`absolute h-3 w-0.5 ${currentRunwayMonths >= months ? 'bg-slate-500' : 'bg-slate-600'}`}
+                    style={{ left: `${(months / 24) * 100}%` }}
+                    title={`${months} months`}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-between mt-1.5 text-xs text-slate-500">
+              <span>3mo</span>
+              <span>6mo</span>
+              <span>1yr</span>
+              <span>2yr</span>
+            </div>
           </div>
-        )}
-      </div>
+          
+          {/* Security Milestones */}
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-orange-400 mb-2 flex items-center gap-2">
+              <span className="text-lg">🛡️</span> Security Milestones
+            </h3>
+            <p className="text-slate-500 text-xs mb-3">
+              Protection against layoffs, emergencies, and unexpected events
+            </p>
+            <div className="space-y-2">
+              {securityMilestones.map(milestone => (
+                <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+              ))}
+            </div>
+          </div>
+          
+          {/* Compounding Advantage Milestones */}
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-purple-400 mb-2 flex items-center gap-2">
+              <span className="text-lg">📈</span> Compounding Advantage
+            </h3>
+            <p className="text-slate-500 text-xs mb-3">
+              When your money starts working harder than you - the path to "post-economic" security
+            </p>
+            <div className="space-y-2">
+              {compoundingMilestones.map(milestone => (
+                <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+              ))}
+            </div>
+          </div>
+          
+          {/* 5-Year Targets */}
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-blue-400 mb-2 flex items-center gap-2">
+              <span className="text-lg">🎯</span> 5-Year Targets
+            </h3>
+            <p className="text-slate-500 text-xs mb-3">
+              Year-by-year goals to build financial security
+            </p>
+            
+            {/* Magic Number & Diminishing Returns */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <p className="text-slate-500 text-xs mb-1">The "Magic Number"</p>
+                <SimpleTrackedValue
+                  value={shortTermTargets.magicNumber}
+                  name="Post-Economic Security Target"
+                  description="Net worth where even a 50% market crash + no more saving still leads to FI by 65"
+                  formula="FI Target at 65 ÷ (0.5 × Growth Factor)"
+                  inputs={[
+                    { name: 'Crash Buffer', value: '50%' },
+                    { name: 'Return Rate', value: `${settings.currentRate}%` },
+                  ]}
+                  className="text-amber-400 font-mono font-semibold"
+                />
+                {shortTermTargets.yearsToMagicNumber !== null && (
+                  <p className="text-slate-500 text-xs mt-1">
+                    ~{shortTermTargets.yearsToMagicNumber} years away
+                  </p>
+                )}
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <p className="text-slate-500 text-xs mb-1">Diminishing Returns At</p>
+                <SimpleTrackedValue
+                  value={shortTermTargets.diminishingReturnsThreshold}
+                  name="Diminishing Returns Threshold"
+                  description="Above this, compound growth dominates - saving more matters less"
+                  formula="(Yearly Contribution × 2) ÷ Return Rate"
+                  inputs={[
+                    { name: 'Yearly Contribution', value: settings.yearlyContribution, unit: '$' },
+                    { name: 'Return Rate', value: `${settings.currentRate}%` },
+                  ]}
+                  className="text-cyan-400 font-mono font-semibold"
+                />
+                <p className="text-slate-500 text-xs mt-1">
+                  Current efficiency: {Math.round(shortTermTargets.currentSavingsEfficiency * 100)}%
+                </p>
+              </div>
+            </div>
+            
+            {/* Year-by-Year Targets */}
+            <div className="space-y-2">
+              {shortTermTargets.targets.map((target) => (
+                <YearlyTargetRow key={target.year} target={target} />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
       
-      {/* Percentage Milestones */}
-      <div className="mb-6">
-        <h3 className="text-sm font-medium text-slate-400 mb-3">
-          Progress Milestones
-        </h3>
-        <div className="space-y-2">
-          {percentageMilestones.map(milestone => (
-            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
-          ))}
+      {/* FI PROGRESS SECTION */}
+      {(activeSection === 'fi-progress' || activeSection === 'all') && (
+        <>
+          {/* Current Progress Overview */}
+          <div className="mb-6 bg-slate-900/50 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-slate-400 text-sm">Current FI Progress</span>
+              <SimpleTrackedValue 
+                value={currentFiProgress} 
+                name="Current FI Progress" 
+                description="Percentage of FI target achieved"
+                formula="(Current Net Worth ÷ FI Target) × 100"
+                inputs={[{ name: 'Net Worth', value: currentNetWorth.total, unit: '$' }, { name: 'FI Target', value: currentFiTarget, unit: '$' }]}
+                formatAs="percent"
+                decimals={1}
+                className="text-emerald-400 font-mono text-lg font-semibold"
+              />
+            </div>
+            
+            {/* Progress bar with milestone markers */}
+            <div className="relative">
+              <div className="h-4 bg-slate-700 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500"
+                  style={{ width: `${Math.min(100, currentFiProgress)}%` }}
+                />
+              </div>
+              
+              {/* Milestone markers */}
+              <div className="absolute top-0 left-0 right-0 h-4 flex items-center">
+                {[10, 25, 50, 75, 100].map(percent => (
+                  <div
+                    key={percent}
+                    className="absolute h-4 w-0.5 bg-slate-600"
+                    style={{ left: `${percent}%` }}
+                    title={`${percent}% FI`}
+                  />
+                ))}
+              </div>
+            </div>
+            
+            {/* Milestone labels */}
+            <div className="flex justify-between mt-2 text-xs text-slate-500">
+              <span>0%</span>
+              <span>25%</span>
+              <span>50%</span>
+              <span>75%</span>
+              <span>100%</span>
+            </div>
+            
+            {/* Next milestone info */}
+            {fiMilestones.nextMilestone && (
+              <div className="mt-4 pt-4 border-t border-slate-700">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-slate-300 text-sm font-medium">
+                      Next: {fiMilestones.nextMilestone.shortName}
+                    </p>
+                    <p className="text-slate-500 text-xs">
+                      {fiMilestones.nextMilestone.yearsFromNow === 0 
+                        ? 'This year' 
+                        : fiMilestones.nextMilestone.yearsFromNow === 1
+                          ? 'Next year'
+                          : `In ${fiMilestones.nextMilestone.yearsFromNow} years`}
+                      {fiMilestones.nextMilestone.age && ` (age ${fiMilestones.nextMilestone.age})`}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <SimpleTrackedValue
+                      value={fiMilestones.amountToNext}
+                      name="Amount to Next Milestone"
+                      description={`Amount needed to reach ${fiMilestones.nextMilestone.shortName}`}
+                      formula={`${fiMilestones.nextMilestone.shortName} Target - Current Net Worth`}
+                      inputs={[
+                        { name: 'Target Progress', value: fiMilestones.nextMilestone.targetValue, unit: '%' },
+                        { name: 'Current Progress', value: Math.round(currentFiProgress * 10) / 10, unit: '%' },
+                      ]}
+                      className="text-slate-300 font-mono text-sm"
+                    />
+                    <p className="text-slate-500 text-xs">to go</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Percentage Milestones */}
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-slate-400 mb-3">
+              Progress Milestones
+            </h3>
+            <div className="space-y-2">
+              {percentageMilestones.map(milestone => (
+                <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+              ))}
+            </div>
+          </div>
+          
+          {/* Lifestyle Milestones */}
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-slate-400 mb-3">
+              Lifestyle Milestones
+            </h3>
+            <div className="space-y-2">
+              {lifestyleMilestones.map(milestone => (
+                <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+              ))}
+            </div>
+          </div>
+          
+          {/* Special Milestones */}
+          <div>
+            <h3 className="text-sm font-medium text-slate-400 mb-3">
+              Special Milestones
+            </h3>
+            <div className="space-y-2">
+              {specialMilestones.map(milestone => (
+                <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Yearly Target Row Component
+interface YearlyTargetRowProps {
+  target: YearlyTarget;
+}
+
+function YearlyTargetRow({ target }: YearlyTargetRowProps) {
+  const [expanded, setExpanded] = React.useState(false);
+  
+  return (
+    <div 
+      className={`rounded-lg p-3 cursor-pointer transition-colors ${
+        target.onTrack 
+          ? 'bg-emerald-900/20 border border-emerald-500/20 hover:bg-emerald-900/30' 
+          : 'bg-slate-900/50 hover:bg-slate-900/70'
+      }`}
+      onClick={() => setExpanded(!expanded)}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
+            target.yearsFromNow === 1 ? 'bg-blue-600 text-white' :
+            target.yearsFromNow === 5 ? 'bg-amber-600 text-white' :
+            'bg-slate-700 text-slate-300'
+          }`}>
+            {target.year.toString().slice(-2)}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-slate-300">
+                {target.year}
+              </span>
+              {target.age && (
+                <span className="text-xs text-slate-500">(age {target.age})</span>
+              )}
+              {target.potentialMilestone && (
+                <span className="text-xs bg-purple-600/30 text-purple-300 px-2 py-0.5 rounded">
+                  {target.potentialMilestone}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">{target.message}</p>
+          </div>
+        </div>
+        
+        <div className="text-right">
+          <div className="text-sm font-mono text-slate-300">
+            <SimpleTrackedValue
+              value={target.targetNetWorth}
+              name={`${target.year} Target`}
+              description={`Target net worth by end of ${target.year}`}
+              formula="Projected Net Worth × 1.05 (5% stretch)"
+              inputs={[
+                { name: 'Projected', value: target.projectedNetWorth, unit: '$' },
+                { name: 'Stretch Factor', value: '5%' },
+              ]}
+              className="text-slate-300 font-mono text-sm"
+            />
+          </div>
+          <span className={`text-xs ${target.onTrack ? 'text-emerald-400' : 'text-slate-500'}`}>
+            {target.onTrack ? 'On track' : `Need +${formatCurrency(target.monthlyContributionNeeded, 0)}/mo`}
+          </span>
         </div>
       </div>
       
-      {/* Lifestyle Milestones */}
-      <div className="mb-6">
-        <h3 className="text-sm font-medium text-slate-400 mb-3">
-          Lifestyle Milestones
-        </h3>
-        <div className="space-y-2">
-          {lifestyleMilestones.map(milestone => (
-            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
-          ))}
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-slate-700 grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <span className="text-slate-500">Projected Net Worth</span>
+            <p className="text-slate-300 font-mono">{formatCurrency(target.projectedNetWorth)}</p>
+          </div>
+          <div>
+            <span className="text-slate-500">Runway at Target</span>
+            <p className="text-slate-300 font-mono">
+              {target.monthsOfRunway >= 12 
+                ? `${(target.monthsOfRunway / 12).toFixed(1)} years`
+                : `${Math.floor(target.monthsOfRunway)} months`}
+            </p>
+          </div>
+          <div>
+            <span className="text-slate-500">Compounding Advantage</span>
+            <p className="text-slate-300 font-mono">{Math.round(target.compoundingAdvantage * 100)}%</p>
+          </div>
+          <div>
+            <span className="text-slate-500">Gap to Target</span>
+            <p className={`font-mono ${target.gapToTarget >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {target.gapToTarget >= 0 ? '+' : ''}{formatCurrency(target.gapToTarget)}
+            </p>
+          </div>
         </div>
-      </div>
-      
-      {/* Special Milestones */}
-      <div>
-        <h3 className="text-sm font-medium text-slate-400 mb-3">
-          Special Milestones
-        </h3>
-        <div className="space-y-2">
-          {specialMilestones.map(milestone => (
-            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -145,7 +145,9 @@ export interface CalculatedFinancials {
 export type FiMilestoneType = 
   | 'percentage'      // Based on FI progress percentage (10%, 25%, 50%, 75%, 100%)
   | 'lifestyle'       // Based on spending levels (Lean FI, Regular FI, Fat FI)
-  | 'special';        // Special milestones (Coast FI, Barista FI, Crossover)
+  | 'special'         // Special milestones (Coast FI, Barista FI, Crossover)
+  | 'security'        // Short-term security milestones (emergency fund, runway targets)
+  | 'compounding';    // Compounding advantage milestones (when money works harder for you)
 
 export interface FiMilestone {
   id: string;
@@ -390,6 +392,158 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
     targetValue: 50, // 50% FI - can semi-retire and let investments compound
     color: '#ec4899', // pink-500
     icon: 'flamingo',
+  },
+  
+  // ============================================================================
+  // SHORT-TERM SECURITY MILESTONES
+  // These provide peace of mind and protection against unexpected events
+  // ============================================================================
+  
+  {
+    id: 'emergency_3mo',
+    name: '3-Month Emergency Fund',
+    shortName: '3mo Runway',
+    description: 'You have 3 months of expenses saved. This covers most short-term disruptions like job transitions or unexpected costs.',
+    type: 'security',
+    targetValue: 3, // 3 months of expenses
+    color: '#f97316', // orange-500
+    icon: 'shield',
+  },
+  {
+    id: 'emergency_6mo',
+    name: '6-Month Emergency Fund',
+    shortName: '6mo Runway',
+    description: 'The recommended emergency fund. You can weather a typical job search or extended illness without touching investments.',
+    type: 'security',
+    targetValue: 6, // 6 months of expenses
+    color: '#eab308', // yellow-500
+    icon: 'shield-check',
+  },
+  {
+    id: 'emergency_12mo',
+    name: '1-Year Runway',
+    shortName: '1yr Runway',
+    description: 'A full year of expenses covered. You\'re protected against recessions, extended job searches, or career pivots.',
+    type: 'security',
+    targetValue: 12, // 12 months of expenses
+    color: '#84cc16', // lime-500
+    icon: 'fortress',
+  },
+  {
+    id: 'emergency_24mo',
+    name: '2-Year Runway ("F-You Money")',
+    shortName: '2yr Runway',
+    description: 'Two years of freedom. You can walk away from any toxic situation, take time to find the right opportunity, or pursue a passion.',
+    type: 'security',
+    targetValue: 24, // 24 months of expenses  
+    color: '#22c55e', // green-500
+    icon: 'castle',
+  },
+  {
+    id: 'layoff_proof',
+    name: 'Layoff-Proof',
+    shortName: 'Layoff-Proof',
+    description: 'You have enough that even a layoff followed by a market crash wouldn\'t derail your long-term plans. 2 years expenses + 20% buffer for market recovery.',
+    type: 'security',
+    targetValue: 2.4, // 2 years * 1.2 buffer = 2.4 years worth
+    color: '#14b8a6', // teal-500
+    icon: 'shield-star',
+  },
+  
+  // ============================================================================
+  // COMPOUNDING ADVANTAGE MILESTONES  
+  // When your money starts working harder than you - the "post-economic" feeling
+  // ============================================================================
+  
+  {
+    id: 'first_10k',
+    name: 'First $10,000',
+    shortName: '$10K Saved',
+    description: 'The hardest psychological milestone! Getting to 5 figures proves you can save. Most people never reach this.',
+    type: 'compounding',
+    targetValue: 10000,
+    color: '#94a3b8', // slate-400
+    icon: 'seed',
+  },
+  {
+    id: 'first_25k',
+    name: 'First $25,000',
+    shortName: '$25K Saved',
+    description: 'A quarter of the way to six figures. Your money is starting to generate noticeable returns.',
+    type: 'compounding',
+    targetValue: 25000,
+    color: '#a1a1aa', // zinc-400
+    icon: 'sprout',
+  },
+  {
+    id: 'first_50k',
+    name: 'First $50,000',
+    shortName: '$50K Saved',
+    description: 'Halfway to $100K. At 7% returns, you\'re earning ~$3,500/year from investments alone.',
+    type: 'compounding',
+    targetValue: 50000,
+    color: '#60a5fa', // blue-400
+    icon: 'sapling',
+  },
+  {
+    id: 'first_100k',
+    name: 'First $100,000',
+    shortName: '$100K Saved',
+    description: 'The hardest $100K you\'ll ever make - but the most important. Charlie Munger said "The first $100,000 is a b****." Now compounding accelerates.',
+    type: 'compounding',
+    targetValue: 100000,
+    color: '#a78bfa', // violet-400
+    icon: 'tree',
+  },
+  {
+    id: 'compound_equals_contribution',
+    name: 'Compound Equals Contribution',
+    shortName: 'Compounding Matches',
+    description: 'Your annual investment returns now equal your annual contributions. Every dollar you save is matched by compound growth!',
+    type: 'compounding',
+    targetValue: 0, // Calculated dynamically based on returns matching contributions
+    color: '#f472b6', // pink-400
+    icon: 'balance',
+  },
+  {
+    id: 'first_250k',
+    name: 'Quarter Millionaire',
+    shortName: '$250K Saved',
+    description: 'At 7% returns, you\'re earning ~$17,500/year. Your money works a part-time job for you.',
+    type: 'compounding',
+    targetValue: 250000,
+    color: '#818cf8', // indigo-400
+    icon: 'growth',
+  },
+  {
+    id: 'compound_doubles_contribution',
+    name: 'Compound Doubles Contribution',
+    shortName: 'Compounding 2x',
+    description: 'Investment returns are now TWICE your contributions. Congratulations, your money is working harder than you are!',
+    type: 'compounding',
+    targetValue: 0, // Calculated dynamically
+    color: '#c084fc', // purple-400
+    icon: 'rocket',
+  },
+  {
+    id: 'first_500k',
+    name: 'Half Millionaire',
+    shortName: '$500K Saved',
+    description: 'At 7% returns, you\'re earning ~$35,000/year - many people\'s full salary. You\'re generating serious wealth.',
+    type: 'compounding',
+    targetValue: 500000,
+    color: '#2dd4bf', // teal-400
+    icon: 'mountain',
+  },
+  {
+    id: 'post_economic',
+    name: 'Post-Economic Security',
+    shortName: 'Bulletproof',
+    description: 'Even if you stopped saving entirely AND markets crashed 50%, you\'d still be on track for FI by 65. You can blow your paycheck guilt-free.',
+    type: 'compounding',
+    targetValue: 0, // Calculated: needs enough that even worst case (50% crash + no more saving) still reaches FI by 65
+    color: '#fbbf24', // amber-400
+    icon: 'crown',
   },
 ] as const;
 
@@ -908,6 +1062,178 @@ export function calculateFiMilestones(
         isAchieved,
         netWorthAtMilestone: milestoneNetWorth,
       };
+    } else if (def.type === 'security') {
+      // Security milestones - based on months of expenses covered
+      const monthsOfExpenses = def.targetValue;
+      
+      // For layoff_proof, it's a multiplier including buffer (2.4 = 2 years * 1.2 buffer)
+      const targetNetWorth = def.id === 'layoff_proof' 
+        ? currentMonthlySpend * 12 * monthsOfExpenses  // Years worth with buffer
+        : currentMonthlySpend * monthsOfExpenses;       // Months of expenses
+      
+      const isAchieved = currentNetWorth >= targetNetWorth;
+      
+      // Find the first year when this is achieved
+      let milestoneYear: number | null = null;
+      let milestoneNetWorth: number | null = null;
+      
+      for (const row of projections) {
+        const rowTarget = def.id === 'layoff_proof'
+          ? row.monthlySpend * 12 * monthsOfExpenses
+          : row.monthlySpend * monthsOfExpenses;
+        
+        if (row.netWorth >= rowTarget) {
+          milestoneYear = row.year;
+          milestoneNetWorth = row.netWorth;
+          break;
+        }
+      }
+      
+      milestone = {
+        ...def,
+        year: milestoneYear,
+        age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+        yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+        isAchieved,
+        netWorthAtMilestone: milestoneNetWorth,
+      };
+    } else if (def.type === 'compounding') {
+      // Compounding advantage milestones
+      
+      if (def.id === 'compound_equals_contribution') {
+        // When annual returns equal annual contributions
+        // At 7% return, this happens at ~$214k if contributing $15k/year
+        // Formula: NW * rate = contribution, so NW = contribution / rate
+        const annualContribution = settings.yearlyContribution || 0;
+        const returnRate = settings.currentRate / 100;
+        const targetNetWorth = returnRate > 0 && annualContribution > 0 
+          ? annualContribution / returnRate 
+          : Infinity;
+        
+        const isAchieved = currentNetWorth >= targetNetWorth && targetNetWorth !== Infinity;
+        
+        let milestoneYear: number | null = null;
+        let milestoneNetWorth: number | null = null;
+        
+        for (const row of projections) {
+          if (row.netWorth >= targetNetWorth && targetNetWorth !== Infinity) {
+            milestoneYear = row.year;
+            milestoneNetWorth = row.netWorth;
+            break;
+          }
+        }
+        
+        milestone = {
+          ...def,
+          year: milestoneYear,
+          age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+          yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+          isAchieved,
+          netWorthAtMilestone: milestoneNetWorth,
+        };
+      } else if (def.id === 'compound_doubles_contribution') {
+        // When annual returns are 2x annual contributions
+        const annualContribution = settings.yearlyContribution || 0;
+        const returnRate = settings.currentRate / 100;
+        const targetNetWorth = returnRate > 0 && annualContribution > 0 
+          ? (annualContribution * 2) / returnRate 
+          : Infinity;
+        
+        const isAchieved = currentNetWorth >= targetNetWorth && targetNetWorth !== Infinity;
+        
+        let milestoneYear: number | null = null;
+        let milestoneNetWorth: number | null = null;
+        
+        for (const row of projections) {
+          if (row.netWorth >= targetNetWorth && targetNetWorth !== Infinity) {
+            milestoneYear = row.year;
+            milestoneNetWorth = row.netWorth;
+            break;
+          }
+        }
+        
+        milestone = {
+          ...def,
+          year: milestoneYear,
+          age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+          yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+          isAchieved,
+          netWorthAtMilestone: milestoneNetWorth,
+        };
+      } else if (def.id === 'post_economic') {
+        // Post-economic security: Even with 50% market crash + no more saving, still reach FI by 65
+        // Calculate: what net worth today, if halved (50% crash), grows at return rate to age 65
+        // and equals FI target at that time?
+        // Formula: (NW * 0.5) * (1 + r)^yearsTo65 >= FI_target_at_65
+        // NW >= FI_target_at_65 / (0.5 * (1 + r)^yearsTo65)
+        
+        const returnRate = settings.currentRate / 100;
+        const currentAge = birthYear ? currentYear - birthYear : null;
+        const yearsTo65 = currentAge ? Math.max(0, 65 - currentAge) : 25; // Default 25 years if no age
+        
+        // Calculate FI target at 65 (with inflation)
+        const inflatedMonthlySpend = adjustForInflation(currentMonthlySpend, yearsTo65, settings.inflationRate);
+        const fiTargetAt65 = calculateFiTarget(inflatedMonthlySpend, settings.swr);
+        
+        // What you need today such that even with 50% crash + no saving, you reach FI at 65
+        const growthFactor = Math.pow(1 + returnRate, yearsTo65);
+        const crashFactor = 0.5; // 50% market crash
+        const targetNetWorth = fiTargetAt65 / (crashFactor * growthFactor);
+        
+        const isAchieved = currentNetWorth >= targetNetWorth && targetNetWorth > 0;
+        
+        let milestoneYear: number | null = null;
+        let milestoneNetWorth: number | null = null;
+        
+        for (const row of projections) {
+          // Recalculate target for each future year (fewer years to 65)
+          const rowAge = birthYear ? row.year - birthYear : null;
+          const rowYearsTo65 = rowAge ? Math.max(0, 65 - rowAge) : Math.max(0, 25 - row.yearsFromEntry);
+          const rowInflatedSpend = adjustForInflation(row.monthlySpend, rowYearsTo65, settings.inflationRate);
+          const rowFiTarget = calculateFiTarget(rowInflatedSpend, settings.swr);
+          const rowGrowthFactor = Math.pow(1 + returnRate, rowYearsTo65);
+          const rowTarget = rowFiTarget / (crashFactor * rowGrowthFactor);
+          
+          if (row.netWorth >= rowTarget && rowTarget > 0) {
+            milestoneYear = row.year;
+            milestoneNetWorth = row.netWorth;
+            break;
+          }
+        }
+        
+        milestone = {
+          ...def,
+          year: milestoneYear,
+          age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+          yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+          isAchieved,
+          netWorthAtMilestone: milestoneNetWorth,
+        };
+      } else {
+        // Fixed net worth threshold milestones ($10k, $25k, $50k, $100k, $250k, $500k)
+        const targetNetWorth = def.targetValue;
+        const isAchieved = currentNetWorth >= targetNetWorth;
+        
+        let milestoneYear: number | null = null;
+        let milestoneNetWorth: number | null = null;
+        
+        for (const row of projections) {
+          if (row.netWorth >= targetNetWorth) {
+            milestoneYear = row.year;
+            milestoneNetWorth = row.netWorth;
+            break;
+          }
+        }
+        
+        milestone = {
+          ...def,
+          year: milestoneYear,
+          age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+          yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+          isAchieved,
+          netWorthAtMilestone: milestoneNetWorth,
+        };
+      }
     } else {
       // Special milestones
       if (def.id === 'crossover') {
@@ -1060,6 +1386,212 @@ export function getFiMilestonesSummary(
     upcoming,
     nextPercentage: nextMilestone,
     nextLifestyle,
+  };
+}
+
+// ============================================================================
+// SHORT-TERM YEARLY TARGETS
+// Provides actionable year-by-year goals for the next 5 years
+// ============================================================================
+
+export interface YearlyTarget {
+  year: number;
+  age: number | null;
+  yearsFromNow: number;
+  targetNetWorth: number;            // What to aim for by end of year
+  projectedNetWorth: number;         // What projections say you'll have
+  onTrack: boolean;                  // Whether projected >= target
+  gapToTarget: number;               // Difference (positive = ahead, negative = behind)
+  monthlyContributionNeeded: number; // Extra monthly saving needed to hit target
+  // Security metrics at this point
+  monthsOfRunway: number;            // Months of expenses covered
+  compoundingAdvantage: number;      // How much compound growth helps (as % of total growth)
+  // Key milestone that could be hit this year
+  potentialMilestone: string | null;
+  // Motivation
+  message: string;
+}
+
+export interface ShortTermTargetsInfo {
+  targets: YearlyTarget[];
+  fiveYearGoal: number;               // Recommended 5-year net worth target
+  fiveYearProjected: number;          // What projections show for 5 years out
+  onTrackForFiveYear: boolean;
+  // The "magic number" - net worth that provides post-economic security
+  magicNumber: number;
+  yearsToMagicNumber: number | null;
+  // Diminishing returns threshold
+  diminishingReturnsThreshold: number; // Net worth where saving more has less impact
+  currentSavingsEfficiency: number;    // How much each dollar saved helps (0-1)
+}
+
+/**
+ * Calculate short-term yearly targets for the next 5 years
+ * Provides actionable goals that balance saving and enjoying life
+ */
+export function calculateShortTermTargets(
+  projections: ProjectionRow[],
+  settings: UserSettings,
+  birthYear: number | null,
+  fiMilestones: FiMilestonesInfo
+): ShortTermTargetsInfo {
+  if (!projections.length || projections.length < 6) {
+    return {
+      targets: [],
+      fiveYearGoal: 0,
+      fiveYearProjected: 0,
+      onTrackForFiveYear: false,
+      magicNumber: 0,
+      yearsToMagicNumber: null,
+      diminishingReturnsThreshold: 0,
+      currentSavingsEfficiency: 1,
+    };
+  }
+  
+  const currentYear = new Date().getFullYear();
+  const currentRow = projections[0];
+  const currentNetWorth = currentRow.netWorth;
+  const currentMonthlySpend = currentRow.monthlySpend;
+  const annualContribution = settings.yearlyContribution || 0;
+  const returnRate = settings.currentRate / 100;
+  
+  const targets: YearlyTarget[] = [];
+  
+  // Generate targets for the next 5 years
+  for (let i = 1; i <= 5; i++) {
+    const projRow = projections[i];
+    if (!projRow) continue;
+    
+    const targetYear = currentYear + i;
+    const yearsFromNow = i;
+    const age = birthYear ? targetYear - birthYear : null;
+    
+    // Calculate an aspirational but achievable target
+    // Target is the projected value with a small stretch (5% above projections)
+    // This provides motivation without being discouraging
+    const projectedNetWorth = projRow.netWorth;
+    const stretchFactor = 1.05; // 5% stretch goal
+    const targetNetWorth = Math.round(projectedNetWorth * stretchFactor);
+    
+    const gapToTarget = projectedNetWorth - targetNetWorth;
+    const onTrack = gapToTarget >= 0;
+    
+    // Calculate extra monthly contribution needed to hit target
+    const shortfall = Math.max(0, targetNetWorth - projectedNetWorth);
+    const monthsRemaining = yearsFromNow * 12;
+    // Simple approximation: extra needed per month (with some growth)
+    const monthlyContributionNeeded = shortfall > 0 
+      ? shortfall / (monthsRemaining * (1 + returnRate * yearsFromNow / 2))
+      : 0;
+    
+    // Calculate months of runway at this point
+    const futureMonthlySpend = projRow.monthlySpend;
+    const monthsOfRunway = futureMonthlySpend > 0 
+      ? projectedNetWorth / futureMonthlySpend 
+      : 0;
+    
+    // Calculate compounding advantage (what % of growth comes from compound returns)
+    const totalGrowth = projectedNetWorth - currentNetWorth;
+    const contributionsPortion = annualContribution * yearsFromNow;
+    const compoundGrowth = totalGrowth - contributionsPortion;
+    const compoundingAdvantage = totalGrowth > 0 
+      ? Math.max(0, compoundGrowth / totalGrowth) 
+      : 0;
+    
+    // Find potential milestones for this year
+    let potentialMilestone: string | null = null;
+    const milestoneThisYear = fiMilestones.milestones.find(m => 
+      m.year === targetYear && !m.isAchieved
+    );
+    if (milestoneThisYear) {
+      potentialMilestone = milestoneThisYear.shortName;
+    }
+    
+    // Generate motivational message based on the year
+    let message: string;
+    if (i === 1) {
+      message = monthsOfRunway >= 12 
+        ? "You'll have 1+ years of runway - major security milestone!"
+        : `Building toward ${Math.ceil(12 - monthsOfRunway)} more months of runway`;
+    } else if (i === 2) {
+      message = compoundingAdvantage >= 0.5
+        ? "Compound growth is pulling its weight - your money works for you"
+        : "Stay consistent - compound growth is building momentum";
+    } else if (i === 3) {
+      message = potentialMilestone 
+        ? `Could hit ${potentialMilestone} this year!`
+        : "The midpoint - your habits are now ingrained";
+    } else if (i === 4) {
+      message = "Past the hardest part - momentum is on your side";
+    } else {
+      message = onTrack 
+        ? "5-year goal in sight - you're building real security"
+        : "Stretch goal - each dollar counts";
+    }
+    
+    targets.push({
+      year: targetYear,
+      age,
+      yearsFromNow,
+      targetNetWorth,
+      projectedNetWorth,
+      onTrack,
+      gapToTarget,
+      monthlyContributionNeeded,
+      monthsOfRunway,
+      compoundingAdvantage,
+      potentialMilestone,
+      message,
+    });
+  }
+  
+  // Calculate 5-year goal (the target for year 5)
+  const fiveYearTarget = targets.find(t => t.yearsFromNow === 5);
+  const fiveYearGoal = fiveYearTarget?.targetNetWorth ?? 0;
+  const fiveYearProjected = fiveYearTarget?.projectedNetWorth ?? 0;
+  const onTrackForFiveYear = fiveYearProjected >= fiveYearGoal;
+  
+  // Calculate the "magic number" - post-economic security threshold
+  // This is the amount where even with a 50% crash + no more saving, you reach FI by 65
+  const currentAge = birthYear ? currentYear - birthYear : null;
+  const yearsTo65 = currentAge ? Math.max(0, 65 - currentAge) : 25;
+  const inflatedSpend = adjustForInflation(currentMonthlySpend, yearsTo65, settings.inflationRate);
+  const fiTargetAt65 = calculateFiTarget(inflatedSpend, settings.swr);
+  const crashFactor = 0.5;
+  const growthFactor = Math.pow(1 + returnRate, yearsTo65);
+  const magicNumber = fiTargetAt65 / (crashFactor * growthFactor);
+  
+  // Find years to magic number
+  let yearsToMagicNumber: number | null = null;
+  for (const row of projections) {
+    if (row.netWorth >= magicNumber) {
+      yearsToMagicNumber = row.year - currentYear;
+      break;
+    }
+  }
+  
+  // Calculate diminishing returns threshold
+  // This is where compound growth equals 2x contributions - beyond this, saving more matters less
+  const diminishingReturnsThreshold = returnRate > 0 && annualContribution > 0
+    ? (annualContribution * 2) / returnRate
+    : 500000; // Default to $500k if can't calculate
+  
+  // Current savings efficiency: how much impact does each saved dollar have
+  // At low net worth, each dollar is crucial (efficiency = 1)
+  // As you approach diminishing returns threshold, efficiency decreases
+  const currentSavingsEfficiency = currentNetWorth < diminishingReturnsThreshold
+    ? 1 - (currentNetWorth / diminishingReturnsThreshold) * 0.5 // Goes from 1 to 0.5
+    : 0.5 - Math.min(0.4, (currentNetWorth - diminishingReturnsThreshold) / (diminishingReturnsThreshold * 4)); // Approaches 0.1
+  
+  return {
+    targets,
+    fiveYearGoal,
+    fiveYearProjected,
+    onTrackForFiveYear,
+    magicNumber,
+    yearsToMagicNumber,
+    diminishingReturnsThreshold,
+    currentSavingsEfficiency: Math.max(0.1, Math.min(1, currentSavingsEfficiency)),
   };
 }
 
