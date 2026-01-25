@@ -2414,24 +2414,35 @@ function ProjectionsTable({
                     const isFirstScenario = scenarioIndex === 0;
                     const isLastScenario = scenarioIndex === scenarioProjections.length - 1;
 
-                    // For monthly view, we need to interpolate from start to end of year
+                    // Get net worth and FI status
                     let netWorthValue = 0;
                     let isFiYear = false;
 
-                    if (viewMode === 'monthly') {
-                      const currentYearRow = sp.projections.find(p => p.year === lookupYear);
-                      const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
-
-                      // monthFraction for end-of-month: Jan=1/12, Feb=2/12, ..., Dec=12/12
-                      const monthFraction = ((row.monthIndex || 0) + 1) / 12;
-
-                      if (currentYearRow) {
-                        // For first year, start from current net worth; otherwise from previous year's end
-                        const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
-                        netWorthValue = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
+                    if (viewMode === 'monthly' && sp.monthlyProjections?.length) {
+                      // Find the matching month in this scenario's monthly projections
+                      const monthData = sp.monthlyProjections.find(
+                        m => m.year === lookupYear && m.month === ((row.monthIndex || 0) + 1)
+                      );
+                      
+                      if (monthData) {
+                        netWorthValue = monthData.netWorth;
+                        // Mark as FI year if this is the first month where SWR covers spend
+                        const prevMonthIndex = sp.monthlyProjections.findIndex(
+                          m => m.year === lookupYear && m.month === ((row.monthIndex || 0) + 1)
+                        );
+                        const prevMonth = prevMonthIndex > 0 ? sp.monthlyProjections[prevMonthIndex - 1] : null;
+                        isFiYear = monthData.swrCoversSpend && (!prevMonth || !prevMonth.swrCoversSpend);
+                      } else {
+                        // Fallback to interpolation
+                        const currentYearRow = sp.projections.find(p => p.year === lookupYear);
+                        const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
+                        const monthFraction = ((row.monthIndex || 0) + 1) / 12;
+                        if (currentYearRow) {
+                          const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
+                          netWorthValue = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
+                        }
+                        isFiYear = (currentYearRow?.isFiYear ?? false) && (row.monthIndex || 0) === 11;
                       }
-
-                      isFiYear = (currentYearRow?.isFiYear ?? false) && (row.monthIndex || 0) === 11;
                     } else {
                       const scenarioRow = sp.projections.find(p => p.year === lookupYear);
                       netWorthValue = scenarioRow?.netWorth || 0;
@@ -2439,62 +2450,57 @@ function ProjectionsTable({
                     }
 
                     // Calculate other values
+                    // For monthly view, use actual monthly projections data (where spending updates each month)
+                    // For yearly view, use yearly projections
                     const scenarioRow = sp.projections.find(p => p.year === lookupYear);
-                    const spendingValue = scenarioRow?.annualSpending || 0;
-                    const spendingDisplayValue = viewMode === 'monthly' ? spendingValue / 12 : spendingValue;
-
-                    const savings = scenarioRow?.annualSavings || 0;
-                    const savingsDisplayValue = viewMode === 'monthly' ? savings / 12 : savings;
-
-                    // SWR calculation
+                    
+                    let spendingDisplayValue = 0;
+                    let savingsDisplayValue = 0;
                     let monthlySwr = 0;
                     let swrCoversSpend = false;
                     let swrDisplayValue = 0;
-
-                    if (viewMode === 'monthly') {
-                      const currentYearRow = sp.projections.find(p => p.year === lookupYear);
-                      const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
-
-                      if (currentYearRow) {
-                        // Calculate interpolated net worth for this month
-                        const monthFraction = ((row.monthIndex || 0) + 1) / 12;
-                        const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
-                        const monthNetWorth = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
-
-                        // Calculate SWR based on interpolated net worth
-                        const swrAmounts = calculateSwrAmounts(monthNetWorth, sp.scenario.swr);
-                        monthlySwr = swrAmounts.monthly;
-                        swrCoversSpend = currentYearRow.monthlySpend > 0 && monthlySwr >= currentYearRow.monthlySpend;
-                        swrDisplayValue = monthlySwr;
-                      }
-                    } else {
-                      monthlySwr = scenarioRow?.monthlySwr || 0;
-                      swrCoversSpend = scenarioRow?.swrCoversSpend || false;
-                      swrDisplayValue = monthlySwr * 12;
-                    }
-
-                    // FI Progress calculation
                     let fiProgress = 0;
-                    let fiTarget = scenarioRow?.fiTarget || 0;
-                    if (viewMode === 'monthly') {
-                      const currentYearRow = sp.projections.find(p => p.year === lookupYear);
-                      const previousYearRow = sp.projections.find(p => p.year === (lookupYear as number) - 1);
+                    let fiTarget = 0;
 
-                      if (currentYearRow) {
-                        // Calculate interpolated net worth for this month
-                        const monthFraction = ((row.monthIndex || 0) + 1) / 12;
-                        const startOfYearNetWorth = previousYearRow ? previousYearRow.netWorth : sp.currentNetWorth.total;
-                        const monthNetWorth = startOfYearNetWorth + (currentYearRow.netWorth - startOfYearNetWorth) * monthFraction;
-
-                        // Calculate FI target and progress based on interpolated net worth
-                        fiTarget = calculateFiTarget(currentYearRow.monthlySpend, sp.scenario.swr);
-                        fiProgress = fiTarget > 0 ? (monthNetWorth / fiTarget) * 100 : 0;
+                    if (viewMode === 'monthly' && sp.monthlyProjections?.length) {
+                      // Find the matching month in this scenario's monthly projections
+                      const monthData = sp.monthlyProjections.find(
+                        m => m.year === lookupYear && m.month === ((row.monthIndex || 0) + 1)
+                      );
+                      
+                      if (monthData) {
+                        // Use actual monthly spending (calculated based on that month's net worth)
+                        spendingDisplayValue = monthData.monthlySpending;
+                        savingsDisplayValue = monthData.monthlySavings;
+                        monthlySwr = monthData.monthlySwr;
+                        swrDisplayValue = monthData.monthlySwr;
+                        swrCoversSpend = monthData.swrCoversSpend;
+                        fiTarget = monthData.fiTarget;
+                        fiProgress = monthData.fiProgress;
+                      } else {
+                        // Fallback to yearly data divided by 12
+                        spendingDisplayValue = (scenarioRow?.annualSpending || 0) / 12;
+                        savingsDisplayValue = (scenarioRow?.annualSavings || 0) / 12;
+                        monthlySwr = scenarioRow?.monthlySwr || 0;
+                        swrDisplayValue = monthlySwr;
+                        swrCoversSpend = scenarioRow?.swrCoversSpend || false;
+                        fiTarget = scenarioRow?.fiTarget || 0;
+                        fiProgress = scenarioRow?.fiProgress || 0;
                       }
                     } else {
+                      // Yearly view - use yearly projections
+                      spendingDisplayValue = scenarioRow?.annualSpending || 0;
+                      savingsDisplayValue = scenarioRow?.annualSavings || 0;
+                      monthlySwr = scenarioRow?.monthlySwr || 0;
+                      swrDisplayValue = monthlySwr * 12; // Show annual SWR
+                      swrCoversSpend = scenarioRow?.swrCoversSpend || false;
+                      fiTarget = scenarioRow?.fiTarget || 0;
                       fiProgress = scenarioRow?.fiProgress || 0;
                     }
 
-                    // Income values
+                    const savings = savingsDisplayValue;
+
+                    // Income values (still from yearly, divided by 12 for monthly)
                     const income = scenarioRow?.grossIncome || 0;
                     const hasIncome = sp.hasDynamicIncome && income > 0;
                     const incomeDisplayValue = viewMode === 'monthly' ? income / 12 : income;
