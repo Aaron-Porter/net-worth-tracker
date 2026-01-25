@@ -14,6 +14,41 @@ const SCENARIO_COLORS = [
   "#f97316", // orange
 ];
 
+// Find the first unused color from SCENARIO_COLORS
+// If all colors are used, returns the least-used color
+function getNextAvailableColor(existingScenarios: { color: string }[]): string {
+  const usedColors = new Set(existingScenarios.map(s => s.color));
+  
+  // First, try to find an unused color
+  for (const color of SCENARIO_COLORS) {
+    if (!usedColors.has(color)) {
+      return color;
+    }
+  }
+  
+  // All colors are used, find the least-used one
+  const colorCounts: Record<string, number> = {};
+  for (const color of SCENARIO_COLORS) {
+    colorCounts[color] = 0;
+  }
+  for (const scenario of existingScenarios) {
+    if (colorCounts[scenario.color] !== undefined) {
+      colorCounts[scenario.color]++;
+    }
+  }
+  
+  let minColor = SCENARIO_COLORS[0];
+  let minCount = Infinity;
+  for (const color of SCENARIO_COLORS) {
+    if (colorCounts[color] < minCount) {
+      minCount = colorCounts[color];
+      minColor = color;
+    }
+  }
+  
+  return minColor;
+}
+
 // Default scenario settings
 const DEFAULT_SCENARIO = {
   name: "Base Plan",
@@ -111,8 +146,7 @@ export const create = mutation({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    const colorIndex = existingScenarios.length % SCENARIO_COLORS.length;
-    const color = args.color || SCENARIO_COLORS[colorIndex];
+    const color = args.color || getNextAvailableColor(existingScenarios);
     
     // If this is the first scenario, auto-select it
     const isSelected = args.isSelected ?? (existingScenarios.length === 0);
@@ -291,14 +325,12 @@ export const duplicate = mutation({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    const colorIndex = existingScenarios.length % SCENARIO_COLORS.length;
-
     const now = Date.now();
     return await ctx.db.insert("scenarios", {
       userId,
       name: `${scenario.name} (Copy)`,
       description: scenario.description,
-      color: SCENARIO_COLORS[colorIndex],
+      color: getNextAvailableColor(existingScenarios),
       isSelected: false, // Don't auto-select duplicates
       currentRate: scenario.currentRate,
       swr: scenario.swr,

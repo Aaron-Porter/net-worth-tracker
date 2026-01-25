@@ -2375,6 +2375,9 @@ function ProjectionsTable({
                   <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
                     FI %
                   </th>
+                  <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                    Milestones
+                  </th>
                   {scenarioProjections.some(sp => sp.hasDynamicIncome) && (
                     <>
                       <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
@@ -2625,6 +2628,32 @@ function ProjectionsTable({
                             unit="%"
                             className={`font-mono ${fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}
                           />
+                        </td>
+                        {/* Milestones reached this year */}
+                        <td className="py-2 px-3 text-left">
+                          <div className="flex flex-wrap gap-1">
+                            {/* In monthly view, only show milestones in January to avoid repetition */}
+                            {(viewMode === 'yearly' || row.monthIndex === 0) && 
+                              sp.fiMilestones.milestones
+                                .filter(m => m.year === lookupYear && m.year !== null)
+                                .map(m => (
+                                  <span
+                                    key={m.id}
+                                    className={`text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap ${
+                                      m.isAchieved ? '' : 'opacity-70'
+                                    }`}
+                                    style={{ 
+                                      backgroundColor: `${m.color}20`, 
+                                      color: m.color,
+                                      border: `1px solid ${m.color}40`
+                                    }}
+                                    title={FI_MILESTONE_DEFINITIONS.find(d => d.id === m.id)?.description || m.shortName}
+                                  >
+                                    {m.shortName}
+                                  </span>
+                                ))
+                            }
+                          </div>
                         </td>
                         {/* Income columns (only if any scenario has income data) */}
                         {scenarioProjections.some(sp => sp.hasDynamicIncome) && (
@@ -2950,13 +2979,95 @@ function ProjectionsChart({
                       />
                       <Legend />
 
-                      {/* Add reference line for 100% FI */}
+                      {/* FI Progress milestones - horizontal reference lines */}
                       {metric.key === 'fiProgress' && (
+                        <>
+                          {/* Key percentage milestones */}
+                          {[
+                            { value: 25, label: '25%', color: '#60a5fa' },
+                            { value: 50, label: '50%', color: '#a78bfa' },
+                            { value: 75, label: '75%', color: '#f59e0b' },
+                            { value: 100, label: 'FI', color: '#10b981' },
+                          ].map(milestone => (
+                            <ReferenceLine
+                              key={milestone.value}
+                              y={milestone.value}
+                              stroke={milestone.color}
+                              strokeDasharray="3 3"
+                              strokeOpacity={0.6}
+                              label={{ 
+                                value: milestone.label, 
+                                position: 'right', 
+                                fill: milestone.color, 
+                                fontSize: 10,
+                                opacity: 0.8
+                              }}
+                            />
+                          ))}
+                        </>
+                      )}
+
+                      {/* Net Worth milestones - vertical reference lines for primary scenario */}
+                      {metric.key === 'netWorth' && scenarioProjections[0] && (
+                        <>
+                          {/* Show key milestone achievement years */}
+                          {scenarioProjections[0].fiMilestones.milestones
+                            .filter(m => 
+                              m.year !== null && 
+                              ['fi_50', 'fi_100', 'lean_fi', 'coast_fi'].includes(m.id)
+                            )
+                            .map(milestone => (
+                              <ReferenceLine
+                                key={milestone.id}
+                                x={milestone.year!}
+                                stroke={milestone.color}
+                                strokeDasharray="5 5"
+                                strokeOpacity={0.7}
+                                label={{
+                                  value: milestone.shortName,
+                                  position: 'top',
+                                  fill: milestone.color,
+                                  fontSize: 10
+                                }}
+                              />
+                            ))}
+                        </>
+                      )}
+
+                      {/* FI Progress chart - vertical milestone year markers */}
+                      {metric.key === 'fiProgress' && scenarioProjections[0] && (
+                        <>
+                          {scenarioProjections[0].fiMilestones.milestones
+                            .filter(m => 
+                              m.year !== null && 
+                              m.type === 'percentage' && 
+                              [25, 50, 75, 100].includes(m.targetValue)
+                            )
+                            .map(milestone => (
+                              <ReferenceLine
+                                key={`year-${milestone.id}`}
+                                x={milestone.year!}
+                                stroke={milestone.color}
+                                strokeDasharray="2 4"
+                                strokeOpacity={0.4}
+                              />
+                            ))}
+                        </>
+                      )}
+
+                      {/* Spending & Savings charts - show FI year marker */}
+                      {(metric.key === 'spending' || metric.key === 'savings') && scenarioProjections[0]?.fiYear && (
                         <ReferenceLine
-                          y={100}
+                          x={scenarioProjections[0].fiYear}
                           stroke="#10b981"
-                          strokeDasharray="3 3"
-                          label={{ value: '100% FI', position: 'right', fill: '#10b981', fontSize: 11 }}
+                          strokeDasharray="5 5"
+                          strokeOpacity={0.6}
+                          label={{
+                            value: 'FI',
+                            position: 'top',
+                            fill: '#10b981',
+                            fontSize: 10
+                          }}
                         />
                       )}
 
