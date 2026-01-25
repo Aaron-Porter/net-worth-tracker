@@ -82,7 +82,7 @@ function AuthenticatedApp() {
   
   // UI state
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
-  const [projectionsView, setProjectionsView] = useState<'table' | 'chart'>('table')
+  const [projectionsView, setProjectionsView] = useState<'table' | 'monthly' | 'chart'>('table')
   const [newAmount, setNewAmount] = useState<string>('')
 
   // Get the primary scenario (first selected) for dashboard display
@@ -1529,8 +1529,8 @@ interface ProjectionsTabProps {
   latestEntry: ReturnType<typeof useScenarios>['latestEntry'];
   scenarioProjections: ScenarioProjection[];
   profile: ReturnType<typeof useScenarios>['profile'];
-  projectionsView: 'table' | 'chart';
-  setProjectionsView: (view: 'table' | 'chart') => void;
+  projectionsView: 'table' | 'monthly' | 'chart';
+  setProjectionsView: (view: 'table' | 'monthly' | 'chart') => void;
   setActiveTab: (tab: Tab) => void;
   scenariosHook: ReturnType<typeof useScenarios>;
 }
@@ -1667,7 +1667,18 @@ function ProjectionsTab({
                 : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
             }`}
           >
-            Table
+            Yearly
+          </button>
+          <button
+            onClick={() => setProjectionsView('monthly')}
+            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+              projectionsView === 'monthly'
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+            }`}
+            title="Monthly projections where spending updates each month based on net worth"
+          >
+            Monthly
           </button>
           <button
             onClick={() => setProjectionsView('chart')}
@@ -1710,6 +1721,10 @@ function ProjectionsTab({
         <ProjectionsTable
           scenarioProjections={scenarioProjections}
           birthDate={profile.birthDate}
+        />
+      ) : projectionsView === 'monthly' ? (
+        <MonthlyProjectionsTable
+          scenarioProjections={scenarioProjections}
         />
       ) : (
         <ProjectionsChart
@@ -2772,6 +2787,257 @@ const getMetrics = (timeUnit: TimeUnit): MetricConfig[] => [
     formatter: (v) => formatCurrency(v)
   },
 ];
+
+// ============================================================================
+// MONTHLY PROJECTIONS TABLE
+// ============================================================================
+
+function MonthlyProjectionsTable({
+  scenarioProjections,
+}: {
+  scenarioProjections: ScenarioProjection[];
+}) {
+  const [showAllMonths, setShowAllMonths] = useState(false);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const primaryProjection = scenarioProjections[0];
+  
+  if (!primaryProjection || !primaryProjection.monthlyProjections?.length) {
+    return (
+      <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 text-center">
+        <p className="text-slate-400">No monthly projections available</p>
+      </div>
+    );
+  }
+
+  const monthlyData = primaryProjection.monthlyProjections;
+  const years = Array.from(new Set(monthlyData.map(m => m.year))).sort();
+  const displayYear = selectedYear || years[0];
+  
+  // Get months for selected year (or all if showAllMonths)
+  const displayMonths = showAllMonths 
+    ? monthlyData.slice(0, 36) // First 3 years
+    : monthlyData.filter(m => m.year === displayYear);
+
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  return (
+    <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-200">Monthly Projections</h3>
+          <p className="text-sm text-slate-500 mt-1">
+            Spending updates each month as your net worth grows
+          </p>
+        </div>
+        <div className="flex gap-2 items-center">
+          {!showAllMonths && (
+            <select
+              value={displayYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              {years.slice(0, 10).map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={() => setShowAllMonths(!showAllMonths)}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+              showAllMonths 
+                ? 'bg-emerald-500/20 text-emerald-400' 
+                : 'bg-slate-700 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {showAllMonths ? 'Show Year' : 'Show 3 Years'}
+          </button>
+        </div>
+      </div>
+
+      {/* Key insight callout */}
+      <div className="mb-6 p-4 bg-gradient-to-r from-emerald-500/10 to-violet-500/10 rounded-lg border border-emerald-500/20">
+        <div className="flex items-start gap-3">
+          <span className="text-emerald-400 text-lg">💡</span>
+          <div>
+            <p className="text-sm text-slate-300 font-medium">Why Monthly Matters</p>
+            <p className="text-xs text-slate-400 mt-1">
+              With level-based spending, your budget increases as your net worth grows. 
+              This table shows how spending changes month-by-month, not just year-by-year.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-700">
+              <th className="text-left text-slate-400 font-medium py-3 px-3">Month</th>
+              <th className="text-right text-slate-400 font-medium py-3 px-3">Net Worth</th>
+              <th className="text-right text-slate-400 font-medium py-3 px-3">Spending</th>
+              <th className="text-right text-slate-400 font-medium py-3 px-3 hidden md:table-cell">Change</th>
+              <th className="text-right text-slate-400 font-medium py-3 px-3">Interest</th>
+              <th className="text-right text-slate-400 font-medium py-3 px-3 hidden md:table-cell">Savings</th>
+              <th className="text-right text-slate-400 font-medium py-3 px-3">FI %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {displayMonths.map((month, idx) => {
+              const prevMonth = displayMonths[idx - 1];
+              const spendingChange = prevMonth 
+                ? month.monthlySpending - prevMonth.monthlySpending 
+                : 0;
+              const isNewYear = idx === 0 || month.year !== displayMonths[idx - 1]?.year;
+              
+              return (
+                <tr 
+                  key={`${month.year}-${month.month}`}
+                  className={`border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors ${
+                    isNewYear && idx > 0 ? 'border-t-2 border-t-slate-600' : ''
+                  }`}
+                >
+                  <td className="py-2.5 px-3 text-slate-300">
+                    <span className="font-medium">{monthNames[month.month - 1]}</span>
+                    {(showAllMonths || idx === 0) && (
+                      <span className="text-slate-500 ml-1">{month.year}</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono">
+                    <SimpleTrackedValue 
+                      value={month.netWorth} 
+                      name={`${monthNames[month.month - 1]} ${month.year} Net Worth`}
+                      description="Projected net worth at end of month"
+                      formula="Start + Interest + Savings"
+                      inputs={[
+                        { name: 'Starting', value: month.startingNetWorth, unit: '$', source: 'calculated' },
+                        { name: 'Interest', value: month.monthlyInterest, unit: '$', source: 'calculated' },
+                        { name: 'Savings', value: month.monthlySavings, unit: '$', source: 'calculated' },
+                      ]}
+                      className="text-sky-400"
+                    />
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono">
+                    <SimpleTrackedValue 
+                      value={month.monthlySpending} 
+                      name={`${monthNames[month.month - 1]} ${month.year} Spending`}
+                      description="Monthly spending based on current net worth"
+                      formula="Base Budget (inflation-adj) + (Net Worth × Rate ÷ 12)"
+                      inputs={[
+                        { name: 'Net Worth', value: month.startingNetWorth, unit: '$', source: 'calculated' },
+                        { name: 'Base Budget', value: primaryProjection.scenario.baseMonthlyBudget, unit: '$', source: 'setting', settingKey: 'baseMonthlyBudget' },
+                        { name: 'Spending Rate', value: primaryProjection.scenario.spendingGrowthRate, unit: '%', source: 'setting', settingKey: 'spendingGrowthRate' },
+                        { name: 'Inflation Rate', value: primaryProjection.scenario.inflationRate, unit: '%', source: 'setting', settingKey: 'inflationRate' },
+                        { name: 'Years Elapsed', value: month.yearsFromStart, unit: 'years', source: 'calculated' },
+                      ]}
+                      className="text-amber-400"
+                    />
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono hidden md:table-cell">
+                    {spendingChange !== 0 && (
+                      <span className={spendingChange > 0 ? 'text-emerald-400' : 'text-red-400'}>
+                        {spendingChange > 0 ? '+' : ''}{formatCurrency(spendingChange, 0)}
+                      </span>
+                    )}
+                    {spendingChange === 0 && <span className="text-slate-600">-</span>}
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono">
+                    <SimpleTrackedValue 
+                      value={month.monthlyInterest} 
+                      name={`${monthNames[month.month - 1]} Interest`}
+                      description="Investment growth this month"
+                      formula="Net Worth × Monthly Return Rate"
+                      inputs={[
+                        { name: 'Net Worth', value: month.startingNetWorth, unit: '$', source: 'calculated' },
+                        { name: 'Annual Rate', value: primaryProjection.scenario.currentRate, unit: '%', source: 'setting', settingKey: 'currentRate' },
+                        { name: 'Monthly Rate', value: primaryProjection.scenario.currentRate / 12, unit: '%', source: 'derived' },
+                      ]}
+                      className="text-emerald-400"
+                    />
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono hidden md:table-cell">
+                    <SimpleTrackedValue 
+                      value={month.monthlySavings} 
+                      name={`${monthNames[month.month - 1]} Savings`}
+                      description="Net amount saved this month"
+                      formula="Monthly Contribution (or Net Income - Spending)"
+                      inputs={[
+                        { name: 'Contribution', value: month.monthlyContribution, unit: '$', source: 'calculated' },
+                      ]}
+                      className={month.monthlySavings >= 0 ? 'text-violet-400' : 'text-red-400'}
+                    />
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono">
+                    <SimpleTrackedValue 
+                      value={month.fiProgress} 
+                      name={`${monthNames[month.month - 1]} FI Progress`}
+                      description="How close you are to financial independence"
+                      formula="(Net Worth ÷ FI Target) × 100"
+                      inputs={[
+                        { name: 'Net Worth', value: month.netWorth, unit: '$', source: 'calculated' },
+                        { name: 'FI Target', value: month.fiTarget, unit: '$', source: 'calculated' },
+                      ]}
+                      formatAs="percent"
+                      decimals={1}
+                      className={month.swrCoversSpend ? 'text-emerald-400 font-semibold' : 'text-slate-300'}
+                    />
+                    {month.swrCoversSpend && (
+                      <span className="ml-1 text-emerald-400" title="FI Achieved">✓</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Summary */}
+      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-slate-900/50 rounded-lg p-4">
+          <p className="text-xs text-slate-500 uppercase">Starting Spending</p>
+          <SimpleTrackedValue 
+            value={displayMonths[0]?.monthlySpending || 0}
+            name="Starting Monthly Spending"
+            description="Spending at the beginning of the period"
+            formula="Level-based spending calculation"
+            className="text-lg font-mono text-amber-400"
+          />
+        </div>
+        <div className="bg-slate-900/50 rounded-lg p-4">
+          <p className="text-xs text-slate-500 uppercase">Ending Spending</p>
+          <SimpleTrackedValue 
+            value={displayMonths[displayMonths.length - 1]?.monthlySpending || 0}
+            name="Ending Monthly Spending"
+            description="Spending at the end of the period"
+            formula="Level-based spending calculation"
+            className="text-lg font-mono text-amber-400"
+          />
+        </div>
+        <div className="bg-slate-900/50 rounded-lg p-4">
+          <p className="text-xs text-slate-500 uppercase">Spending Growth</p>
+          <SimpleTrackedValue 
+            value={(displayMonths[displayMonths.length - 1]?.monthlySpending || 0) - (displayMonths[0]?.monthlySpending || 0)}
+            name="Spending Growth"
+            description="How much monthly spending increased over the period"
+            formula="Ending Spending - Starting Spending"
+            className="text-lg font-mono text-emerald-400"
+          />
+        </div>
+        <div className="bg-slate-900/50 rounded-lg p-4">
+          <p className="text-xs text-slate-500 uppercase">Net Worth Growth</p>
+          <SimpleTrackedValue 
+            value={(displayMonths[displayMonths.length - 1]?.netWorth || 0) - (displayMonths[0]?.startingNetWorth || 0)}
+            name="Net Worth Growth"
+            description="Total net worth increase over the period"
+            formula="Ending Net Worth - Starting Net Worth"
+            className="text-lg font-mono text-sky-400"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ProjectionsChart({
   scenarioProjections,
