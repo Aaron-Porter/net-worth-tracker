@@ -77,43 +77,88 @@ export function generateTrackedDashboardValues(
   const { scenario, currentNetWorth, growthRates, levelInfo } = projection;
   const netWorth = currentNetWorth.total;
   
-  // Current Net Worth components
-  const currentNetWorthTracked = new CalculationBuilder('current_net_worth', 'Current Net Worth', 'net_worth')
-    .setDescription('Your real-time net worth including base amount and appreciation since last entry')
-    .setFormula('Total = Base Amount + Appreciation + Contributions')
-    .setUnit('$')
-    .addInput('Base Amount', currentNetWorth.baseAmount, '$', 'Net worth at last entry')
-    .addInput('Appreciation', currentNetWorth.appreciation, '$', 'Growth since last entry')
-    .addInput('Contributions', currentNetWorth.contributions, '$', 'Contributions since last entry')
-    .addInput('Annual Return Rate', scenario.currentRate, '%')
-    .addStep('Calculate time elapsed since last entry', 'now - entry timestamp', [], 
-      (Date.now() - latestEntryTimestamp) / (365.25 * 24 * 60 * 60 * 1000))
-    .addStep('Calculate appreciation', 'Base × Rate × Time', [], currentNetWorth.appreciation)
-    .addStep('Sum all components', 'Base + Appreciation + Contributions', [], netWorth)
-    .build(netWorth);
-
+  const timeElapsedYears = (Date.now() - latestEntryTimestamp) / (365.25 * 24 * 60 * 60 * 1000);
+  
+  // Base Amount trace
   const baseAmountTracked = new CalculationBuilder('base_amount', 'Base Amount', 'net_worth')
     .setDescription('Your net worth at the time of your last entry')
-    .setFormula('Base Amount = Last recorded net worth')
+    .setFormula('Sum of all account balances from last entry')
     .setUnit('$')
-    .addInput('Last Entry Amount', currentNetWorth.baseAmount, '$')
+    .addInputWithSource('Last Entry Total', currentNetWorth.baseAmount, 'input', {
+      unit: '$',
+      description: 'Total from your most recent net worth entry'
+    })
     .build(currentNetWorth.baseAmount);
 
+  // Appreciation trace
   const appreciationTracked = new CalculationBuilder('appreciation', 'Appreciation', 'net_worth')
     .setDescription('The growth in your net worth from investment returns since your last entry')
-    .setFormula('Appreciation = Base Amount × (Annual Rate ÷ ms/year) × Time Elapsed (ms)')
+    .setFormula('Base Amount × Annual Rate × Time Elapsed')
     .setUnit('$')
-    .addInput('Base Amount', currentNetWorth.baseAmount, '$')
-    .addInput('Annual Return Rate', scenario.currentRate, '%')
-    .addInput('Time Elapsed', (Date.now() - latestEntryTimestamp) / (365.25 * 24 * 60 * 60 * 1000), 'years')
+    .addInputWithSource('Base Amount', currentNetWorth.baseAmount, 'input', { 
+      unit: '$', 
+      description: 'Net worth at last entry' 
+    })
+    .addSetting('Annual Return Rate', scenario.currentRate, 'currentRate', { 
+      unit: '%', 
+      description: 'Expected annual investment return' 
+    })
+    .addInputWithSource('Time Elapsed', timeElapsedYears, 'calculated', { 
+      unit: 'years', 
+      description: 'Time since last entry' 
+    })
+    .addStep(
+      'Convert rate to decimal', 
+      `${scenario.currentRate}% ÷ 100 = ${(scenario.currentRate / 100).toFixed(4)}`, 
+      [], 
+      scenario.currentRate / 100
+    )
+    .addStep(
+      'Calculate appreciation',
+      `$${currentNetWorth.baseAmount.toLocaleString()} × ${(scenario.currentRate / 100).toFixed(4)} × ${timeElapsedYears.toFixed(6)} years`,
+      [],
+      currentNetWorth.appreciation,
+      '$'
+    )
     .build(currentNetWorth.appreciation);
 
+  // Contributions trace
   const contributionsTracked = new CalculationBuilder('contributions', 'Contributions', 'net_worth')
     .setDescription('Contributions added since your last entry (pro-rated from yearly contribution)')
-    .setFormula('Contributions = (Yearly Contribution × Time Elapsed) + Growth on Contributions')
+    .setFormula('(Yearly Contribution × Time Elapsed) + Growth on Contributions')
     .setUnit('$')
-    .addInput('Yearly Contribution', scenario.yearlyContribution, '$')
+    .addSetting('Yearly Contribution', scenario.yearlyContribution, 'yearlyContribution', { 
+      unit: '$', 
+      description: 'Annual contribution amount' 
+    })
+    .addInputWithSource('Time Elapsed', timeElapsedYears, 'calculated', { 
+      unit: 'years' 
+    })
+    .addStep(
+      'Calculate pro-rated contribution',
+      `$${scenario.yearlyContribution.toLocaleString()} × ${timeElapsedYears.toFixed(4)} years`,
+      [],
+      scenario.yearlyContribution * timeElapsedYears,
+      '$'
+    )
     .build(currentNetWorth.contributions);
+
+  // Current Net Worth (combines the above)
+  const currentNetWorthTracked = new CalculationBuilder('current_net_worth', 'Current Net Worth', 'net_worth')
+    .setDescription('Your real-time net worth including base amount and appreciation since last entry')
+    .setFormula('Base Amount + Appreciation + Contributions')
+    .setUnit('$')
+    .addTrackedInput('Base Amount', baseAmountTracked, 'Net worth at last entry')
+    .addTrackedInput('Appreciation', appreciationTracked, 'Investment growth since last entry')
+    .addTrackedInput('Contributions', contributionsTracked, 'New contributions since last entry')
+    .addStep(
+      'Sum all components',
+      `$${currentNetWorth.baseAmount.toLocaleString()} + $${currentNetWorth.appreciation.toLocaleString(undefined, { maximumFractionDigits: 2 })} + $${currentNetWorth.contributions.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      [],
+      netWorth,
+      '$'
+    )
+    .build(netWorth);
 
   // Growth Rates
   const growthRatesTracked = calculateGrowthRatesTracked(
