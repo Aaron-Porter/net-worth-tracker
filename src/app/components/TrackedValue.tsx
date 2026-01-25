@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { TrackedCalculation, TrackedValue as TrackedValueType, formatNumber } from '../../lib/calculationTrace'
+import { TrackedCalculation, TrackedValue as TrackedValueType, CalculationInput, ValueSource, formatNumber } from '../../lib/calculationTrace'
 
 // ============================================================================
 // TYPES
@@ -23,6 +23,19 @@ interface TrackedValueProps {
   disabled?: boolean;
 }
 
+/** Input definition for SimpleTrackedValue */
+export interface SimpleInput {
+  name: string;
+  value: number | string;
+  unit?: string;
+  /** Where this value comes from */
+  source?: ValueSource;
+  /** For settings: which scenario setting this maps to */
+  settingKey?: string;
+  /** For calculated values: nested trace */
+  trace?: TrackedCalculation;
+}
+
 interface SimpleTrackedValueProps {
   /** The numeric value */
   value: number;
@@ -33,7 +46,14 @@ interface SimpleTrackedValueProps {
   /** The formula used */
   formula: string;
   /** Input values used in the calculation */
-  inputs?: Array<{ name: string; value: number | string; unit?: string }>;
+  inputs?: SimpleInput[];
+  /** Calculation steps showing the work */
+  steps?: Array<{
+    description: string;
+    formula?: string;
+    result?: number;
+    unit?: string;
+  }>;
   /** Number of decimal places */
   decimals?: number;
   /** Additional CSS classes */
@@ -47,6 +67,124 @@ interface SimpleTrackedValueProps {
 // ============================================================================
 // TOOLTIP COMPONENT
 // ============================================================================
+
+/** Get color and label for value source */
+function getSourceDisplay(source?: ValueSource): { color: string; label: string; icon: string } {
+  switch (source) {
+    case 'setting':
+      return { color: 'text-violet-400', label: 'Setting', icon: '⚙️' };
+    case 'calculated':
+      return { color: 'text-emerald-400', label: 'Calculated', icon: '📊' };
+    case 'input':
+      return { color: 'text-sky-400', label: 'User Input', icon: '✏️' };
+    case 'constant':
+      return { color: 'text-amber-400', label: 'Constant', icon: '📌' };
+    case 'api':
+      return { color: 'text-blue-400', label: 'API', icon: '🌐' };
+    case 'derived':
+      return { color: 'text-orange-400', label: 'Derived', icon: '🔗' };
+    default:
+      return { color: 'text-slate-400', label: '', icon: '' };
+  }
+}
+
+/** Component to display an input with source info and expandable nested calculations */
+function InputDisplay({ input, depth = 0 }: { input: CalculationInput; depth?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const sourceDisplay = getSourceDisplay(input.source);
+  const hasNestedTrace = input.trace && input.source === 'calculated';
+  
+  return (
+    <div className={`text-xs ${depth > 0 ? 'ml-3 pl-3 border-l border-slate-700' : ''}`}>
+      <div className="flex justify-between items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            {/* Source indicator */}
+            {input.source && (
+              <span className={`${sourceDisplay.color} text-[10px]`} title={sourceDisplay.label}>
+                {sourceDisplay.icon}
+              </span>
+            )}
+            {/* Name */}
+            <span className="text-slate-300 truncate">{input.name}</span>
+            {/* Setting key indicator */}
+            {input.settingKey && (
+              <span className="text-violet-400/70 text-[10px] font-mono">({input.settingKey})</span>
+            )}
+            {/* Expand button for nested calculations */}
+            {hasNestedTrace && (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="text-emerald-400 hover:text-emerald-300 transition-colors"
+                title="Show calculation breakdown"
+              >
+                <svg 
+                  className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`} 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {/* Description */}
+          {input.description && !input.settingKey && (
+            <div className="text-slate-500 text-[10px] mt-0.5 truncate">{input.description}</div>
+          )}
+        </div>
+        {/* Value */}
+        <span className="font-mono text-slate-200 shrink-0">
+          {typeof input.value === 'number' 
+            ? formatNumber(input.value, input.unit)
+            : String(input.value)}
+        </span>
+      </div>
+      
+      {/* Nested calculation breakdown */}
+      {expanded && input.trace && (
+        <div className="mt-2 bg-slate-900/50 rounded p-2 space-y-2">
+          <div className="text-slate-400 text-[10px] font-medium mb-1">
+            How {input.name} is calculated:
+          </div>
+          {/* Formula */}
+          <div className="font-mono text-[10px] text-emerald-400/80 bg-slate-900/50 rounded px-2 py-1">
+            {input.trace.formula}
+          </div>
+          {/* Nested inputs */}
+          {input.trace.inputs.length > 0 && (
+            <div className="space-y-1">
+              {input.trace.inputs.map((nestedInput, idx) => (
+                <InputDisplay key={idx} input={nestedInput} depth={depth + 1} />
+              ))}
+            </div>
+          )}
+          {/* Steps if any */}
+          {input.trace.steps && input.trace.steps.length > 0 && (
+            <div className="space-y-1 mt-2">
+              <div className="text-slate-500 text-[10px] font-medium">Steps:</div>
+              {input.trace.steps.map((step, idx) => (
+                <div key={idx} className="text-[10px] bg-slate-800/50 rounded p-1.5">
+                  <span className="text-slate-500">{idx + 1}.</span>{' '}
+                  <span className="text-slate-300">{step.description}</span>
+                  {step.formula && (
+                    <div className="font-mono text-slate-500 mt-0.5">{step.formula}</div>
+                  )}
+                  {step.intermediateResult !== undefined && (
+                    <div className="text-emerald-400 font-mono">
+                      = {formatNumber(step.intermediateResult, step.unit || input.trace?.unit)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface TooltipProps {
   trace: TrackedCalculation;
@@ -149,21 +287,9 @@ function CalculationTooltip({ trace, targetRect, onClose }: TooltipProps) {
       {trace.inputs.length > 0 && (
         <div className="mb-3">
           <h4 className="text-xs font-medium text-slate-400 mb-2">Inputs</h4>
-          <div className="space-y-1">
+          <div className="space-y-2">
             {trace.inputs.map((input, idx) => (
-              <div key={idx} className="flex justify-between items-center text-xs">
-                <span className="text-slate-400">
-                  {input.name}
-                  {input.description && (
-                    <span className="text-slate-600 ml-1">({input.description})</span>
-                  )}
-                </span>
-                <span className="font-mono text-slate-200">
-                  {typeof input.value === 'number' 
-                    ? formatNumber(input.value, input.unit)
-                    : String(input.value)}
-                </span>
-              </div>
+              <InputDisplay key={idx} input={input} />
             ))}
           </div>
         </div>
@@ -269,6 +395,7 @@ export function SimpleTrackedValue({
   description,
   formula,
   inputs = [],
+  steps = [],
   decimals = 2,
   className = '',
   unit = '$',
@@ -285,7 +412,21 @@ export function SimpleTrackedValue({
       description,
       category: 'projection',
       formula,
-      inputs: inputs.map(i => ({ ...i, value: i.value })),
+      inputs: inputs.map(i => ({ 
+        name: i.name, 
+        value: i.value,
+        unit: i.unit,
+        source: i.source,
+        settingKey: i.settingKey,
+        trace: i.trace,
+      })),
+      steps: steps.length > 0 ? steps.map(s => ({
+        description: s.description,
+        formula: s.formula,
+        intermediateResult: s.result,
+        unit: s.unit,
+        inputs: [],
+      })) : undefined,
       result: value,
       unit: displayUnit,
       timestamp: Date.now(),

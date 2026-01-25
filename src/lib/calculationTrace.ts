@@ -9,11 +9,26 @@
 // TYPES
 // ============================================================================
 
+/** Source of a value - helps users understand where the value came from */
+export type ValueSource = 
+  | 'setting'      // User-configurable setting (e.g., baseMonthlyBudget, swr)
+  | 'calculated'   // Computed from other values
+  | 'input'        // User input (e.g., account balances)
+  | 'constant'     // Fixed constant (e.g., IRS limits)
+  | 'api'          // From external API or database
+  | 'derived';     // Derived from other calculated values
+
 export interface CalculationInput {
   name: string;
   value: number | string | boolean;
   unit?: string;
   description?: string;
+  /** Where this value comes from */
+  source?: ValueSource;
+  /** For settings: which scenario setting this maps to */
+  settingKey?: string;
+  /** For calculated values: the full trace of how it was calculated */
+  trace?: TrackedCalculation;
 }
 
 export interface CalculationStep {
@@ -21,6 +36,8 @@ export interface CalculationStep {
   formula?: string;
   inputs: CalculationInput[];
   intermediateResult?: number;
+  /** Unit for the intermediate result */
+  unit?: string;
 }
 
 export interface TrackedCalculation {
@@ -96,12 +113,63 @@ export class CalculationBuilder {
     return this;
   }
 
-  addStep(description: string, formula?: string, inputs?: CalculationInput[], intermediateResult?: number): this {
+  /** Add an input with source information */
+  addInputWithSource(
+    name: string, 
+    value: number | string | boolean, 
+    source: ValueSource,
+    options?: { 
+      unit?: string; 
+      description?: string; 
+      settingKey?: string;
+      trace?: TrackedCalculation;
+    }
+  ): this {
+    this.inputs.push({ 
+      name, 
+      value, 
+      source,
+      unit: options?.unit,
+      description: options?.description,
+      settingKey: options?.settingKey,
+      trace: options?.trace,
+    });
+    return this;
+  }
+
+  /** Add a tracked value as an input (includes its full calculation trace) */
+  addTrackedInput(name: string, trackedValue: TrackedValue, description?: string): this {
+    this.inputs.push({
+      name,
+      value: trackedValue.value,
+      unit: trackedValue.trace.unit,
+      description: description || trackedValue.trace.description,
+      source: 'calculated',
+      trace: trackedValue.trace,
+    });
+    return this;
+  }
+
+  /** Add a setting value as an input */
+  addSetting(name: string, value: number | string | boolean, settingKey: string, options?: { unit?: string; description?: string }): this {
+    this.inputs.push({
+      name,
+      value,
+      source: 'setting',
+      settingKey,
+      unit: options?.unit,
+      description: options?.description || `From scenario setting: ${settingKey}`,
+    });
+    return this;
+  }
+
+  addStep(description: string, formula?: string, inputs?: CalculationInput[], intermediateResult?: number, unit?: string): this {
     this.steps.push({
       description,
       formula,
       inputs: inputs || [],
       intermediateResult,
+      unit,
     });
     return this;
   }

@@ -434,60 +434,118 @@ export function createTrackedLevelValues(
   amountToNext: TrackedValue;
   nextLevelThreshold: TrackedValue | null;
 } {
+  // First, create the base budget trace so we can reference it in the monthly budget
+  const baseBudgetTrace = new CalculationBuilder('base_budget', 'Base Budget (Inflation-Adjusted)', 'spending')
+    .setDescription('Your base monthly budget adjusted for inflation since tracking started')
+    .setFormula(`Original Base × (1 + Inflation Rate)^Years`)
+    .setUnit('$')
+    .addSetting('Original Base Budget', levelInfo.baseBudgetOriginal, 'baseMonthlyBudget', { 
+      unit: '$', 
+      description: 'Your starting monthly spending floor' 
+    })
+    .addSetting('Inflation Rate', scenario.inflationRate, 'inflationRate', { 
+      unit: '%', 
+      description: 'Expected annual inflation rate' 
+    })
+    .addInputWithSource('Years Elapsed', levelInfo.yearsElapsed, 'calculated', { 
+      unit: 'years', 
+      description: 'Time since you started tracking' 
+    })
+    .addStep(
+      'Calculate inflation multiplier', 
+      `(1 + ${scenario.inflationRate}% / 100)^${levelInfo.yearsElapsed.toFixed(2)}`, 
+      [], 
+      Math.pow(1 + scenario.inflationRate / 100, levelInfo.yearsElapsed),
+      ''
+    )
+    .addStep(
+      'Apply inflation to base', 
+      `$${levelInfo.baseBudgetOriginal.toLocaleString()} × ${Math.pow(1 + scenario.inflationRate / 100, levelInfo.yearsElapsed).toFixed(4)}`, 
+      [], 
+      levelInfo.baseBudgetInflationAdjusted,
+      '$'
+    )
+    .build(levelInfo.baseBudgetInflationAdjusted);
+
+  // Create the net worth portion trace
+  const netWorthPortionTrace = new CalculationBuilder('nw_portion', 'Net Worth Spending Portion', 'spending')
+    .setDescription('Additional monthly spending unlocked by your net worth')
+    .setFormula(`Net Worth × Spending Rate ÷ 12`)
+    .setUnit('$')
+    .addInputWithSource('Current Net Worth', levelInfo.netWorth, 'calculated', { 
+      unit: '$', 
+      description: 'Sum of all your assets' 
+    })
+    .addSetting('Spending Growth Rate', scenario.spendingGrowthRate, 'spendingGrowthRate', { 
+      unit: '%', 
+      description: 'Percent of net worth added to spending annually' 
+    })
+    .addStep(
+      'Calculate annual portion', 
+      `$${levelInfo.netWorth.toLocaleString()} × ${scenario.spendingGrowthRate}% = $${(levelInfo.netWorth * scenario.spendingGrowthRate / 100).toLocaleString()}`, 
+      [], 
+      levelInfo.netWorth * scenario.spendingGrowthRate / 100,
+      '$'
+    )
+    .addStep(
+      'Convert to monthly', 
+      `$${(levelInfo.netWorth * scenario.spendingGrowthRate / 100).toLocaleString()} ÷ 12`, 
+      [], 
+      levelInfo.netWorthPortion,
+      '$'
+    )
+    .build(levelInfo.netWorthPortion);
+
   return {
     netWorth: new CalculationBuilder('level_net_worth', 'Current Net Worth', 'level')
       .setDescription('Your current total net worth used for level calculations')
-      .setFormula('Current Net Worth')
+      .setFormula('Sum of all assets')
       .setUnit('$')
-      .addInput('Net Worth', levelInfo.netWorth, '$')
+      .addInputWithSource('Total Net Worth', levelInfo.netWorth, 'calculated', { unit: '$' })
       .build(levelInfo.netWorth),
 
-    monthlyBudget: new CalculationBuilder('monthly_budget', 'Monthly Budget', 'spending')
-      .setDescription('Your unlocked monthly spending budget based on your net worth level')
-      .setFormula('Inflation-Adjusted Base + (Net Worth × Spending Rate ÷ 12)')
+    monthlyBudget: new CalculationBuilder('monthly_budget', 'Monthly Spending Budget', 'spending')
+      .setDescription('Your unlocked monthly spending budget based on your FI level. This is the amount you can safely spend each month based on your settings.')
+      .setFormula('Inflation-Adjusted Base + Net Worth Portion')
       .setUnit('$')
-      .addInput('Base Monthly Budget', scenario.baseMonthlyBudget, '$')
-      .addInput('Net Worth', levelInfo.netWorth, '$')
-      .addInput('Spending Growth Rate', scenario.spendingGrowthRate, '%')
-      .addInput('Years Elapsed', levelInfo.yearsElapsed, 'years')
-      .addInput('Inflation Rate', scenario.inflationRate, '%')
-      .addStep('Adjust base for inflation', `Base × (1 + ${scenario.inflationRate}%)^years`, [], levelInfo.baseBudgetInflationAdjusted)
-      .addStep('Calculate net worth portion', `NW × ${scenario.spendingGrowthRate}% ÷ 12`, [], levelInfo.netWorthPortion)
-      .addStep('Sum components', 'Adjusted Base + NW Portion', [], levelInfo.unlockedAtNetWorth)
+      // Add the traced components
+      .addTrackedInput('Base Budget (Inflation-Adjusted)', baseBudgetTrace, 'Click to expand how this is calculated')
+      .addTrackedInput('Net Worth Portion', netWorthPortionTrace, 'Click to expand how this is calculated')
+      // Summary step
+      .addStep(
+        'Sum the components',
+        `$${levelInfo.baseBudgetInflationAdjusted.toLocaleString(undefined, { maximumFractionDigits: 2 })} + $${levelInfo.netWorthPortion.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+        [],
+        levelInfo.unlockedAtNetWorth,
+        '$'
+      )
       .build(levelInfo.unlockedAtNetWorth),
 
     annualBudget: new CalculationBuilder('annual_budget', 'Annual Budget', 'spending')
       .setDescription('Your annual spending budget (monthly × 12)')
       .setFormula('Monthly Budget × 12')
       .setUnit('$')
-      .addInput('Monthly Budget', levelInfo.unlockedAtNetWorth, '$')
+      .addInputWithSource('Monthly Budget', levelInfo.unlockedAtNetWorth, 'calculated', { 
+        unit: '$',
+        trace: baseBudgetTrace.trace // Reference to show this is calculated
+      })
+      .addStep('Multiply by 12', `$${levelInfo.unlockedAtNetWorth.toLocaleString()} × 12`, [], levelInfo.unlockedAtNetWorth * 12, '$')
       .build(levelInfo.unlockedAtNetWorth * 12),
 
-    baseBudget: new CalculationBuilder('base_budget', 'Base Budget (Inflation-Adjusted)', 'spending')
-      .setDescription('Your base monthly budget adjusted for inflation since tracking started')
-      .setFormula(`Original Base × (1 + ${scenario.inflationRate}%)^${levelInfo.yearsElapsed.toFixed(1)} years`)
-      .setUnit('$')
-      .addInput('Original Base', levelInfo.baseBudgetOriginal, '$')
-      .addInput('Inflation Rate', scenario.inflationRate, '%')
-      .addInput('Years Elapsed', levelInfo.yearsElapsed, 'years')
-      .build(levelInfo.baseBudgetInflationAdjusted),
+    baseBudget: baseBudgetTrace,
 
-    netWorthPortion: new CalculationBuilder('nw_portion', 'Net Worth Spending Portion', 'spending')
-      .setDescription('Additional monthly spending unlocked by your net worth')
-      .setFormula(`Net Worth × ${scenario.spendingGrowthRate}% ÷ 12`)
-      .setUnit('$')
-      .addInput('Net Worth', levelInfo.netWorth, '$')
-      .addInput('Spending Growth Rate', scenario.spendingGrowthRate, '%')
-      .addStep('Calculate annual portion', `NW × ${scenario.spendingGrowthRate}%`, [], levelInfo.netWorth * scenario.spendingGrowthRate / 100)
-      .addStep('Convert to monthly', 'Annual ÷ 12', [], levelInfo.netWorthPortion)
-      .build(levelInfo.netWorthPortion),
+    netWorthPortion: netWorthPortionTrace,
 
     amountToNext: new CalculationBuilder('amount_to_next', 'Amount to Next Level', 'level')
       .setDescription('Net worth needed to reach the next level')
       .setFormula('Next Level Threshold - Current Net Worth')
       .setUnit('$')
-      .addInput('Next Level Threshold', levelInfo.nextLevel?.threshold || 0, '$')
-      .addInput('Current Net Worth', levelInfo.netWorth, '$')
+      .addInputWithSource('Next Level Threshold', levelInfo.nextLevel?.threshold || 0, 'constant', { 
+        unit: '$',
+        description: levelInfo.nextLevel ? `Level ${levelInfo.nextLevel.level}: ${levelInfo.nextLevel.name}` : 'N/A'
+      })
+      .addInputWithSource('Current Net Worth', levelInfo.netWorth, 'calculated', { unit: '$' })
+      .addStep('Calculate difference', `$${(levelInfo.nextLevel?.threshold || 0).toLocaleString()} - $${levelInfo.netWorth.toLocaleString()}`, [], levelInfo.amountToNext, '$')
       .build(levelInfo.amountToNext),
 
     nextLevelThreshold: levelInfo.nextLevel 
@@ -495,9 +553,9 @@ export function createTrackedLevelValues(
           .setDescription(`Net worth required for Level ${levelInfo.nextLevel.level} (${levelInfo.nextLevel.name})`)
           .setFormula('Predefined Level Threshold')
           .setUnit('$')
-          .addInput('Level', levelInfo.nextLevel.level)
-          .addInput('Level Name', levelInfo.nextLevel.name)
-          .addInput('Threshold', levelInfo.nextLevel.threshold, '$')
+          .addInputWithSource('Level Number', levelInfo.nextLevel.level, 'constant')
+          .addInputWithSource('Level Name', levelInfo.nextLevel.name, 'constant')
+          .addInputWithSource('Threshold', levelInfo.nextLevel.threshold, 'constant', { unit: '$' })
           .build(levelInfo.nextLevel.threshold)
       : null,
   };
