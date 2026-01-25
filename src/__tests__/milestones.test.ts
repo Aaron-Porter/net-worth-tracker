@@ -977,6 +977,40 @@ describe('Calculation Accuracy', () => {
 // ============================================================================
 
 describe('Bug Verification Tests', () => {
+  describe('Crossover Milestone Definition', () => {
+    it('should use CUMULATIVE interest vs contributions (traditional definition)', () => {
+      // The crossover point is when cumulative interest exceeds cumulative contributions
+      // This represents when your money has "worked harder" than you over the life of your investments
+      const settings = createMockSettings({ yearlyContribution: 20000, currentRate: 7 })
+      
+      const projections = generateTestProjections(300000, settings)
+      
+      // Verify that projections track cumulative values
+      if (projections.length > 1) {
+        // Interest should be cumulative (increasing)
+        for (let i = 1; i < projections.length; i++) {
+          expect(projections[i].interest).toBeGreaterThan(projections[i - 1].interest)
+        }
+      }
+    })
+
+    it('should mark crossover when cumulative interest exceeds cumulative contributions', () => {
+      const settings = createMockSettings({ yearlyContribution: 10000, currentRate: 7 })
+      
+      // With low contributions and good returns, crossover should happen
+      const projections = generateTestProjections(500000, settings)
+      
+      // Find the crossover row
+      const crossoverRow = projections.find(p => p.isCrossover)
+      
+      // If crossover is found, interest should exceed contributions at that point
+      if (crossoverRow) {
+        expect(crossoverRow.interest).toBeGreaterThan(crossoverRow.contributed)
+        expect(crossoverRow.contributed).toBeGreaterThan(0)
+      }
+    })
+  })
+
   describe('Crossover Milestone Consistency', () => {
     it('should have consistent isAchieved and year values', () => {
       const settings = createMockSettings({ yearlyContribution: 20000 })
@@ -1020,6 +1054,25 @@ describe('Bug Verification Tests', () => {
           expect(crossover?.year).toBeLessThanOrEqual(new Date().getFullYear())
         }
       }
+    })
+
+    it('should handle scenarios with high spending growth (negative savings)', () => {
+      // Scenario where spending increases faster than contributions
+      const settings = createMockSettings({
+        yearlyContribution: 20000,
+        baseMonthlyBudget: 5000,
+        spendingGrowthRate: 5, // High spending growth rate
+      })
+      
+      const projections = generateTestProjections(300000, settings)
+      const milestones = calculateFiMilestones(projections, settings, 1990)
+      
+      // Even with high spending growth, milestones should be calculated
+      expect(milestones.milestones.length).toBeGreaterThan(0)
+      
+      // Crossover should still be identifiable
+      const crossover = milestones.milestones.find(m => m.id === 'crossover')
+      expect(crossover).toBeDefined()
     })
   })
 
