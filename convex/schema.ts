@@ -24,6 +24,7 @@ export default defineSchema({
     description: v.optional(v.string()),
     color: v.string(), // Hex color for chart visualization
     isSelected: v.boolean(), // Whether this scenario is selected for viewing projections
+    order: v.optional(v.number()), // Display order (0-based), optional for backward compatibility
     
     // Investment assumptions
     currentRate: v.number(), // Expected annual return rate

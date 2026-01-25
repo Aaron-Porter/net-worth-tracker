@@ -41,6 +41,7 @@ export interface Scenario {
   description?: string;
   color: string;
   isSelected: boolean;
+  order?: number; // Display order (0-based)
   currentRate: number;
   swr: number;
   yearlyContribution: number;
@@ -107,6 +108,8 @@ export interface UseScenariosReturn {
   toggleSelected: (id: Id<"scenarios">) => Promise<void>;
   selectOnly: (id: Id<"scenarios">) => Promise<void>;
   setSelected: (ids: Id<"scenarios">[]) => Promise<void>;
+  reorderScenarios: (orderedIds: Id<"scenarios">[]) => Promise<void>;
+  moveScenario: (id: Id<"scenarios">, direction: "up" | "down") => Promise<void>;
   
   // Projections - generated for all selected scenarios
   scenarioProjections: ScenarioProjection[];
@@ -181,6 +184,8 @@ export function useScenarios(): UseScenariosReturn {
   const toggleSelectedMutation = useMutation(api.scenarios.toggleSelected);
   const selectOnlyMutation = useMutation(api.scenarios.selectOnly);
   const setSelectedMutation = useMutation(api.scenarios.setSelected);
+  const reorderMutation = useMutation(api.scenarios.reorder);
+  const moveScenarioMutation = useMutation(api.scenarios.moveScenario);
   const saveProfileMutation = useMutation(api.settings.saveProfile);
   
   // Local profile state for controlled inputs
@@ -389,6 +394,14 @@ export function useScenarios(): UseScenariosReturn {
     await setSelectedMutation({ ids });
   }, [setSelectedMutation]);
   
+  const reorderScenarios = useCallback(async (orderedIds: Id<"scenarios">[]) => {
+    await reorderMutation({ orderedIds });
+  }, [reorderMutation]);
+  
+  const moveScenario = useCallback(async (id: Id<"scenarios">, direction: "up" | "down") => {
+    await moveScenarioMutation({ id, direction });
+  }, [moveScenarioMutation]);
+  
   return {
     isLoading: rawScenarios === undefined,
     hasScenarios: scenarios.length > 0,
@@ -404,6 +417,8 @@ export function useScenarios(): UseScenariosReturn {
     toggleSelected,
     selectOnly,
     setSelected,
+    reorderScenarios,
+    moveScenario,
     scenarioProjections,
     entries,
     latestEntry,

@@ -81,7 +81,13 @@ export const list = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    return scenarios.sort((a, b) => a.createdAt - b.createdAt);
+    // Sort by order (if set), falling back to createdAt for backward compatibility
+    return scenarios.sort((a, b) => {
+      const orderA = a.order ?? Infinity;
+      const orderB = b.order ?? Infinity;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.createdAt - b.createdAt;
+    });
   },
 });
 
@@ -96,7 +102,13 @@ export const getSelected = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    return scenarios.filter(s => s.isSelected).sort((a, b) => a.createdAt - b.createdAt);
+    // Sort by order (if set), falling back to createdAt for backward compatibility
+    return scenarios.filter(s => s.isSelected).sort((a, b) => {
+      const orderA = a.order ?? Infinity;
+      const orderB = b.order ?? Infinity;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.createdAt - b.createdAt;
+    });
   },
 });
 
@@ -140,7 +152,7 @@ export const create = mutation({
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
 
-    // Get existing scenarios to determine next color
+    // Get existing scenarios to determine next color and order
     const existingScenarios = await ctx.db
       .query("scenarios")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -151,6 +163,10 @@ export const create = mutation({
     // If this is the first scenario, auto-select it
     const isSelected = args.isSelected ?? (existingScenarios.length === 0);
 
+    // Calculate the next order value (max existing order + 1, or 0 if no scenarios)
+    const maxOrder = existingScenarios.reduce((max, s) => Math.max(max, s.order ?? -1), -1);
+    const order = maxOrder + 1;
+
     const now = Date.now();
     return await ctx.db.insert("scenarios", {
       userId,
@@ -158,6 +174,7 @@ export const create = mutation({
       description: args.description,
       color,
       isSelected,
+      order,
       currentRate: args.currentRate,
       swr: args.swr,
       yearlyContribution: args.yearlyContribution,
@@ -205,6 +222,7 @@ export const createDefault = mutation({
       description: DEFAULT_SCENARIO.description,
       color: SCENARIO_COLORS[0],
       isSelected: true,
+      order: 0, // First scenario gets order 0
       currentRate: DEFAULT_SCENARIO.currentRate,
       swr: DEFAULT_SCENARIO.swr,
       yearlyContribution: DEFAULT_SCENARIO.yearlyContribution,
@@ -319,19 +337,40 @@ export const duplicate = mutation({
       throw new Error("Scenario not found");
     }
 
-    // Get existing scenarios to determine next color
+    // Get existing scenarios to determine next color and adjust orders
     const existingScenarios = await ctx.db
       .query("scenarios")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
+    // Sort by order to properly handle insertion
+    const sortedScenarios = existingScenarios.sort((a, b) => {
+      const orderA = a.order ?? Infinity;
+      const orderB = b.order ?? Infinity;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.createdAt - b.createdAt;
+    });
+
+    // Find the original's position and insert the copy right after it
+    const originalOrder = scenario.order ?? sortedScenarios.findIndex(s => s._id === scenario._id);
+    const newOrder = originalOrder + 1;
+
+    // Shift all scenarios after the insertion point
     const now = Date.now();
+    for (const s of sortedScenarios) {
+      const sOrder = s.order ?? sortedScenarios.findIndex(sc => sc._id === s._id);
+      if (sOrder >= newOrder) {
+        await ctx.db.patch(s._id, { order: sOrder + 1, updatedAt: now });
+      }
+    }
+
     return await ctx.db.insert("scenarios", {
       userId,
       name: `${scenario.name} (Copy)`,
       description: scenario.description,
       color: getNextAvailableColor(existingScenarios),
       isSelected: false, // Don't auto-select duplicates
+      order: newOrder,
       currentRate: scenario.currentRate,
       swr: scenario.swr,
       yearlyContribution: scenario.yearlyContribution,
@@ -458,5 +497,84 @@ export const setSelected = mutation({
     }
 
     return args.ids;
+  },
+});
+
+// Reorder scenarios - accepts an array of scenario IDs in the desired order
+export const reorder = mutation({
+  args: { orderedIds: v.array(v.id("scenarios")) },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    // Verify all IDs belong to this user
+    for (const id of args.orderedIds) {
+      const scenario = await ctx.db.get(id);
+      if (!scenario || scenario.userId !== userId) {
+        throw new Error("Scenario not found");
+      }
+    }
+
+    const now = Date.now();
+
+    // Update order for each scenario based on its position in the array
+    for (let i = 0; i < args.orderedIds.length; i++) {
+      await ctx.db.patch(args.orderedIds[i], { order: i, updatedAt: now });
+    }
+
+    return args.orderedIds;
+  },
+});
+
+// Move a single scenario up or down in the order
+export const moveScenario = mutation({
+  args: { 
+    id: v.id("scenarios"),
+    direction: v.union(v.literal("up"), v.literal("down")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const scenario = await ctx.db.get(args.id);
+    if (!scenario || scenario.userId !== userId) {
+      throw new Error("Scenario not found");
+    }
+
+    // Get all scenarios sorted by order
+    const allScenarios = await ctx.db
+      .query("scenarios")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    // Sort by order (falling back to createdAt for backward compatibility)
+    const sortedScenarios = allScenarios.sort((a, b) => {
+      const orderA = a.order ?? Infinity;
+      const orderB = b.order ?? Infinity;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.createdAt - b.createdAt;
+    });
+
+    // Find current index
+    const currentIndex = sortedScenarios.findIndex(s => s._id === args.id);
+    if (currentIndex === -1) throw new Error("Scenario not found in list");
+
+    // Calculate new index
+    const newIndex = args.direction === "up" 
+      ? Math.max(0, currentIndex - 1)
+      : Math.min(sortedScenarios.length - 1, currentIndex + 1);
+
+    // If position didn't change, nothing to do
+    if (newIndex === currentIndex) return args.id;
+
+    // Swap with the adjacent scenario
+    const adjacentScenario = sortedScenarios[newIndex];
+    const now = Date.now();
+
+    // Update both scenarios' order values
+    await ctx.db.patch(args.id, { order: newIndex, updatedAt: now });
+    await ctx.db.patch(adjacentScenario._id, { order: currentIndex, updatedAt: now });
+
+    return args.id;
   },
 });

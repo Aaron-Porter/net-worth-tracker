@@ -938,6 +938,31 @@ function ScenarioManagementPanel({
 
             {/* Actions */}
             <div className="flex items-center gap-1 shrink-0">
+              {/* Move up/down buttons */}
+              {scenariosHook.scenarios.length > 1 && (
+                <>
+                  <button
+                    onClick={() => scenariosHook.moveScenario(scenario._id, "up")}
+                    disabled={scenariosHook.scenarios.indexOf(scenario) === 0}
+                    className="p-1.5 text-slate-400 hover:text-slate-200 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Move up"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => scenariosHook.moveScenario(scenario._id, "down")}
+                    disabled={scenariosHook.scenarios.indexOf(scenario) === scenariosHook.scenarios.length - 1}
+                    className="p-1.5 text-slate-400 hover:text-slate-200 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Move down"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => onEditScenario(scenario)}
                 className="p-1.5 text-slate-400 hover:text-violet-400 rounded transition-colors"
@@ -4055,6 +4080,17 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
+                    {/* Move up/down buttons */}
+                    {scenariosHook.scenarios.length > 1 && (
+                      <>
+                        <button onClick={() => scenariosHook.moveScenario(scenario._id, "up")} disabled={scenariosHook.scenarios.indexOf(scenario) === 0} className="p-1.5 text-slate-400 hover:text-slate-200 rounded disabled:opacity-30 disabled:cursor-not-allowed" title="Move up">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                        </button>
+                        <button onClick={() => scenariosHook.moveScenario(scenario._id, "down")} disabled={scenariosHook.scenarios.indexOf(scenario) === scenariosHook.scenarios.length - 1} className="p-1.5 text-slate-400 hover:text-slate-200 rounded disabled:opacity-30 disabled:cursor-not-allowed" title="Move down">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                      </>
+                    )}
                     <button onClick={() => setQuickEditScenario(scenario)} className="p-1.5 text-slate-400 hover:text-emerald-400 rounded" title="Quick Edit">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
                     </button>
