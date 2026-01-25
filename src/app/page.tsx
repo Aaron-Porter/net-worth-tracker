@@ -26,6 +26,9 @@ import {
   calculateFiTarget,
   FiMilestone,
   FI_MILESTONE_DEFINITIONS,
+  calculateRunwayYears,
+  calculateDollarMultiplier,
+  calculateRunwayAndCoastInfo,
 } from '../lib/calculations'
 import { TrackedValue, SimpleTrackedValue } from './components/TrackedValue'
 import { 
@@ -479,11 +482,30 @@ interface FiMilestonesCardProps {
 }
 
 function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
-  const { fiMilestones, currentFiProgress, currentNetWorth, projections } = primaryProjection;
+  const { fiMilestones, currentFiProgress, currentNetWorth, projections, scenario } = primaryProjection;
   const currentYear = new Date().getFullYear();
   const currentFiTarget = projections[0]?.fiTarget ?? 0;
+  const currentMonthlySpend = projections[0]?.monthlySpend ?? 0;
+  
+  // Calculate runway and coast info for context display
+  const runwayAndCoastInfo = useMemo(() => {
+    // Get birth year from projections if available
+    const firstRow = projections[0];
+    const birthYear = firstRow?.age ? currentYear - firstRow.age : null;
+    
+    return calculateRunwayAndCoastInfo(
+      currentNetWorth.total,
+      currentMonthlySpend,
+      birthYear,
+      scenario.currentRate,
+      scenario.inflationRate,
+      scenario.swr
+    );
+  }, [currentNetWorth.total, currentMonthlySpend, projections, scenario, currentYear]);
   
   // Filter milestones by type for display
+  const runwayMilestones = fiMilestones.milestones.filter(m => m.type === 'runway');
+  const coastMilestones = fiMilestones.milestones.filter(m => m.type === 'coast');
   const percentageMilestones = fiMilestones.milestones.filter(m => m.type === 'percentage');
   const lifestyleMilestones = fiMilestones.milestones.filter(m => m.type === 'lifestyle');
   const specialMilestones = fiMilestones.milestones.filter(m => m.type === 'special');
@@ -578,6 +600,59 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
             </div>
           </div>
         )}
+      </div>
+      
+      {/* Runway Milestones - Security */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-slate-400">
+            Runway Milestones
+          </h3>
+          <div className="text-right">
+            <span className="text-xs text-slate-500">Current: </span>
+            <span className="text-sm font-mono text-emerald-400">
+              {runwayAndCoastInfo.currentRunwayYears >= 100 
+                ? '∞' 
+                : runwayAndCoastInfo.currentRunwayYears >= 1 
+                  ? `${runwayAndCoastInfo.currentRunwayYears.toFixed(1)} years`
+                  : `${Math.round(runwayAndCoastInfo.currentRunwayMonths)} months`
+              }
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">How long you could survive without income</p>
+        <div className="space-y-2">
+          {runwayMilestones.map(milestone => (
+            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+          ))}
+        </div>
+      </div>
+      
+      {/* Coast Milestones - Compounding Power */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-slate-400">
+            Coast Milestones
+          </h3>
+          <div className="text-right">
+            <span className="text-xs text-slate-500">Coast to: </span>
+            <span className="text-sm font-mono text-violet-400">
+              {runwayAndCoastInfo.coastFiPercent.toFixed(0)}% FI
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mb-2">If you stopped contributing today (by age {runwayAndCoastInfo.retirementAge})</p>
+        <p className="text-xs text-amber-400/80 mb-3">
+          💡 Every $1 you save today = <span className="font-mono font-semibold">${runwayAndCoastInfo.dollarMultiplier.toFixed(2)}</span> at retirement
+          {runwayAndCoastInfo.yearsToRetirement > 0 && (
+            <span className="text-slate-500"> ({runwayAndCoastInfo.yearsToRetirement} years of compounding)</span>
+          )}
+        </p>
+        <div className="space-y-2">
+          {coastMilestones.map(milestone => (
+            <MilestoneRow key={milestone.id} milestone={milestone} currentYear={currentYear} />
+          ))}
+        </div>
       </div>
       
       {/* Percentage Milestones */}

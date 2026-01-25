@@ -145,7 +145,9 @@ export interface CalculatedFinancials {
 export type FiMilestoneType = 
   | 'percentage'      // Based on FI progress percentage (10%, 25%, 50%, 75%, 100%)
   | 'lifestyle'       // Based on spending levels (Lean FI, Regular FI, Fat FI)
-  | 'special';        // Special milestones (Coast FI, Barista FI, Crossover)
+  | 'special'         // Special milestones (Coast FI, Barista FI, Crossover)
+  | 'runway'          // Based on years of expenses covered (security milestones)
+  | 'coast';          // Based on projected FI % if you stop contributing today
 
 export interface FiMilestone {
   id: string;
@@ -391,14 +393,229 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
     color: '#ec4899', // pink-500
     icon: 'flamingo',
   },
+  
+  // Runway milestones - years of expenses covered by current net worth
+  {
+    id: 'runway_6mo',
+    name: '6-Month Runway',
+    shortName: '6mo Runway',
+    description: 'Your net worth covers 6 months of expenses. You have a solid emergency buffer.',
+    type: 'runway',
+    targetValue: 0.5, // 0.5 years = 6 months
+    color: '#94a3b8', // slate-400
+    icon: 'shield',
+  },
+  {
+    id: 'runway_1yr',
+    name: '1-Year Runway',
+    shortName: '1yr Runway',
+    description: 'Your net worth covers a full year of expenses. You could survive a prolonged job search or career transition.',
+    type: 'runway',
+    targetValue: 1, // 1 year
+    color: '#60a5fa', // blue-400
+    icon: 'shield',
+  },
+  {
+    id: 'runway_2yr',
+    name: '2-Year Runway',
+    shortName: '2yr Runway',
+    description: 'Your net worth covers 2 years of expenses. You have serious flexibility for career changes or extended breaks.',
+    type: 'runway',
+    targetValue: 2, // 2 years
+    color: '#a78bfa', // violet-400
+    icon: 'shield',
+  },
+  {
+    id: 'runway_3yr',
+    name: '3-Year Runway',
+    shortName: '3yr Runway',
+    description: 'Your net worth covers 3 years of expenses. You could take an extended sabbatical or completely reinvent your career.',
+    type: 'runway',
+    targetValue: 3, // 3 years
+    color: '#2dd4bf', // teal-400
+    icon: 'shield',
+  },
+  {
+    id: 'runway_5yr',
+    name: '5-Year Runway',
+    shortName: '5yr Runway',
+    description: 'Your net worth covers 5 years of expenses. Even if everything falls apart, you have half a decade to figure it out.',
+    type: 'runway',
+    targetValue: 5, // 5 years
+    color: '#fbbf24', // amber-400
+    icon: 'shield',
+  },
+  {
+    id: 'runway_10yr',
+    name: '10-Year Runway',
+    shortName: '10yr Runway',
+    description: 'Your net worth covers a decade of expenses. You have extraordinary security and freedom.',
+    type: 'runway',
+    targetValue: 10, // 10 years
+    color: '#f97316', // orange-500
+    icon: 'shield',
+  },
+  
+  // Coast milestones - projected FI % at retirement if you stop contributing today
+  // These show the power of compounding: the younger you are, the less you need
+  {
+    id: 'coast_25',
+    name: 'Coast to 25% FI',
+    shortName: 'Coast 25%',
+    description: 'If you stopped saving today, your investments would grow to 25% of your FI target by age 65. Every dollar you save now is multiplied by time.',
+    type: 'coast',
+    targetValue: 25, // Coast to 25% of FI target
+    color: '#94a3b8', // slate-400
+    icon: 'trending-up',
+  },
+  {
+    id: 'coast_50',
+    name: 'Coast to 50% FI',
+    shortName: 'Coast 50%',
+    description: 'If you stopped saving today, your investments would grow to 50% of your FI target by age 65. You\'re halfway there on autopilot.',
+    type: 'coast',
+    targetValue: 50, // Coast to 50% of FI target
+    color: '#a78bfa', // violet-400
+    icon: 'trending-up',
+  },
+  {
+    id: 'coast_75',
+    name: 'Coast to 75% FI',
+    shortName: 'Coast 75%',
+    description: 'If you stopped saving today, your investments would grow to 75% of your FI target by age 65. Compounding is doing most of the work now.',
+    type: 'coast',
+    targetValue: 75, // Coast to 75% of FI target
+    color: '#f59e0b', // amber-500
+    icon: 'trending-up',
+  },
 ] as const;
 
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
 const PROJECTION_YEARS = 61;
+const DEFAULT_RETIREMENT_AGE = 65;
 
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
+
+/**
+ * Calculate how many years of expenses are covered by current net worth
+ * This is the "runway" - how long you could survive without income
+ */
+export function calculateRunwayYears(netWorth: number, monthlySpend: number): number {
+  const annualExpenses = monthlySpend * 12;
+  if (annualExpenses <= 0) return Infinity;
+  return netWorth / annualExpenses;
+}
+
+/**
+ * Calculate the dollar multiplier - how much $1 saved today becomes at retirement
+ * This shows the power of compounding: the more years until retirement, the higher the multiplier
+ * 
+ * @param yearsToRetirement - Years until retirement age (default 65)
+ * @param annualReturnRate - Expected annual return rate as percentage (e.g., 7 for 7%)
+ * @returns The multiplier (e.g., 5.43 means $1 today = $5.43 at retirement)
+ */
+export function calculateDollarMultiplier(yearsToRetirement: number, annualReturnRate: number): number {
+  if (yearsToRetirement <= 0) return 1;
+  const rate = annualReturnRate / 100;
+  return Math.pow(1 + rate, yearsToRetirement);
+}
+
+/**
+ * Calculate what percentage of FI target you'd reach by retirement if you stopped contributing today
+ * This is the "coast FI percentage" - higher is better
+ * 
+ * @param currentNetWorth - Current net worth
+ * @param currentMonthlySpend - Current monthly spending
+ * @param yearsToRetirement - Years until retirement
+ * @param annualReturnRate - Expected annual return rate as percentage
+ * @param inflationRate - Expected inflation rate as percentage
+ * @param swr - Safe withdrawal rate as percentage
+ * @returns The percentage of FI target you'd reach (e.g., 75 means you'd coast to 75% FI)
+ */
+export function calculateCoastFiPercent(
+  currentNetWorth: number,
+  currentMonthlySpend: number,
+  yearsToRetirement: number,
+  annualReturnRate: number,
+  inflationRate: number,
+  swr: number
+): number {
+  if (yearsToRetirement <= 0) {
+    // Already at retirement - just return current FI progress
+    const fiTarget = calculateFiTarget(currentMonthlySpend, swr);
+    return fiTarget > 0 ? (currentNetWorth / fiTarget) * 100 : 0;
+  }
+  
+  const returnRate = annualReturnRate / 100;
+  const inflation = inflationRate / 100;
+  
+  // Calculate what current NW would grow to
+  const futureNetWorth = currentNetWorth * Math.pow(1 + returnRate, yearsToRetirement);
+  
+  // Calculate future FI target (spending grows with inflation)
+  const futureMonthlySpend = currentMonthlySpend * Math.pow(1 + inflation, yearsToRetirement);
+  const futureFiTarget = calculateFiTarget(futureMonthlySpend, swr);
+  
+  if (futureFiTarget <= 0) return 0;
+  return (futureNetWorth / futureFiTarget) * 100;
+}
+
+/**
+ * Get comprehensive runway and coast information for display
+ */
+export interface RunwayAndCoastInfo {
+  // Runway info
+  currentRunwayYears: number;
+  currentRunwayMonths: number;
+  
+  // Coast info
+  coastFiPercent: number;
+  yearsToRetirement: number;
+  dollarMultiplier: number;
+  
+  // Helpful context
+  currentAge: number | null;
+  retirementAge: number;
+}
+
+export function calculateRunwayAndCoastInfo(
+  netWorth: number,
+  monthlySpend: number,
+  birthYear: number | null,
+  annualReturnRate: number,
+  inflationRate: number,
+  swr: number,
+  retirementAge: number = DEFAULT_RETIREMENT_AGE
+): RunwayAndCoastInfo {
+  const currentYear = new Date().getFullYear();
+  const currentAge = birthYear ? currentYear - birthYear : null;
+  const yearsToRetirement = currentAge !== null 
+    ? Math.max(0, retirementAge - currentAge) 
+    : 30; // Default assumption if no birth year
+  
+  const runwayYears = calculateRunwayYears(netWorth, monthlySpend);
+  const dollarMultiplier = calculateDollarMultiplier(yearsToRetirement, annualReturnRate);
+  const coastFiPercent = calculateCoastFiPercent(
+    netWorth,
+    monthlySpend,
+    yearsToRetirement,
+    annualReturnRate,
+    inflationRate,
+    swr
+  );
+  
+  return {
+    currentRunwayYears: runwayYears,
+    currentRunwayMonths: runwayYears * 12,
+    coastFiPercent,
+    yearsToRetirement,
+    dollarMultiplier,
+    currentAge,
+    retirementAge,
+  };
+}
 
 /**
  * Format a number as currency
@@ -897,6 +1114,98 @@ export function calculateFiMilestones(
           milestoneYear = row.year;
           milestoneNetWorth = row.netWorth;
           break;
+        }
+      }
+      
+      milestone = {
+        ...def,
+        year: milestoneYear,
+        age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+        yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+        isAchieved,
+        netWorthAtMilestone: milestoneNetWorth,
+      };
+    } else if (def.type === 'runway') {
+      // Runway milestones - years of expenses covered by current net worth
+      const targetYears = def.targetValue;
+      const annualExpenses = currentMonthlySpend * 12;
+      const currentRunwayYears = annualExpenses > 0 ? currentNetWorth / annualExpenses : 0;
+      const isAchieved = currentRunwayYears >= targetYears;
+      
+      // Find the first year when this runway is achieved
+      let milestoneYear: number | null = null;
+      let milestoneNetWorth: number | null = null;
+      
+      for (const row of projections) {
+        const rowAnnualExpenses = row.monthlySpend * 12;
+        const rowRunwayYears = rowAnnualExpenses > 0 ? row.netWorth / rowAnnualExpenses : 0;
+        if (rowRunwayYears >= targetYears) {
+          milestoneYear = row.year;
+          milestoneNetWorth = row.netWorth;
+          break;
+        }
+      }
+      
+      milestone = {
+        ...def,
+        year: milestoneYear,
+        age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+        yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+        isAchieved,
+        netWorthAtMilestone: milestoneNetWorth,
+      };
+    } else if (def.type === 'coast') {
+      // Coast milestones - what % of FI would current NW grow to by age 65 with $0 contributions?
+      const targetCoastPercent = def.targetValue;
+      const retirementAge = 65;
+      const currentAge = birthYear ? currentYear - birthYear : null;
+      const yearsToRetirement = currentAge !== null ? Math.max(0, retirementAge - currentAge) : 30; // Default to 30 years if no birth year
+      const returnRate = settings.currentRate / 100;
+      
+      // Calculate what current NW would grow to by retirement with no contributions
+      const futureValueMultiplier = Math.pow(1 + returnRate, yearsToRetirement);
+      const coastedNetWorth = currentNetWorth * futureValueMultiplier;
+      
+      // Estimate FI target at retirement (accounting for inflation on spending)
+      const inflationRate = settings.inflationRate / 100;
+      const futureMonthlySpend = currentMonthlySpend * Math.pow(1 + inflationRate, yearsToRetirement);
+      const futureFiTarget = calculateFiTarget(futureMonthlySpend, settings.swr);
+      
+      // Calculate coast FI percentage
+      const coastFiPercent = futureFiTarget > 0 ? (coastedNetWorth / futureFiTarget) * 100 : 0;
+      const isAchieved = coastFiPercent >= targetCoastPercent;
+      
+      // Find the first year when this coast milestone is achieved
+      // For each year, calculate: if we stopped contributing THEN, would we coast to targetCoastPercent?
+      let milestoneYear: number | null = null;
+      let milestoneNetWorth: number | null = null;
+      
+      for (const row of projections) {
+        const rowAge = birthYear ? row.year - birthYear : null;
+        const rowYearsToRetirement = rowAge !== null ? Math.max(0, retirementAge - rowAge) : Math.max(0, 30 - row.yearsFromEntry);
+        
+        if (rowYearsToRetirement <= 0) {
+          // Already at or past retirement
+          if (row.fiProgress >= targetCoastPercent) {
+            milestoneYear = row.year;
+            milestoneNetWorth = row.netWorth;
+            break;
+          }
+        } else {
+          const rowFutureMultiplier = Math.pow(1 + returnRate, rowYearsToRetirement);
+          const rowCoastedNW = row.netWorth * rowFutureMultiplier;
+          
+          // Calculate FI target at that future retirement
+          const rowFutureSpend = row.monthlySpend * Math.pow(1 + inflationRate, rowYearsToRetirement);
+          const rowFutureFiTarget = calculateFiTarget(rowFutureSpend, settings.swr);
+          
+          const rowCoastPercent = rowFutureFiTarget > 0 ? (rowCoastedNW / rowFutureFiTarget) * 100 : 0;
+          
+          if (rowCoastPercent >= targetCoastPercent) {
+            milestoneYear = row.year;
+            milestoneNetWorth = row.netWorth;
+            break;
+          }
         }
       }
       
