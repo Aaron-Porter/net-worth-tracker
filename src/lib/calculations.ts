@@ -56,6 +56,26 @@ export interface ProjectionRow {
   preTaxContributions?: number; // Pre-tax retirement contributions
 }
 
+/** Monthly projection row - for month-by-month detail where spending updates with net worth */
+export interface MonthlyProjectionRow {
+  month: number;              // Month number (1-12)
+  year: number;               // Calendar year
+  monthIndex: number;         // Sequential month index from start (0, 1, 2, ...)
+  yearsFromStart: number;     // Fractional years from start
+  netWorth: number;           // Net worth at end of month
+  startingNetWorth: number;   // Net worth at start of month
+  monthlyInterest: number;    // Interest earned this month
+  monthlyContribution: number; // Contribution added this month
+  monthlySpending: number;    // Spending for this month (based on start-of-month NW)
+  monthlySavings: number;     // Net savings (contribution - spending) or (income - tax - spending)
+  cumulativeInterest: number; // Total interest earned since start
+  cumulativeContributions: number; // Total contributions since start
+  monthlySwr: number;         // SWR amount for this month
+  fiTarget: number;           // FI target based on this month's spending
+  fiProgress: number;         // Progress to FI
+  swrCoversSpend: boolean;    // Whether SWR covers this month's spending
+}
+
 export interface GrowthRates {
   perSecond: number;
   perMinute: number;
@@ -1206,6 +1226,193 @@ export function generateProjections(
   }
   
   return data;
+}
+
+/**
+ * Generate monthly projections with spending that updates each month based on net worth
+ * 
+ * This provides more accurate projections than yearly calculations because:
+ * 1. Spending updates monthly as net worth changes (important for level-based spending)
+ * 2. Interest compounds monthly
+ * 3. Contributions are distributed monthly
+ */
+export function generateMonthlyProjections(
+  startingNetWorth: number,
+  settings: UserSettings,
+  months: number = 120, // Default 10 years
+  monthlyContribution?: number, // Override for monthly contribution (defaults to yearlyContribution / 12)
+  monthlyNetIncome?: number // If provided, use this for savings calculation instead of contribution
+): MonthlyProjectionRow[] {
+  const {
+    currentRate,
+    swr,
+    yearlyContribution,
+    baseMonthlyBudget,
+    spendingGrowthRate,
+    inflationRate,
+  } = settings;
+
+  const monthlyRate = currentRate / 100 / 12; // Monthly return rate
+  const contribution = monthlyContribution ?? yearlyContribution / 12;
+  
+  const data: MonthlyProjectionRow[] = [];
+  let netWorth = startingNetWorth;
+  let cumulativeInterest = 0;
+  let cumulativeContributions = 0;
+
+  for (let i = 0; i < months; i++) {
+    const monthIndex = i;
+    const yearsFromStart = i / 12;
+    const year = new Date().getFullYear() + Math.floor(i / 12);
+    const month = (i % 12) + 1; // 1-12
+
+    const startingNW = netWorth;
+
+    // Calculate this month's spending based on current net worth
+    // This is the key difference from yearly projections - spending updates each month
+    const monthlySpending = calculateLevelBasedSpending(netWorth, settings, yearsFromStart);
+
+    // Calculate monthly savings
+    let monthlySavings: number;
+    if (monthlyNetIncome !== undefined) {
+      // If we have net income info, calculate savings as income - spending
+      monthlySavings = monthlyNetIncome - monthlySpending;
+    } else {
+      // Otherwise use the contribution amount
+      monthlySavings = contribution;
+    }
+
+    // Calculate interest on current balance
+    const monthlyInterest = netWorth * monthlyRate;
+    cumulativeInterest += monthlyInterest;
+
+    // Add contribution
+    cumulativeContributions += contribution;
+
+    // Calculate end-of-month net worth
+    // Net worth grows by interest, plus we add savings (which could be negative if spending > income)
+    netWorth = netWorth + monthlyInterest + monthlySavings;
+
+    // SWR calculations
+    const swrAmounts = calculateSwrAmounts(netWorth, swr);
+    const fiTarget = calculateFiTarget(monthlySpending, swr);
+    const fiProgress = fiTarget > 0 ? (netWorth / fiTarget) * 100 : 0;
+    const swrCoversSpend = monthlySpending > 0 && swrAmounts.monthly >= monthlySpending;
+
+    data.push({
+      month,
+      year,
+      monthIndex,
+      yearsFromStart,
+      netWorth,
+      startingNetWorth: startingNW,
+      monthlyInterest,
+      monthlyContribution: contribution,
+      monthlySpending,
+      monthlySavings,
+      cumulativeInterest,
+      cumulativeContributions,
+      monthlySwr: swrAmounts.monthly,
+      fiTarget,
+      fiProgress,
+      swrCoversSpend,
+    });
+  }
+
+  return data;
+}
+
+/**
+ * Generate yearly projections using monthly granularity internally
+ * This provides more accurate spending calculations than the original yearly approach
+ */
+export function generateProjectionsWithMonthlySpending(
+  latestEntry: NetWorthEntry | null,
+  currentNetWorth: number,
+  settings: UserSettings,
+  years: number = PROJECTION_YEARS
+): ProjectionRow[] {
+  if (!latestEntry) return [];
+
+  const { swr, birthDate } = settings;
+  const currentYear = new Date().getFullYear();
+  const birthYear = birthDate ? new Date(birthDate).getFullYear() : null;
+
+  // Generate monthly projections
+  const monthlyData = generateMonthlyProjections(currentNetWorth, settings, years * 12);
+
+  // Aggregate monthly data into yearly summaries
+  const yearlyData: ProjectionRow[] = [];
+  let fiYearFound = false;
+  let crossoverFound = false;
+
+  for (let yearIdx = 0; yearIdx < years; yearIdx++) {
+    const year = currentYear + yearIdx;
+    const age = birthYear ? year - birthYear : null;
+
+    // Get the 12 months for this year
+    const startMonth = yearIdx * 12;
+    const endMonth = startMonth + 12;
+    const yearMonths = monthlyData.slice(startMonth, endMonth);
+
+    if (yearMonths.length === 0) continue;
+
+    // End of year values from the last month
+    const lastMonth = yearMonths[yearMonths.length - 1];
+    const yearNetWorth = lastMonth.netWorth;
+
+    // Sum up the year's values
+    const yearInterest = yearMonths.reduce((sum, m) => sum + m.monthlyInterest, 0);
+    const yearContributions = yearMonths.reduce((sum, m) => sum + m.monthlyContribution, 0);
+    const yearSpending = yearMonths.reduce((sum, m) => sum + m.monthlySpending, 0);
+    const yearSavings = yearMonths.reduce((sum, m) => sum + m.monthlySavings, 0);
+
+    // Average monthly spending for the year (for FI target calculation)
+    const avgMonthlySpend = yearSpending / 12;
+
+    // SWR and FI calculations based on year-end values
+    const swrAmounts = calculateSwrAmounts(yearNetWorth, swr);
+    const yearFiTarget = calculateFiTarget(avgMonthlySpend, swr);
+    const fiProgress = yearFiTarget > 0 ? (yearNetWorth / yearFiTarget) * 100 : 0;
+    const swrCoversSpend = avgMonthlySpend > 0 && swrAmounts.monthly >= avgMonthlySpend;
+
+    // Milestones
+    const isFiYear = swrCoversSpend && !fiYearFound;
+    if (isFiYear) fiYearFound = true;
+
+    const isCrossover = lastMonth.cumulativeInterest > lastMonth.cumulativeContributions && 
+                        !crossoverFound && lastMonth.cumulativeContributions > 0;
+    if (isCrossover) crossoverFound = true;
+
+    // Years from entry
+    const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999).getTime();
+    const yearsFromEntry = (endOfYear - latestEntry.timestamp) / MS_PER_YEAR;
+
+    yearlyData.push({
+      year,
+      age,
+      yearsFromEntry,
+      netWorth: yearNetWorth,
+      interest: lastMonth.cumulativeInterest,
+      contributed: lastMonth.cumulativeContributions,
+      annualSwr: swrAmounts.annual,
+      monthlySwr: swrAmounts.monthly,
+      weeklySwr: swrAmounts.weekly,
+      dailySwr: swrAmounts.daily,
+      monthlySpend: avgMonthlySpend,
+      annualSpending: yearSpending,
+      annualSavings: yearSavings,
+      fiTarget: yearFiTarget,
+      fiProgress,
+      coastFiYear: null, // TODO: Calculate if needed
+      coastFiAge: null,
+      isFiYear,
+      isCrossover,
+      swrCoversSpend,
+    });
+  }
+
+  return yearlyData;
 }
 
 /**

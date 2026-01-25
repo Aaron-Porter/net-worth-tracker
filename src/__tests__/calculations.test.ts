@@ -725,3 +725,129 @@ describe('Calculation Consistency', () => {
     expect(result.total).toBeCloseTo(manual, 0)
   })
 })
+
+// ============================================================================
+// MONTHLY PROJECTIONS TESTS
+// ============================================================================
+
+import { generateMonthlyProjections, MonthlyProjectionRow } from '../lib/calculations'
+
+describe('Monthly Projections', () => {
+  it('should generate the correct number of months', () => {
+    const projections = generateMonthlyProjections(100000, mockSettings, 24)
+    expect(projections.length).toBe(24)
+  })
+
+  it('should update spending each month based on net worth', () => {
+    // With a spending growth rate > 0, spending should increase as net worth grows
+    const settings = {
+      ...mockSettings,
+      spendingGrowthRate: 2, // 2% of net worth per year added to spending
+    }
+    
+    const projections = generateMonthlyProjections(500000, settings, 12)
+    
+    // First month spending
+    const firstMonthSpending = projections[0].monthlySpending
+    
+    // Last month spending should be different (higher if net worth grew)
+    const lastMonthSpending = projections[11].monthlySpending
+    
+    // Since net worth should grow with 7% return and contributions,
+    // and spending is tied to net worth, spending should increase
+    expect(lastMonthSpending).toBeGreaterThan(firstMonthSpending)
+  })
+
+  it('should have spending equal to base budget when spendingGrowthRate is 0', () => {
+    const settings = {
+      ...mockSettings,
+      baseMonthlyBudget: 3000,
+      spendingGrowthRate: 0, // No net worth portion
+    }
+    
+    const projections = generateMonthlyProjections(500000, settings, 12)
+    
+    // Month 0 spending should be base budget (no inflation yet)
+    expect(projections[0].monthlySpending).toBeCloseTo(3000, 0)
+  })
+
+  it('should accumulate interest correctly', () => {
+    const startingNW = 100000
+    const settings = {
+      ...mockSettings,
+      currentRate: 12, // 12% annual = 1% monthly for easy calculation
+      yearlyContribution: 0, // No contributions for simpler math
+      baseMonthlyBudget: 0, // No spending for simpler math
+      spendingGrowthRate: 0,
+    }
+    
+    const projections = generateMonthlyProjections(startingNW, settings, 1)
+    
+    // First month interest should be roughly 1% of starting balance
+    const expectedInterest = startingNW * (0.12 / 12)
+    expect(projections[0].monthlyInterest).toBeCloseTo(expectedInterest, 2)
+  })
+
+  it('should track cumulative values correctly', () => {
+    const projections = generateMonthlyProjections(100000, mockSettings, 12)
+    
+    // Cumulative interest should be sum of all monthly interest
+    const sumInterest = projections.reduce((sum, p) => sum + p.monthlyInterest, 0)
+    expect(projections[11].cumulativeInterest).toBeCloseTo(sumInterest, 2)
+    
+    // Cumulative contributions should be sum of all monthly contributions
+    const sumContributions = projections.reduce((sum, p) => sum + p.monthlyContribution, 0)
+    expect(projections[11].cumulativeContributions).toBeCloseTo(sumContributions, 2)
+  })
+
+  it('should calculate FI progress correctly each month', () => {
+    const projections = generateMonthlyProjections(500000, mockSettings, 12)
+    
+    for (const month of projections) {
+      // FI progress should be (netWorth / fiTarget) * 100
+      const expectedProgress = (month.netWorth / month.fiTarget) * 100
+      expect(month.fiProgress).toBeCloseTo(expectedProgress, 2)
+    }
+  })
+
+  it('should mark swrCoversSpend correctly', () => {
+    // Start with high net worth where SWR covers spending
+    const projections = generateMonthlyProjections(2000000, mockSettings, 12)
+    
+    // With $2M and 4% SWR = $80k/year = ~$6,667/month
+    // With base budget of $3k + NW portion, should be covered
+    expect(projections[0].swrCoversSpend).toBe(true)
+  })
+
+  it('should handle zero starting net worth', () => {
+    const projections = generateMonthlyProjections(0, mockSettings, 12)
+    
+    expect(projections.length).toBe(12)
+    expect(projections[0].startingNetWorth).toBe(0)
+    expect(projections[0].monthlyInterest).toBe(0)
+  })
+
+  it('should show different spending values between months (not just yearly)', () => {
+    const settings = {
+      ...mockSettings,
+      spendingGrowthRate: 4, // Higher rate to make difference more visible
+      yearlyContribution: 60000, // $5k/month contributions
+    }
+    
+    const projections = generateMonthlyProjections(500000, settings, 3)
+    
+    // Each month should have a slightly different spending value
+    // because net worth changes each month
+    const spending1 = projections[0].monthlySpending
+    const spending2 = projections[1].monthlySpending
+    const spending3 = projections[2].monthlySpending
+    
+    // They should all be different (net worth grows each month)
+    expect(spending2).not.toBe(spending1)
+    expect(spending3).not.toBe(spending2)
+    
+    // And they should be increasing (as net worth grows)
+    expect(spending2).toBeGreaterThan(spending1)
+    expect(spending3).toBeGreaterThan(spending2)
+  })
+})
