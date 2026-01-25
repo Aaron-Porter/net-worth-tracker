@@ -1199,6 +1199,249 @@ export function createTrackedLifestyleMilestone(
 }
 
 /**
+ * Create tracked retirement income milestone info
+ * Shows how much annual income you could withdraw at retirement if you stopped saving today
+ */
+export function createTrackedRetirementIncomeMilestone(
+  milestoneId: string,
+  milestoneName: string,
+  targetAnnualIncome: number,
+  currentNetWorth: number,
+  currentAge: number | null,
+  retirementAge: number,
+  annualReturnRate: number,
+  swr: number,
+  netWorthAtMilestone: number | null,
+  year: number | null,
+  currentYear: number
+): TrackedMilestoneInfo {
+  const yearsToRetirement = currentAge !== null 
+    ? Math.max(0, retirementAge - currentAge)
+    : 30;
+  
+  const returnRate = annualReturnRate / 100;
+  const withdrawalRate = swr / 100;
+  
+  // Calculate what NW is needed today to achieve target income at retirement
+  const futureNetWorthNeeded = targetAnnualIncome / withdrawalRate;
+  const targetCurrentNW = yearsToRetirement > 0 
+    ? futureNetWorthNeeded / Math.pow(1 + returnRate, yearsToRetirement)
+    : futureNetWorthNeeded;
+  
+  // Calculate current projected retirement income
+  const futureNetWorth = currentNetWorth * Math.pow(1 + returnRate, yearsToRetirement);
+  const currentProjectedIncome = futureNetWorth * withdrawalRate;
+  
+  const amountNeeded = Math.max(0, targetCurrentNW - currentNetWorth);
+  const yearsAway = year ? year - currentYear : null;
+  const dollarMultiplier = Math.pow(1 + returnRate, yearsToRetirement);
+
+  const targetValueTracked = new CalculationBuilder(`${milestoneId}_target`, `${milestoneName} Target`, 'milestone')
+    .setDescription(`The net worth you need today so that compound growth alone will let you withdraw $${targetAnnualIncome.toLocaleString()}/year at retirement age ${retirementAge}. This is what you could live on if you never saved another dollar.`)
+    .setFormula('(Target Income ÷ SWR%) ÷ Growth Multiplier')
+    .setUnit('$')
+    .addInputWithSource('Target Annual Income', targetAnnualIncome, 'constant', { 
+      unit: '$',
+      description: `Milestone: $${targetAnnualIncome.toLocaleString()}/year at retirement`
+    })
+    .addSetting('SWR', swr, 'swr', { unit: '%' })
+    .addSetting('Return Rate', annualReturnRate, 'currentRate', { unit: '%' })
+    .addInputWithSource('Years to Retirement', yearsToRetirement, 'calculated', { 
+      unit: 'years',
+      description: currentAge !== null 
+        ? `${retirementAge} - ${currentAge} = ${yearsToRetirement} years`
+        : `Using default of ${yearsToRetirement} years`
+    })
+    .addStep(
+      'Calculate future NW needed',
+      `$${targetAnnualIncome.toLocaleString()} ÷ ${swr}% = $${futureNetWorthNeeded.toLocaleString()}`,
+      [],
+      futureNetWorthNeeded,
+      '$'
+    )
+    .addStep(
+      'Calculate growth multiplier',
+      `(1 + ${annualReturnRate}%)^${yearsToRetirement} = ${dollarMultiplier.toFixed(2)}x`,
+      [],
+      dollarMultiplier,
+      'x'
+    )
+    .addStep(
+      'Calculate NW needed today',
+      `$${futureNetWorthNeeded.toLocaleString()} ÷ ${dollarMultiplier.toFixed(2)} = $${targetCurrentNW.toLocaleString()}`,
+      [],
+      targetCurrentNW,
+      '$'
+    )
+    .build(targetCurrentNW);
+
+  const amountNeededTracked = amountNeeded > 0 ? new CalculationBuilder(`${milestoneId}_amount`, `Amount to ${milestoneName}`, 'milestone')
+    .setDescription(`The additional net worth you need to secure $${targetAnnualIncome.toLocaleString()}/year at retirement`)
+    .setFormula('Target Net Worth - Current Net Worth')
+    .setUnit('$')
+    .addTrackedInput(`${milestoneName} Target`, targetValueTracked)
+    .addInputWithSource('Current Net Worth', currentNetWorth, 'calculated', { unit: '$' })
+    .addInputWithSource('Current Projected Income', currentProjectedIncome, 'calculated', { 
+      unit: '$/year',
+      description: `If you stopped saving today, you'd have $${currentProjectedIncome.toLocaleString()}/year at retirement`
+    })
+    .addStep(
+      'Calculate remaining amount',
+      `$${targetCurrentNW.toLocaleString()} - $${currentNetWorth.toLocaleString()} = $${amountNeeded.toLocaleString()}`,
+      [],
+      amountNeeded,
+      '$'
+    )
+    .build(amountNeeded) : null;
+
+  const yearsToMilestoneTracked = yearsAway !== null ? new CalculationBuilder(`${milestoneId}_years`, `Years to ${milestoneName}`, 'milestone')
+    .setDescription(`Projected years until you can secure $${targetAnnualIncome.toLocaleString()}/year at retirement`)
+    .setFormula('Milestone Year - Current Year')
+    .setUnit('years')
+    .addInputWithSource('Milestone Year', year!, 'calculated')
+    .addInputWithSource('Current Year', currentYear, 'constant')
+    .build(yearsAway) : null;
+
+  const netWorthAtMilestoneTracked = netWorthAtMilestone !== null ? new CalculationBuilder(`${milestoneId}_nw`, `Net Worth at ${milestoneName}`, 'milestone')
+    .setDescription(`Your projected net worth when you secure $${targetAnnualIncome.toLocaleString()}/year at retirement`)
+    .setFormula('Projected Net Worth at Milestone')
+    .setUnit('$')
+    .addInputWithSource('Net Worth', netWorthAtMilestone, 'calculated', { unit: '$' })
+    .build(netWorthAtMilestone) : null;
+
+  return {
+    targetValue: targetValueTracked,
+    netWorthAtMilestone: netWorthAtMilestoneTracked,
+    yearsToMilestone: yearsToMilestoneTracked,
+    amountNeeded: amountNeededTracked,
+  };
+}
+
+/**
+ * Create tracked projected retirement income info
+ * Shows current situation: what income you'd have at retirement if you stopped saving today
+ */
+export function createTrackedRetirementIncomeInfo(
+  currentNetWorth: number,
+  currentAge: number | null,
+  retirementAge: number,
+  annualReturnRate: number,
+  swr: number
+): {
+  projectedAnnualIncome: TrackedValue;
+  projectedMonthlyIncome: TrackedValue;
+  netWorthNeededFor100k: TrackedValue;
+  dollarMultiplier: TrackedValue;
+  yearsToRetirement: TrackedValue;
+} {
+  const yearsToRetirement = currentAge !== null 
+    ? Math.max(0, retirementAge - currentAge)
+    : 30;
+  
+  const returnRate = annualReturnRate / 100;
+  const withdrawalRate = swr / 100;
+  
+  const dollarMultiplier = Math.pow(1 + returnRate, yearsToRetirement);
+  const futureNetWorth = currentNetWorth * dollarMultiplier;
+  const projectedAnnualIncome = futureNetWorth * withdrawalRate;
+  const projectedMonthlyIncome = projectedAnnualIncome / 12;
+  
+  // What NW do you need today for $100k/year?
+  const futureNWFor100k = 100000 / withdrawalRate;
+  const currentNWFor100k = futureNWFor100k / dollarMultiplier;
+
+  const yearsToRetirementTracked = new CalculationBuilder('ret_years', 'Years to Retirement', 'milestone')
+    .setDescription('Years until retirement age')
+    .setFormula('Retirement Age - Current Age')
+    .setUnit('years')
+    .addInputWithSource('Current Age', currentAge ?? 'Not set', currentAge ? 'calculated' : 'input')
+    .addInputWithSource('Retirement Age', retirementAge, 'constant')
+    .build(yearsToRetirement);
+
+  const dollarMultiplierTracked = new CalculationBuilder('ret_multiplier', 'Dollar Multiplier', 'milestone')
+    .setDescription('How much $1 saved today becomes at retirement')
+    .setFormula('(1 + Rate)^Years')
+    .setUnit('x')
+    .addSetting('Return Rate', annualReturnRate, 'currentRate', { unit: '%' })
+    .addTrackedInput('Years to Retirement', yearsToRetirementTracked)
+    .addStep(
+      'Calculate multiplier',
+      `(1 + ${annualReturnRate}%)^${yearsToRetirement} = ${dollarMultiplier.toFixed(2)}x`,
+      [],
+      dollarMultiplier,
+      'x'
+    )
+    .build(dollarMultiplier);
+
+  const projectedAnnualIncomeTracked = new CalculationBuilder('ret_income_annual', 'Projected Retirement Income', 'milestone')
+    .setDescription('If you stopped saving today, this is the annual income you could withdraw at retirement. This is your "coast number" - what you\'re guaranteed if you never save another dollar.')
+    .setFormula('(Current NW × Multiplier) × SWR%')
+    .setUnit('$')
+    .addInputWithSource('Current Net Worth', currentNetWorth, 'calculated', { unit: '$' })
+    .addTrackedInput('Dollar Multiplier', dollarMultiplierTracked)
+    .addSetting('SWR', swr, 'swr', { unit: '%' })
+    .addStep(
+      'Calculate future net worth',
+      `$${currentNetWorth.toLocaleString()} × ${dollarMultiplier.toFixed(2)} = $${futureNetWorth.toLocaleString()}`,
+      [],
+      futureNetWorth,
+      '$'
+    )
+    .addStep(
+      'Calculate annual income',
+      `$${futureNetWorth.toLocaleString()} × ${swr}% = $${projectedAnnualIncome.toLocaleString()}/year`,
+      [],
+      projectedAnnualIncome,
+      '$/year'
+    )
+    .build(projectedAnnualIncome);
+
+  const projectedMonthlyIncomeTracked = new CalculationBuilder('ret_income_monthly', 'Monthly Retirement Income', 'milestone')
+    .setDescription('Your projected monthly retirement income if you stopped saving today')
+    .setFormula('Annual Income ÷ 12')
+    .setUnit('$')
+    .addTrackedInput('Annual Income', projectedAnnualIncomeTracked)
+    .addStep(
+      'Convert to monthly',
+      `$${projectedAnnualIncome.toLocaleString()} ÷ 12 = $${projectedMonthlyIncome.toLocaleString()}/month`,
+      [],
+      projectedMonthlyIncome,
+      '$/month'
+    )
+    .build(projectedMonthlyIncome);
+
+  const netWorthNeededFor100kTracked = new CalculationBuilder('ret_nw_100k', 'NW Needed for $100k/year', 'milestone')
+    .setDescription('How much net worth you need today to have $100,000/year at retirement')
+    .setFormula('($100,000 ÷ SWR%) ÷ Multiplier')
+    .setUnit('$')
+    .addSetting('SWR', swr, 'swr', { unit: '%' })
+    .addTrackedInput('Dollar Multiplier', dollarMultiplierTracked)
+    .addStep(
+      'Calculate future NW needed',
+      `$100,000 ÷ ${swr}% = $${futureNWFor100k.toLocaleString()}`,
+      [],
+      futureNWFor100k,
+      '$'
+    )
+    .addStep(
+      'Calculate current NW needed',
+      `$${futureNWFor100k.toLocaleString()} ÷ ${dollarMultiplier.toFixed(2)} = $${currentNWFor100k.toLocaleString()}`,
+      [],
+      currentNWFor100k,
+      '$'
+    )
+    .build(currentNWFor100k);
+
+  return {
+    projectedAnnualIncome: projectedAnnualIncomeTracked,
+    projectedMonthlyIncome: projectedMonthlyIncomeTracked,
+    netWorthNeededFor100k: netWorthNeededFor100kTracked,
+    dollarMultiplier: dollarMultiplierTracked,
+    yearsToRetirement: yearsToRetirementTracked,
+  };
+}
+
+/**
  * Create tracked crossover milestone info
  */
 export function createTrackedCrossoverMilestone(
