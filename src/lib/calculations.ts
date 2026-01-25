@@ -143,11 +143,12 @@ export interface CalculatedFinancials {
 // ============================================================================
 
 export type FiMilestoneType = 
-  | 'percentage'      // Based on FI progress percentage (10%, 25%, 50%, 75%, 100%)
-  | 'lifestyle'       // Based on spending levels (Lean FI, Regular FI, Fat FI)
-  | 'special'         // Special milestones (Coast FI, Barista FI, Crossover)
-  | 'runway'          // Based on years of expenses covered (security milestones)
-  | 'coast';          // Based on projected FI % if you stop contributing today
+  | 'percentage'        // Based on FI progress percentage (10%, 25%, 50%, 75%, 100%)
+  | 'lifestyle'         // Based on spending levels (Lean FI, Regular FI, Fat FI)
+  | 'special'           // Special milestones (Coast FI, Barista FI, Crossover)
+  | 'runway'            // Based on years of expenses covered (security milestones)
+  | 'coast'             // Based on projected FI % if you stop contributing today
+  | 'retirement_income'; // Based on projected annual income at retirement age if you stop contributing today
 
 export interface FiMilestone {
   id: string;
@@ -488,6 +489,150 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
     color: '#f59e0b', // amber-500
     icon: 'trending-up',
   },
+  
+  // Retirement Income milestones - concrete pre-tax salary you could pull at retirement if you stopped saving today
+  // These answer: "If I never save another dollar, what salary equivalent will my investments provide at age 65?"
+  // The earlier you achieve these, the more time compounding has to work for you
+  {
+    id: 'retirement_income_10k',
+    name: '$10k/year at Retirement',
+    shortName: '$10k Retirement',
+    description: 'If you stopped saving today, you could withdraw $10,000/year at retirement. A small but meaningful foundation.',
+    type: 'retirement_income',
+    targetValue: 10000, // $10,000 annual income at retirement
+    color: '#94a3b8', // slate-400
+    icon: 'piggy-bank',
+  },
+  {
+    id: 'retirement_income_15k',
+    name: '$15k/year at Retirement',
+    shortName: '$15k Retirement',
+    description: 'If you stopped saving today, you could withdraw $15,000/year at retirement. Covers basic necessities.',
+    type: 'retirement_income',
+    targetValue: 15000,
+    color: '#64748b', // slate-500
+    icon: 'piggy-bank',
+  },
+  {
+    id: 'retirement_income_20k',
+    name: '$20k/year at Retirement',
+    shortName: '$20k Retirement',
+    description: 'If you stopped saving today, you could withdraw $20,000/year at retirement. Roughly equivalent to Social Security benefits.',
+    type: 'retirement_income',
+    targetValue: 20000,
+    color: '#60a5fa', // blue-400
+    icon: 'piggy-bank',
+  },
+  {
+    id: 'retirement_income_25k',
+    name: '$25k/year at Retirement',
+    shortName: '$25k Retirement',
+    description: 'If you stopped saving today, you could withdraw $25,000/year at retirement. A modest but comfortable baseline.',
+    type: 'retirement_income',
+    targetValue: 25000,
+    color: '#3b82f6', // blue-500
+    icon: 'piggy-bank',
+  },
+  {
+    id: 'retirement_income_30k',
+    name: '$30k/year at Retirement',
+    shortName: '$30k Retirement',
+    description: 'If you stopped saving today, you could withdraw $30,000/year at retirement. Equivalent to minimum wage full-time work.',
+    type: 'retirement_income',
+    targetValue: 30000,
+    color: '#8b5cf6', // violet-500
+    icon: 'wallet',
+  },
+  {
+    id: 'retirement_income_35k',
+    name: '$35k/year at Retirement',
+    shortName: '$35k Retirement',
+    description: 'If you stopped saving today, you could withdraw $35,000/year at retirement. Building toward a comfortable lifestyle.',
+    type: 'retirement_income',
+    targetValue: 35000,
+    color: '#a78bfa', // violet-400
+    icon: 'wallet',
+  },
+  {
+    id: 'retirement_income_40k',
+    name: '$40k/year at Retirement',
+    shortName: '$40k Retirement',
+    description: 'If you stopped saving today, you could withdraw $40,000/year at retirement. Close to median individual income.',
+    type: 'retirement_income',
+    targetValue: 40000,
+    color: '#22c55e', // green-500
+    icon: 'wallet',
+  },
+  {
+    id: 'retirement_income_50k',
+    name: '$50k/year at Retirement',
+    shortName: '$50k Retirement',
+    description: 'If you stopped saving today, you could withdraw $50,000/year at retirement. A solid middle-class income.',
+    type: 'retirement_income',
+    targetValue: 50000,
+    color: '#14b8a6', // teal-500
+    icon: 'banknote',
+  },
+  {
+    id: 'retirement_income_60k',
+    name: '$60k/year at Retirement',
+    shortName: '$60k Retirement',
+    description: 'If you stopped saving today, you could withdraw $60,000/year at retirement. A comfortable lifestyle with room for discretionary spending.',
+    type: 'retirement_income',
+    targetValue: 60000,
+    color: '#10b981', // emerald-500
+    icon: 'banknote',
+  },
+  {
+    id: 'retirement_income_75k',
+    name: '$75k/year at Retirement',
+    shortName: '$75k Retirement',
+    description: 'If you stopped saving today, you could withdraw $75,000/year at retirement. Well above median household income.',
+    type: 'retirement_income',
+    targetValue: 75000,
+    color: '#f59e0b', // amber-500
+    icon: 'banknote',
+  },
+  {
+    id: 'retirement_income_100k',
+    name: '$100k/year at Retirement',
+    shortName: '$100k Retirement',
+    description: 'If you stopped saving today, you could withdraw $100,000/year at retirement. A six-figure retirement income!',
+    type: 'retirement_income',
+    targetValue: 100000,
+    color: '#eab308', // yellow-500
+    icon: 'gem',
+  },
+  {
+    id: 'retirement_income_125k',
+    name: '$125k/year at Retirement',
+    shortName: '$125k Retirement',
+    description: 'If you stopped saving today, you could withdraw $125,000/year at retirement. An affluent retirement lifestyle.',
+    type: 'retirement_income',
+    targetValue: 125000,
+    color: '#f97316', // orange-500
+    icon: 'gem',
+  },
+  {
+    id: 'retirement_income_150k',
+    name: '$150k/year at Retirement',
+    shortName: '$150k Retirement',
+    description: 'If you stopped saving today, you could withdraw $150,000/year at retirement. Upper-class retirement security.',
+    type: 'retirement_income',
+    targetValue: 150000,
+    color: '#ef4444', // red-500
+    icon: 'gem',
+  },
+  {
+    id: 'retirement_income_200k',
+    name: '$200k/year at Retirement',
+    shortName: '$200k Retirement',
+    description: 'If you stopped saving today, you could withdraw $200,000/year at retirement. Exceptional wealth and freedom.',
+    type: 'retirement_income',
+    targetValue: 200000,
+    color: '#ec4899', // pink-500
+    icon: 'crown',
+  },
 ] as const;
 
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
@@ -560,6 +705,146 @@ export function calculateCoastFiPercent(
   
   if (futureFiTarget <= 0) return 0;
   return (futureNetWorth / futureFiTarget) * 100;
+}
+
+/**
+ * Calculate the projected annual retirement income if you stopped saving today.
+ * This answers: "If I never contribute another dollar, what salary can I withdraw at retirement?"
+ * 
+ * This is the concrete dollar amount version of coast FI - instead of showing percentages,
+ * it shows the actual income you could sustain at retirement age.
+ * 
+ * @param currentNetWorth - Current net worth
+ * @param yearsToRetirement - Years until retirement (age 65 typically)
+ * @param annualReturnRate - Expected annual return rate as percentage (e.g., 7 for 7%)
+ * @param swr - Safe withdrawal rate as percentage (e.g., 4 for 4%)
+ * @returns Annual income you could withdraw at retirement (in today's dollars)
+ */
+export function calculateProjectedRetirementIncome(
+  currentNetWorth: number,
+  yearsToRetirement: number,
+  annualReturnRate: number,
+  swr: number
+): number {
+  if (yearsToRetirement <= 0) {
+    // Already at retirement - return current SWR
+    return currentNetWorth * (swr / 100);
+  }
+  
+  const returnRate = annualReturnRate / 100;
+  const withdrawalRate = swr / 100;
+  
+  // Calculate what current NW would grow to with no additional contributions
+  const futureNetWorth = currentNetWorth * Math.pow(1 + returnRate, yearsToRetirement);
+  
+  // Calculate annual income at that future date using SWR
+  return futureNetWorth * withdrawalRate;
+}
+
+/**
+ * Calculate the net worth needed TODAY to achieve a target retirement income.
+ * This is the inverse of calculateProjectedRetirementIncome.
+ * 
+ * @param targetAnnualIncome - Desired annual income at retirement
+ * @param yearsToRetirement - Years until retirement
+ * @param annualReturnRate - Expected annual return rate as percentage
+ * @param swr - Safe withdrawal rate as percentage
+ * @returns Net worth needed today to achieve target income at retirement
+ */
+export function calculateNetWorthForRetirementIncome(
+  targetAnnualIncome: number,
+  yearsToRetirement: number,
+  annualReturnRate: number,
+  swr: number
+): number {
+  if (yearsToRetirement <= 0) {
+    // Already at retirement - need full amount now
+    return targetAnnualIncome / (swr / 100);
+  }
+  
+  const returnRate = annualReturnRate / 100;
+  const withdrawalRate = swr / 100;
+  
+  // Future NW needed = targetIncome / SWR
+  const futureNetWorthNeeded = targetAnnualIncome / withdrawalRate;
+  
+  // Present value of that future amount
+  return futureNetWorthNeeded / Math.pow(1 + returnRate, yearsToRetirement);
+}
+
+/**
+ * Get comprehensive retirement income projection information
+ */
+export interface RetirementIncomeInfo {
+  // Current situation
+  currentNetWorth: number;
+  currentAge: number | null;
+  yearsToRetirement: number;
+  retirementAge: number;
+  
+  // Projected retirement income (if stopped saving today)
+  projectedAnnualIncome: number;
+  projectedMonthlyIncome: number;
+  
+  // How much $1 saved today becomes at retirement
+  dollarMultiplier: number;
+  
+  // Net worth thresholds for various income levels
+  // Shows "you need $X today to have $Y/year at retirement"
+  incomeThresholds: Array<{
+    annualIncome: number;
+    netWorthNeeded: number;
+    isAchieved: boolean;
+    percentComplete: number;
+  }>;
+}
+
+export function calculateRetirementIncomeInfo(
+  netWorth: number,
+  birthYear: number | null,
+  annualReturnRate: number,
+  swr: number,
+  retirementAge: number = DEFAULT_RETIREMENT_AGE
+): RetirementIncomeInfo {
+  const currentYear = new Date().getFullYear();
+  const currentAge = birthYear ? currentYear - birthYear : null;
+  const yearsToRetirement = currentAge !== null 
+    ? Math.max(0, retirementAge - currentAge) 
+    : 30; // Default assumption if no birth year
+  
+  const dollarMultiplier = calculateDollarMultiplier(yearsToRetirement, annualReturnRate);
+  const projectedAnnualIncome = calculateProjectedRetirementIncome(
+    netWorth, yearsToRetirement, annualReturnRate, swr
+  );
+  
+  // Common income milestones
+  const incomeLevels = [10000, 15000, 20000, 25000, 30000, 35000, 40000, 50000, 60000, 75000, 100000, 125000, 150000, 200000];
+  
+  const incomeThresholds = incomeLevels.map(income => {
+    const netWorthNeeded = calculateNetWorthForRetirementIncome(
+      income, yearsToRetirement, annualReturnRate, swr
+    );
+    const isAchieved = netWorth >= netWorthNeeded;
+    const percentComplete = netWorthNeeded > 0 ? Math.min(100, (netWorth / netWorthNeeded) * 100) : 0;
+    
+    return {
+      annualIncome: income,
+      netWorthNeeded,
+      isAchieved,
+      percentComplete,
+    };
+  });
+  
+  return {
+    currentNetWorth: netWorth,
+    currentAge,
+    yearsToRetirement,
+    retirementAge,
+    projectedAnnualIncome,
+    projectedMonthlyIncome: projectedAnnualIncome / 12,
+    dollarMultiplier,
+    incomeThresholds,
+  };
 }
 
 /**
@@ -1206,6 +1491,62 @@ export function calculateFiMilestones(
             milestoneNetWorth = row.netWorth;
             break;
           }
+        }
+      }
+      
+      milestone = {
+        ...def,
+        year: milestoneYear,
+        age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+        yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+        isAchieved,
+        netWorthAtMilestone: milestoneNetWorth,
+      };
+    } else if (def.type === 'retirement_income') {
+      // Retirement Income milestones - what pre-tax salary could you pull at retirement if you stopped saving today?
+      // These are concrete dollar amounts that show the power of compounding over time.
+      // The earlier you achieve these, the fewer years of compounding you need.
+      const targetAnnualIncome = def.targetValue;
+      const retirementAge = 65;
+      const currentAge = birthYear ? currentYear - birthYear : null;
+      const yearsToRetirement = currentAge !== null ? Math.max(0, retirementAge - currentAge) : 30;
+      const returnRate = settings.currentRate / 100;
+      const withdrawalRate = settings.swr / 100;
+      
+      // Calculate what annual income current NW would provide at retirement
+      const futureNetWorth = currentNetWorth * Math.pow(1 + returnRate, yearsToRetirement);
+      const projectedAnnualIncome = futureNetWorth * withdrawalRate;
+      const isAchieved = projectedAnnualIncome >= targetAnnualIncome;
+      
+      // Calculate the net worth needed today to achieve this milestone
+      const futureNetWorthNeeded = targetAnnualIncome / withdrawalRate;
+      const netWorthNeededToday = yearsToRetirement > 0 
+        ? futureNetWorthNeeded / Math.pow(1 + returnRate, yearsToRetirement)
+        : futureNetWorthNeeded;
+      
+      // Find the first year when this income milestone is achieved
+      // For each year, calculate: if we stopped contributing THEN, would we reach targetAnnualIncome?
+      let milestoneYear: number | null = null;
+      let milestoneNetWorth: number | null = null;
+      
+      for (const row of projections) {
+        const rowAge = birthYear ? row.year - birthYear : null;
+        const rowYearsToRetirement = rowAge !== null ? Math.max(0, retirementAge - rowAge) : Math.max(0, 30 - row.yearsFromEntry);
+        
+        // Calculate the projected annual income if we stopped contributing at this row
+        let rowProjectedIncome: number;
+        if (rowYearsToRetirement <= 0) {
+          // Already at or past retirement - just use SWR on current NW
+          rowProjectedIncome = row.netWorth * withdrawalRate;
+        } else {
+          const rowFutureNW = row.netWorth * Math.pow(1 + returnRate, rowYearsToRetirement);
+          rowProjectedIncome = rowFutureNW * withdrawalRate;
+        }
+        
+        if (rowProjectedIncome >= targetAnnualIncome) {
+          milestoneYear = row.year;
+          milestoneNetWorth = row.netWorth;
+          break;
         }
       }
       

@@ -7,6 +7,7 @@
  * - Runway milestones (6mo, 1yr, 2yr, 3yr, 5yr, 10yr of expenses)
  * - Coast milestones (Coast to 25%, 50%, 75% FI)
  * - Special milestones (Crossover, Coast FI, Flamingo FI)
+ * - Retirement Income milestones ($10k-$200k/year at retirement if you stop saving today)
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -21,6 +22,9 @@ import {
   generateProjections,
   calculateLevelBasedSpending,
   adjustForInflation,
+  calculateProjectedRetirementIncome,
+  calculateNetWorthForRetirementIncome,
+  calculateRetirementIncomeInfo,
   UserSettings,
   NetWorthEntry,
   ProjectionRow,
@@ -1559,5 +1563,382 @@ describe('Milestone Integration Tests', () => {
       expect(achievedCount).toBeGreaterThanOrEqual(previousAchievedCount)
       previousAchievedCount = achievedCount
     }
+  })
+})
+
+// ============================================================================
+// RETIREMENT INCOME MILESTONES - Concrete salary at retirement age
+// ============================================================================
+
+describe('Retirement Income Milestones', () => {
+  describe('calculateProjectedRetirementIncome', () => {
+    it('should calculate projected retirement income correctly with compound growth', () => {
+      // $100,000 at 7% for 30 years with 4% SWR
+      // Future NW = $100,000 * (1.07)^30 = ~$761,226
+      // Annual income = $761,226 * 0.04 = ~$30,449
+      const income = calculateProjectedRetirementIncome(100000, 30, 7, 4)
+      const expectedFutureNW = 100000 * Math.pow(1.07, 30)
+      const expectedIncome = expectedFutureNW * 0.04
+      
+      expect(income).toBeCloseTo(expectedIncome, 0)
+      expect(income).toBeCloseTo(30449, 0)
+    })
+    
+    it('should return current SWR when already at retirement age', () => {
+      const income = calculateProjectedRetirementIncome(1000000, 0, 7, 4)
+      // At retirement, just apply SWR: $1,000,000 * 0.04 = $40,000
+      expect(income).toBe(40000)
+    })
+    
+    it('should scale linearly with net worth', () => {
+      const income100k = calculateProjectedRetirementIncome(100000, 30, 7, 4)
+      const income200k = calculateProjectedRetirementIncome(200000, 30, 7, 4)
+      const income300k = calculateProjectedRetirementIncome(300000, 30, 7, 4)
+      
+      expect(income200k).toBeCloseTo(income100k * 2, 0)
+      expect(income300k).toBeCloseTo(income100k * 3, 0)
+    })
+    
+    it('should increase exponentially with more years to retirement', () => {
+      const income10yr = calculateProjectedRetirementIncome(100000, 10, 7, 4)
+      const income20yr = calculateProjectedRetirementIncome(100000, 20, 7, 4)
+      const income30yr = calculateProjectedRetirementIncome(100000, 30, 7, 4)
+      
+      // More years = more compounding = higher income
+      expect(income20yr).toBeGreaterThan(income10yr * 1.5)
+      expect(income30yr).toBeGreaterThan(income20yr * 1.5)
+    })
+  })
+
+  describe('calculateNetWorthForRetirementIncome', () => {
+    it('should be the inverse of calculateProjectedRetirementIncome', () => {
+      const targetIncome = 50000
+      const yearsToRetirement = 30
+      const returnRate = 7
+      const swr = 4
+      
+      // Calculate NW needed for $50k/year
+      const nwNeeded = calculateNetWorthForRetirementIncome(targetIncome, yearsToRetirement, returnRate, swr)
+      
+      // Verify that amount would actually produce $50k/year
+      const actualIncome = calculateProjectedRetirementIncome(nwNeeded, yearsToRetirement, returnRate, swr)
+      
+      expect(actualIncome).toBeCloseTo(targetIncome, 0)
+    })
+    
+    it('should calculate correct net worth for various income levels', () => {
+      // For $40,000/year at retirement in 30 years with 7% return and 4% SWR:
+      // Future NW needed = $40,000 / 0.04 = $1,000,000
+      // Present value = $1,000,000 / (1.07)^30 = ~$131,367
+      const nwNeeded = calculateNetWorthForRetirementIncome(40000, 30, 7, 4)
+      
+      const futureNWNeeded = 40000 / 0.04
+      const expectedPresentValue = futureNWNeeded / Math.pow(1.07, 30)
+      
+      expect(nwNeeded).toBeCloseTo(expectedPresentValue, 0)
+      expect(nwNeeded).toBeCloseTo(131367, 0)
+    })
+    
+    it('should return full amount when at retirement age', () => {
+      const nwNeeded = calculateNetWorthForRetirementIncome(50000, 0, 7, 4)
+      // At retirement: NW needed = income / SWR = $50,000 / 0.04 = $1,250,000
+      expect(nwNeeded).toBe(1250000)
+    })
+    
+    it('should decrease the earlier you start (more compounding time)', () => {
+      const income = 100000 // $100k/year target
+      
+      const nw30yr = calculateNetWorthForRetirementIncome(income, 30, 7, 4)
+      const nw20yr = calculateNetWorthForRetirementIncome(income, 20, 7, 4)
+      const nw10yr = calculateNetWorthForRetirementIncome(income, 10, 7, 4)
+      
+      // Less time = more NW needed today
+      expect(nw30yr).toBeLessThan(nw20yr)
+      expect(nw20yr).toBeLessThan(nw10yr)
+    })
+  })
+
+  describe('Retirement Income Milestone Achievement', () => {
+    it('should include retirement_income type milestones', () => {
+      const settings = createMockSettings()
+      const projections = generateTestProjections(500000, settings)
+      const milestones = calculateFiMilestones(projections, settings, 1990)
+      
+      const retirementIncomeMilestones = milestones.milestones.filter(m => m.type === 'retirement_income')
+      
+      // Should have all 14 retirement income milestones
+      expect(retirementIncomeMilestones.length).toBe(14)
+    })
+    
+    it('should achieve $10k milestone with modest net worth', () => {
+      // Person born 1990 (age 35 in 2025), ~30 years to retirement
+      // At 7% for 30 years, $1 becomes ~$7.61
+      // Need: $10,000 / 0.04 / 7.61 = ~$32,854 today
+      const settings = createMockSettings()
+      const projections = generateTestProjections(35000, settings)
+      const milestones = calculateFiMilestones(projections, settings, 1990)
+      
+      const milestone10k = milestones.milestones.find(m => m.id === 'retirement_income_10k')
+      expect(milestone10k).toBeDefined()
+      expect(milestone10k?.isAchieved).toBe(true)
+    })
+    
+    it('should not achieve $100k milestone with modest net worth', () => {
+      const settings = createMockSettings()
+      const projections = generateTestProjections(100000, settings)
+      const milestones = calculateFiMilestones(projections, settings, 1990)
+      
+      const milestone100k = milestones.milestones.find(m => m.id === 'retirement_income_100k')
+      expect(milestone100k).toBeDefined()
+      // $100k/year needs much more than $100k NW today
+      expect(milestone100k?.isAchieved).toBe(false)
+    })
+    
+    it('should achieve $100k milestone with high net worth', () => {
+      // Need: $100,000 / 0.04 / 7.61 = ~$328,540 today (for 30 years)
+      const settings = createMockSettings()
+      const projections = generateTestProjections(400000, settings)
+      const milestones = calculateFiMilestones(projections, settings, 1990)
+      
+      const milestone100k = milestones.milestones.find(m => m.id === 'retirement_income_100k')
+      expect(milestone100k).toBeDefined()
+      expect(milestone100k?.isAchieved).toBe(true)
+    })
+    
+    it('should have milestones in ascending order of target income', () => {
+      const settings = createMockSettings()
+      const projections = generateTestProjections(500000, settings)
+      const milestones = calculateFiMilestones(projections, settings, 1990)
+      
+      const retirementIncomeMilestones = milestones.milestones
+        .filter(m => m.type === 'retirement_income')
+        .map(m => m.targetValue)
+      
+      // Should be in ascending order
+      for (let i = 1; i < retirementIncomeMilestones.length; i++) {
+        expect(retirementIncomeMilestones[i]).toBeGreaterThan(retirementIncomeMilestones[i - 1])
+      }
+    })
+    
+    it('should show earlier milestone years for lower income targets', () => {
+      const settings = createMockSettings()
+      const projections = generateTestProjections(200000, settings)
+      const milestones = calculateFiMilestones(projections, settings, 1990)
+      
+      const milestone20k = milestones.milestones.find(m => m.id === 'retirement_income_20k')
+      const milestone50k = milestones.milestones.find(m => m.id === 'retirement_income_50k')
+      const milestone100k = milestones.milestones.find(m => m.id === 'retirement_income_100k')
+      
+      // Lower targets should be achieved earlier (or have null year if not achievable)
+      if (milestone20k?.year && milestone50k?.year) {
+        expect(milestone20k.year).toBeLessThanOrEqual(milestone50k.year)
+      }
+      if (milestone50k?.year && milestone100k?.year) {
+        expect(milestone50k.year).toBeLessThanOrEqual(milestone100k.year)
+      }
+    })
+  })
+
+  describe('Retirement Income Milestone with Age', () => {
+    it('should require less net worth for younger people (more compounding time)', () => {
+      const settings = createMockSettings()
+      
+      // Young person (age 30, 35 years to retirement)
+      const youngProjections = generateTestProjections(200000, settings)
+      const youngMilestones = calculateFiMilestones(youngProjections, settings, 1995)
+      
+      // Older person (age 50, 15 years to retirement)
+      const oldProjections = generateTestProjections(200000, settings)
+      const oldMilestones = calculateFiMilestones(oldProjections, settings, 1975)
+      
+      const youngMilestone50k = youngMilestones.milestones.find(m => m.id === 'retirement_income_50k')
+      const oldMilestone50k = oldMilestones.milestones.find(m => m.id === 'retirement_income_50k')
+      
+      // Young person should achieve more income milestones with same NW
+      // because they have more time for compounding
+      const youngAchievedCount = youngMilestones.milestones
+        .filter(m => m.type === 'retirement_income' && m.isAchieved).length
+      const oldAchievedCount = oldMilestones.milestones
+        .filter(m => m.type === 'retirement_income' && m.isAchieved).length
+      
+      expect(youngAchievedCount).toBeGreaterThanOrEqual(oldAchievedCount)
+    })
+    
+    it('should calculate correct years to milestone for different ages', () => {
+      const settings = createMockSettings()
+      const projections = generateTestProjections(100000, settings)
+      const milestones = calculateFiMilestones(projections, settings, 1990)
+      
+      const milestone30k = milestones.milestones.find(m => m.id === 'retirement_income_30k')
+      
+      // For a 35 year old with $100k, when would they reach $30k/year retirement income?
+      // It should be achievable (either now or in the future with continued savings)
+      expect(milestone30k?.year).not.toBeNull()
+      
+      if (milestone30k?.age) {
+        // Age should be between current age and retirement age
+        expect(milestone30k.age).toBeGreaterThanOrEqual(35)
+        expect(milestone30k.age).toBeLessThanOrEqual(100)
+      }
+    })
+  })
+
+  describe('Dollar Multiplier Effect', () => {
+    it('should show the power of early saving via dollar multiplier', () => {
+      // At age 25 (40 years to retirement) vs age 55 (10 years to retirement)
+      const multiplier40yr = calculateDollarMultiplier(40, 7)
+      const multiplier10yr = calculateDollarMultiplier(10, 7)
+      
+      // $1 at age 25 becomes ~$14.97 at retirement
+      // $1 at age 55 becomes ~$1.97 at retirement
+      expect(multiplier40yr).toBeCloseTo(14.97, 1)
+      expect(multiplier10yr).toBeCloseTo(1.97, 1)
+      
+      // This means a 25 year old needs ~1/7.6 of what a 55 year old needs
+      expect(multiplier40yr / multiplier10yr).toBeGreaterThan(7)
+    })
+    
+    it('should reflect in retirement income calculations', () => {
+      // Same $100,000 net worth produces very different retirement incomes
+      // depending on years to retirement
+      const income40yr = calculateProjectedRetirementIncome(100000, 40, 7, 4)
+      const income10yr = calculateProjectedRetirementIncome(100000, 10, 7, 4)
+      
+      // 40 years: $100k * 14.97 * 0.04 = ~$59,880/year
+      // 10 years: $100k * 1.97 * 0.04 = ~$7,880/year
+      expect(income40yr).toBeGreaterThan(income10yr * 7)
+    })
+  })
+
+  describe('Retirement Income Milestone Progression', () => {
+    it('should achieve milestones in order as net worth grows', () => {
+      const settings = createMockSettings()
+      
+      // Progress through various net worth levels
+      const netWorths = [50000, 100000, 200000, 300000, 500000, 800000]
+      
+      let previousAchievedCount = 0
+      
+      for (const nw of netWorths) {
+        const projections = generateTestProjections(nw, settings)
+        const milestones = calculateFiMilestones(projections, settings, 1990)
+        
+        const achievedCount = milestones.milestones
+          .filter(m => m.type === 'retirement_income' && m.isAchieved).length
+        
+        // Should never lose achievements as NW grows
+        expect(achievedCount).toBeGreaterThanOrEqual(previousAchievedCount)
+        previousAchievedCount = achievedCount
+      }
+    })
+    
+    it('should track net worth at milestone achievement', () => {
+      const settings = createMockSettings()
+      const projections = generateTestProjections(200000, settings)
+      const milestones = calculateFiMilestones(projections, settings, 1990)
+      
+      const milestone30k = milestones.milestones.find(m => m.id === 'retirement_income_30k')
+      
+      if (milestone30k?.isAchieved) {
+        // Net worth at milestone should be recorded
+        expect(milestone30k.netWorthAtMilestone).toBeDefined()
+        expect(milestone30k.netWorthAtMilestone).toBeGreaterThan(0)
+      }
+    })
+  })
+
+  describe('Edge Cases for Retirement Income Milestones', () => {
+    it('should handle null birth year with default years to retirement', () => {
+      const settings = createMockSettings()
+      const projections = generateTestProjections(300000, settings)
+      const milestones = calculateFiMilestones(projections, settings, null)
+      
+      // Should still calculate milestones with default 30 years to retirement
+      const retirementIncomeMilestones = milestones.milestones.filter(m => m.type === 'retirement_income')
+      expect(retirementIncomeMilestones.length).toBe(14)
+      
+      // Some should be achieved with $300k and 30 years
+      const achievedCount = retirementIncomeMilestones.filter(m => m.isAchieved).length
+      expect(achievedCount).toBeGreaterThan(0)
+    })
+    
+    it('should handle person at retirement age', () => {
+      const settings = createMockSettings()
+      const projections = generateTestProjections(1000000, settings)
+      // Person born 1960 is ~65 in 2025, at retirement
+      const milestones = calculateFiMilestones(projections, settings, 1960)
+      
+      const milestone40k = milestones.milestones.find(m => m.id === 'retirement_income_40k')
+      
+      // At retirement with $1M and 4% SWR: $40,000/year
+      // Should exactly hit the $40k milestone
+      expect(milestone40k?.isAchieved).toBe(true)
+    })
+    
+    it('should handle very young person with maximum compounding', () => {
+      const settings = createMockSettings()
+      // Person born 2005 is ~20 years old, 45 years to retirement
+      const projections = generateTestProjections(50000, settings)
+      const milestones = calculateFiMilestones(projections, settings, 2005)
+      
+      // With 45 years of compounding at 7%, multiplier is ~21.00
+      // $50,000 * 21.00 = $1,050,000 future value
+      // $1,050,000 * 0.04 = $42,000/year
+      const milestone40k = milestones.milestones.find(m => m.id === 'retirement_income_40k')
+      expect(milestone40k?.isAchieved).toBe(true)
+    })
+  })
+})
+
+// ============================================================================
+// NUMERICAL VERIFICATION FOR RETIREMENT INCOME
+// ============================================================================
+
+describe('Retirement Income Numerical Verification', () => {
+  it('should verify retirement income calculation: income = NW * (1+r)^t * SWR', () => {
+    // Test case: $150,000 NW, 25 years, 7% return, 4% SWR
+    const nw = 150000
+    const years = 25
+    const rate = 7
+    const swr = 4
+    
+    const calculated = calculateProjectedRetirementIncome(nw, years, rate, swr)
+    
+    // Manual: $150,000 * (1.07)^25 * 0.04
+    const futureNW = nw * Math.pow(1 + rate/100, years)
+    const manual = futureNW * (swr / 100)
+    
+    expect(calculated).toBeCloseTo(manual, 2)
+  })
+  
+  it('should verify NW needed calculation: NW = (income / SWR) / (1+r)^t', () => {
+    // Test case: Want $60,000/year, 20 years out, 7% return, 4% SWR
+    const targetIncome = 60000
+    const years = 20
+    const rate = 7
+    const swr = 4
+    
+    const calculated = calculateNetWorthForRetirementIncome(targetIncome, years, rate, swr)
+    
+    // Manual: ($60,000 / 0.04) / (1.07)^20
+    const futureNWNeeded = targetIncome / (swr / 100)
+    const manual = futureNWNeeded / Math.pow(1 + rate/100, years)
+    
+    expect(calculated).toBeCloseTo(manual, 2)
+  })
+  
+  it('should verify milestone thresholds at 30 years to retirement', () => {
+    // For each income level, verify the NW needed today makes sense
+    const years = 30
+    const rate = 7
+    const swr = 4
+    const multiplier = Math.pow(1.07, 30) // ~7.61
+    
+    // To get $X/year, need NW_today = ($X / 0.04) / 7.61
+    const expectedNWFor50k = (50000 / 0.04) / multiplier
+    const expectedNWFor100k = (100000 / 0.04) / multiplier
+    
+    expect(calculateNetWorthForRetirementIncome(50000, years, rate, swr)).toBeCloseTo(expectedNWFor50k, 0)
+    expect(calculateNetWorthForRetirementIncome(100000, years, rate, swr)).toBeCloseTo(expectedNWFor100k, 0)
   })
 })
