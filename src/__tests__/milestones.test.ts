@@ -1666,8 +1666,8 @@ describe('Retirement Income Milestones', () => {
       
       const retirementIncomeMilestones = milestones.milestones.filter(m => m.type === 'retirement_income')
       
-      // Should have all 14 retirement income milestones
-      expect(retirementIncomeMilestones.length).toBe(14)
+      // Should have all 22 retirement income milestones ($10k - $2M)
+      expect(retirementIncomeMilestones.length).toBe(22)
     })
     
     it('should achieve $10k milestone with modest net worth', () => {
@@ -1855,7 +1855,7 @@ describe('Retirement Income Milestones', () => {
       
       // Should still calculate milestones with default 30 years to retirement
       const retirementIncomeMilestones = milestones.milestones.filter(m => m.type === 'retirement_income')
-      expect(retirementIncomeMilestones.length).toBe(14)
+      expect(retirementIncomeMilestones.length).toBe(22)
       
       // Some should be achieved with $300k and 30 years
       const achievedCount = retirementIncomeMilestones.filter(m => m.isAchieved).length

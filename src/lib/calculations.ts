@@ -633,6 +633,86 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
     color: '#ec4899', // pink-500
     icon: 'crown',
   },
+  {
+    id: 'retirement_income_250k',
+    name: '$250k/year at Retirement',
+    shortName: '$250k Retirement',
+    description: 'If you stopped saving today, you could withdraw $250,000/year at retirement. Top 5% retirement income.',
+    type: 'retirement_income',
+    targetValue: 250000,
+    color: '#dc2626', // red-600
+    icon: 'crown',
+  },
+  {
+    id: 'retirement_income_300k',
+    name: '$300k/year at Retirement',
+    shortName: '$300k Retirement',
+    description: 'If you stopped saving today, you could withdraw $300,000/year at retirement. True financial abundance.',
+    type: 'retirement_income',
+    targetValue: 300000,
+    color: '#b91c1c', // red-700
+    icon: 'crown',
+  },
+  {
+    id: 'retirement_income_400k',
+    name: '$400k/year at Retirement',
+    shortName: '$400k Retirement',
+    description: 'If you stopped saving today, you could withdraw $400,000/year at retirement. Elite financial status.',
+    type: 'retirement_income',
+    targetValue: 400000,
+    color: '#7c3aed', // violet-600
+    icon: 'trophy',
+  },
+  {
+    id: 'retirement_income_500k',
+    name: '$500k/year at Retirement',
+    shortName: '$500k Retirement',
+    description: 'If you stopped saving today, you could withdraw $500,000/year at retirement. Half a million annually!',
+    type: 'retirement_income',
+    targetValue: 500000,
+    color: '#6d28d9', // violet-700
+    icon: 'trophy',
+  },
+  {
+    id: 'retirement_income_750k',
+    name: '$750k/year at Retirement',
+    shortName: '$750k Retirement',
+    description: 'If you stopped saving today, you could withdraw $750,000/year at retirement. Extraordinary wealth.',
+    type: 'retirement_income',
+    targetValue: 750000,
+    color: '#4c1d95', // violet-900
+    icon: 'trophy',
+  },
+  {
+    id: 'retirement_income_1m',
+    name: '$1M/year at Retirement',
+    shortName: '$1M Retirement',
+    description: 'If you stopped saving today, you could withdraw $1,000,000/year at retirement. Seven-figure annual retirement income!',
+    type: 'retirement_income',
+    targetValue: 1000000,
+    color: '#fbbf24', // amber-400 (gold)
+    icon: 'diamond',
+  },
+  {
+    id: 'retirement_income_1_5m',
+    name: '$1.5M/year at Retirement',
+    shortName: '$1.5M Retirement',
+    description: 'If you stopped saving today, you could withdraw $1,500,000/year at retirement. Ultra-high net worth territory.',
+    type: 'retirement_income',
+    targetValue: 1500000,
+    color: '#f59e0b', // amber-500 (gold)
+    icon: 'diamond',
+  },
+  {
+    id: 'retirement_income_2m',
+    name: '$2M/year at Retirement',
+    shortName: '$2M Retirement',
+    description: 'If you stopped saving today, you could withdraw $2,000,000/year at retirement. Generational wealth secured.',
+    type: 'retirement_income',
+    targetValue: 2000000,
+    color: '#d97706', // amber-600 (gold)
+    icon: 'diamond',
+  },
 ] as const;
 
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
@@ -818,7 +898,7 @@ export function calculateRetirementIncomeInfo(
   );
   
   // Common income milestones
-  const incomeLevels = [10000, 15000, 20000, 25000, 30000, 35000, 40000, 50000, 60000, 75000, 100000, 125000, 150000, 200000];
+  const incomeLevels = [10000, 15000, 20000, 25000, 30000, 35000, 40000, 50000, 60000, 75000, 100000, 125000, 150000, 200000, 250000, 300000, 400000, 500000, 750000, 1000000, 1500000, 2000000];
   
   const incomeThresholds = incomeLevels.map(income => {
     const netWorthNeeded = calculateNetWorthForRetirementIncome(
