@@ -21,7 +21,6 @@ import {
   calculateLevelBasedSpending,
   mergeWithDefaults,
   DEFAULT_SETTINGS,
-  LEVEL_THRESHOLDS,
   formatCurrency,
   formatDate,
   getTimeSinceEntry,
@@ -273,4 +272,4 @@ export type {
   ProjectionRow,
 };
 
-export { LEVEL_THRESHOLDS, DEFAULT_SETTINGS, formatCurrency, formatDate, getTimeSinceEntry };
+export { DEFAULT_SETTINGS, formatCurrency, formatDate, getTimeSinceEntry };
