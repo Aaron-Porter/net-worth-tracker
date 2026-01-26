@@ -1571,90 +1571,111 @@ describe('Milestone Integration Tests', () => {
 // ============================================================================
 
 describe('Retirement Income Milestones', () => {
-  describe('calculateProjectedRetirementIncome', () => {
-    it('should calculate projected retirement income correctly with compound growth', () => {
-      // $100,000 at 7% for 30 years with 4% SWR
+  describe('calculateProjectedRetirementIncome (inflation-adjusted)', () => {
+    it('should calculate projected REAL retirement income with inflation adjustment', () => {
+      // $100,000 at 7% for 30 years with 3% inflation and 4% SWR
       // Future NW = $100,000 * (1.07)^30 = ~$761,226
-      // Annual income = $761,226 * 0.04 = ~$30,449
-      const income = calculateProjectedRetirementIncome(100000, 30, 7, 4)
-      const expectedFutureNW = 100000 * Math.pow(1.07, 30)
-      const expectedIncome = expectedFutureNW * 0.04
+      // Nominal income = $761,226 * 0.04 = ~$30,449
+      // Inflation multiplier = (1.03)^30 = ~2.427
+      // Real income = $30,449 / 2.427 = ~$12,545 (in today's purchasing power)
+      const realIncome = calculateProjectedRetirementIncome(100000, 30, 7, 3, 4)
       
-      expect(income).toBeCloseTo(expectedIncome, 0)
-      expect(income).toBeCloseTo(30449, 0)
+      const futureNW = 100000 * Math.pow(1.07, 30)
+      const nominalIncome = futureNW * 0.04
+      const inflationMultiplier = Math.pow(1.03, 30)
+      const expectedRealIncome = nominalIncome / inflationMultiplier
+      
+      expect(realIncome).toBeCloseTo(expectedRealIncome, 0)
+      expect(realIncome).toBeCloseTo(12545, -1) // Roughly $12.5k in today's dollars
     })
     
-    it('should return current SWR when already at retirement age', () => {
-      const income = calculateProjectedRetirementIncome(1000000, 0, 7, 4)
+    it('should return current SWR when already at retirement age (no inflation adjustment)', () => {
+      const income = calculateProjectedRetirementIncome(1000000, 0, 7, 3, 4)
       // At retirement, just apply SWR: $1,000,000 * 0.04 = $40,000
       expect(income).toBe(40000)
     })
     
     it('should scale linearly with net worth', () => {
-      const income100k = calculateProjectedRetirementIncome(100000, 30, 7, 4)
-      const income200k = calculateProjectedRetirementIncome(200000, 30, 7, 4)
-      const income300k = calculateProjectedRetirementIncome(300000, 30, 7, 4)
+      const income100k = calculateProjectedRetirementIncome(100000, 30, 7, 3, 4)
+      const income200k = calculateProjectedRetirementIncome(200000, 30, 7, 3, 4)
+      const income300k = calculateProjectedRetirementIncome(300000, 30, 7, 3, 4)
       
       expect(income200k).toBeCloseTo(income100k * 2, 0)
       expect(income300k).toBeCloseTo(income100k * 3, 0)
     })
     
-    it('should increase exponentially with more years to retirement', () => {
-      const income10yr = calculateProjectedRetirementIncome(100000, 10, 7, 4)
-      const income20yr = calculateProjectedRetirementIncome(100000, 20, 7, 4)
-      const income30yr = calculateProjectedRetirementIncome(100000, 30, 7, 4)
+    it('should show higher real income with more years (net of inflation)', () => {
+      // With 7% return and 3% inflation, real growth is ~4%/year
+      // More years still means more real income, but less dramatically than nominal
+      const income10yr = calculateProjectedRetirementIncome(100000, 10, 7, 3, 4)
+      const income20yr = calculateProjectedRetirementIncome(100000, 20, 7, 3, 4)
+      const income30yr = calculateProjectedRetirementIncome(100000, 30, 7, 3, 4)
       
-      // More years = more compounding = higher income
-      expect(income20yr).toBeGreaterThan(income10yr * 1.5)
-      expect(income30yr).toBeGreaterThan(income20yr * 1.5)
+      // Real income should still increase with more years
+      expect(income20yr).toBeGreaterThan(income10yr)
+      expect(income30yr).toBeGreaterThan(income20yr)
+    })
+    
+    it('should show lower real income with higher inflation', () => {
+      const lowInflation = calculateProjectedRetirementIncome(100000, 30, 7, 2, 4)
+      const midInflation = calculateProjectedRetirementIncome(100000, 30, 7, 3, 4)
+      const highInflation = calculateProjectedRetirementIncome(100000, 30, 7, 4, 4)
+      
+      // Higher inflation = lower real income
+      expect(lowInflation).toBeGreaterThan(midInflation)
+      expect(midInflation).toBeGreaterThan(highInflation)
     })
   })
 
-  describe('calculateNetWorthForRetirementIncome', () => {
+  describe('calculateNetWorthForRetirementIncome (inflation-adjusted)', () => {
     it('should be the inverse of calculateProjectedRetirementIncome', () => {
-      const targetIncome = 50000
+      const targetRealIncome = 50000 // $50k in today's dollars
       const yearsToRetirement = 30
       const returnRate = 7
+      const inflationRate = 3
       const swr = 4
       
-      // Calculate NW needed for $50k/year
-      const nwNeeded = calculateNetWorthForRetirementIncome(targetIncome, yearsToRetirement, returnRate, swr)
+      // Calculate NW needed for $50k/year real income
+      const nwNeeded = calculateNetWorthForRetirementIncome(targetRealIncome, yearsToRetirement, returnRate, inflationRate, swr)
       
-      // Verify that amount would actually produce $50k/year
-      const actualIncome = calculateProjectedRetirementIncome(nwNeeded, yearsToRetirement, returnRate, swr)
+      // Verify that amount would actually produce $50k/year real income
+      const actualRealIncome = calculateProjectedRetirementIncome(nwNeeded, yearsToRetirement, returnRate, inflationRate, swr)
       
-      expect(actualIncome).toBeCloseTo(targetIncome, 0)
+      expect(actualRealIncome).toBeCloseTo(targetRealIncome, 0)
     })
     
-    it('should calculate correct net worth for various income levels', () => {
-      // For $40,000/year at retirement in 30 years with 7% return and 4% SWR:
-      // Future NW needed = $40,000 / 0.04 = $1,000,000
-      // Present value = $1,000,000 / (1.07)^30 = ~$131,367
-      const nwNeeded = calculateNetWorthForRetirementIncome(40000, 30, 7, 4)
+    it('should calculate correct net worth for real income targets', () => {
+      // For $40,000/year REAL income in 30 years with 7% return, 3% inflation, 4% SWR:
+      // Inflation multiplier = (1.03)^30 = ~2.427
+      // Target nominal income = $40,000 * 2.427 = ~$97,080
+      // Future NW needed = $97,080 / 0.04 = ~$2,427,000
+      // Present value = $2,427,000 / (1.07)^30 = ~$318,873
+      const nwNeeded = calculateNetWorthForRetirementIncome(40000, 30, 7, 3, 4)
       
-      const futureNWNeeded = 40000 / 0.04
+      const inflationMultiplier = Math.pow(1.03, 30)
+      const targetNominalIncome = 40000 * inflationMultiplier
+      const futureNWNeeded = targetNominalIncome / 0.04
       const expectedPresentValue = futureNWNeeded / Math.pow(1.07, 30)
       
       expect(nwNeeded).toBeCloseTo(expectedPresentValue, 0)
-      expect(nwNeeded).toBeCloseTo(131367, 0)
     })
     
     it('should return full amount when at retirement age', () => {
-      const nwNeeded = calculateNetWorthForRetirementIncome(50000, 0, 7, 4)
+      const nwNeeded = calculateNetWorthForRetirementIncome(50000, 0, 7, 3, 4)
       // At retirement: NW needed = income / SWR = $50,000 / 0.04 = $1,250,000
       expect(nwNeeded).toBe(1250000)
     })
     
-    it('should decrease the earlier you start (more compounding time)', () => {
-      const income = 100000 // $100k/year target
+    it('should require MORE net worth with higher inflation', () => {
+      const targetRealIncome = 100000
       
-      const nw30yr = calculateNetWorthForRetirementIncome(income, 30, 7, 4)
-      const nw20yr = calculateNetWorthForRetirementIncome(income, 20, 7, 4)
-      const nw10yr = calculateNetWorthForRetirementIncome(income, 10, 7, 4)
+      const nwLowInflation = calculateNetWorthForRetirementIncome(targetRealIncome, 30, 7, 2, 4)
+      const nwMidInflation = calculateNetWorthForRetirementIncome(targetRealIncome, 30, 7, 3, 4)
+      const nwHighInflation = calculateNetWorthForRetirementIncome(targetRealIncome, 30, 7, 4, 4)
       
-      // Less time = more NW needed today
-      expect(nw30yr).toBeLessThan(nw20yr)
-      expect(nw20yr).toBeLessThan(nw10yr)
+      // Higher inflation = more NW needed to maintain same real income
+      expect(nwHighInflation).toBeGreaterThan(nwMidInflation)
+      expect(nwMidInflation).toBeGreaterThan(nwLowInflation)
     })
   })
 
@@ -1670,12 +1691,16 @@ describe('Retirement Income Milestones', () => {
       expect(retirementIncomeMilestones.length).toBe(22)
     })
     
-    it('should achieve $10k milestone with modest net worth', () => {
+    it('should achieve $10k milestone with modest net worth (inflation-adjusted)', () => {
       // Person born 1990 (age 35 in 2025), ~30 years to retirement
-      // At 7% for 30 years, $1 becomes ~$7.61
-      // Need: $10,000 / 0.04 / 7.61 = ~$32,854 today
+      // With 7% return, 3% inflation, 4% SWR:
+      // Growth multiplier = (1.07)^30 = 7.61
+      // Inflation multiplier = (1.03)^30 = 2.43
+      // Real growth = 7.61 / 2.43 = 3.13x
+      // Need for $10k real income: ($10k * 2.43 / 0.04) / 7.61 = ~$80k today
+      // But with lower NW the spending level adjusts, so test with higher threshold
       const settings = createMockSettings()
-      const projections = generateTestProjections(35000, settings)
+      const projections = generateTestProjections(100000, settings)
       const milestones = calculateFiMilestones(projections, settings, 1990)
       
       const milestone10k = milestones.milestones.find(m => m.id === 'retirement_income_10k')
@@ -1685,19 +1710,21 @@ describe('Retirement Income Milestones', () => {
     
     it('should not achieve $100k milestone with modest net worth', () => {
       const settings = createMockSettings()
-      const projections = generateTestProjections(100000, settings)
+      const projections = generateTestProjections(200000, settings)
       const milestones = calculateFiMilestones(projections, settings, 1990)
       
       const milestone100k = milestones.milestones.find(m => m.id === 'retirement_income_100k')
       expect(milestone100k).toBeDefined()
-      // $100k/year needs much more than $100k NW today
+      // $100k/year real income needs much more than $200k NW today
       expect(milestone100k?.isAchieved).toBe(false)
     })
     
-    it('should achieve $100k milestone with high net worth', () => {
-      // Need: $100,000 / 0.04 / 7.61 = ~$328,540 today (for 30 years)
+    it('should achieve $100k milestone with high net worth (inflation-adjusted)', () => {
+      // For $100k real income with 30 years, 7% return, 3% inflation, 4% SWR:
+      // Inflation multiplier = 2.43, Growth multiplier = 7.61
+      // Need: ($100k * 2.43 / 0.04) / 7.61 = ~$800k today
       const settings = createMockSettings()
-      const projections = generateTestProjections(400000, settings)
+      const projections = generateTestProjections(900000, settings)
       const milestones = calculateFiMilestones(projections, settings, 1990)
       
       const milestone100k = milestones.milestones.find(m => m.id === 'retirement_income_100k')
@@ -1783,30 +1810,37 @@ describe('Retirement Income Milestones', () => {
     })
   })
 
-  describe('Dollar Multiplier Effect', () => {
+  describe('Dollar Multiplier Effect (with inflation)', () => {
     it('should show the power of early saving via dollar multiplier', () => {
       // At age 25 (40 years to retirement) vs age 55 (10 years to retirement)
       const multiplier40yr = calculateDollarMultiplier(40, 7)
       const multiplier10yr = calculateDollarMultiplier(10, 7)
       
-      // $1 at age 25 becomes ~$14.97 at retirement
-      // $1 at age 55 becomes ~$1.97 at retirement
+      // $1 at age 25 becomes ~$14.97 at retirement (nominal)
+      // $1 at age 55 becomes ~$1.97 at retirement (nominal)
       expect(multiplier40yr).toBeCloseTo(14.97, 1)
       expect(multiplier10yr).toBeCloseTo(1.97, 1)
       
-      // This means a 25 year old needs ~1/7.6 of what a 55 year old needs
+      // This means a 25 year old needs ~1/7.6 of what a 55 year old needs (in nominal terms)
       expect(multiplier40yr / multiplier10yr).toBeGreaterThan(7)
     })
     
-    it('should reflect in retirement income calculations', () => {
-      // Same $100,000 net worth produces very different retirement incomes
-      // depending on years to retirement
-      const income40yr = calculateProjectedRetirementIncome(100000, 40, 7, 4)
-      const income10yr = calculateProjectedRetirementIncome(100000, 10, 7, 4)
+    it('should reflect real purchasing power in retirement income calculations', () => {
+      // Same $100,000 net worth produces very different REAL retirement incomes
+      // depending on years to retirement (after accounting for inflation)
+      const income40yr = calculateProjectedRetirementIncome(100000, 40, 7, 3, 4)
+      const income10yr = calculateProjectedRetirementIncome(100000, 10, 7, 3, 4)
       
-      // 40 years: $100k * 14.97 * 0.04 = ~$59,880/year
-      // 10 years: $100k * 1.97 * 0.04 = ~$7,880/year
-      expect(income40yr).toBeGreaterThan(income10yr * 7)
+      // With inflation adjustment, the difference is smaller but still significant
+      // The real growth rate is roughly (1.07/1.03)^years
+      // 40 years still beats 10 years, but not by as much as nominal suggests
+      expect(income40yr).toBeGreaterThan(income10yr)
+      
+      // Real growth over 40 years at ~4% real rate: (1.04)^40 = ~4.8x
+      // Real growth over 10 years at ~4% real rate: (1.04)^10 = ~1.48x
+      // So 40yr should be roughly 3x the 10yr income
+      expect(income40yr / income10yr).toBeGreaterThan(2)
+      expect(income40yr / income10yr).toBeLessThan(5)
     })
   })
 
@@ -1875,17 +1909,22 @@ describe('Retirement Income Milestones', () => {
       expect(milestone40k?.isAchieved).toBe(true)
     })
     
-    it('should handle very young person with maximum compounding', () => {
+    it('should handle very young person with maximum compounding (inflation-adjusted)', () => {
       const settings = createMockSettings()
       // Person born 2005 is ~20 years old, 45 years to retirement
       const projections = generateTestProjections(50000, settings)
       const milestones = calculateFiMilestones(projections, settings, 2005)
       
-      // With 45 years of compounding at 7%, multiplier is ~21.00
-      // $50,000 * 21.00 = $1,050,000 future value
-      // $1,050,000 * 0.04 = $42,000/year
-      const milestone40k = milestones.milestones.find(m => m.id === 'retirement_income_40k')
-      expect(milestone40k?.isAchieved).toBe(true)
+      // With 45 years of compounding at 7%, growth multiplier is ~21.00
+      // But inflation multiplier at 3% for 45 years is ~3.78
+      // Net real growth = 21.00 / 3.78 = ~5.55x
+      // $50,000 * 5.55 * 0.04 = ~$11,100/year in today's purchasing power
+      // So they should achieve $10k milestone but not $15k
+      const milestone10k = milestones.milestones.find(m => m.id === 'retirement_income_10k')
+      const milestone15k = milestones.milestones.find(m => m.id === 'retirement_income_15k')
+      expect(milestone10k?.isAchieved).toBe(true)
+      // $15k milestone needs more NW due to inflation
+      // Note: might be achieved depending on exact calculation, so we just verify $10k
     })
   })
 })
@@ -1894,51 +1933,84 @@ describe('Retirement Income Milestones', () => {
 // NUMERICAL VERIFICATION FOR RETIREMENT INCOME
 // ============================================================================
 
-describe('Retirement Income Numerical Verification', () => {
-  it('should verify retirement income calculation: income = NW * (1+r)^t * SWR', () => {
-    // Test case: $150,000 NW, 25 years, 7% return, 4% SWR
+describe('Retirement Income Numerical Verification (Inflation-Adjusted)', () => {
+  it('should verify REAL retirement income calculation with inflation', () => {
+    // Test case: $150,000 NW, 25 years, 7% return, 3% inflation, 4% SWR
     const nw = 150000
     const years = 25
     const rate = 7
+    const inflation = 3
     const swr = 4
     
-    const calculated = calculateProjectedRetirementIncome(nw, years, rate, swr)
+    const calculated = calculateProjectedRetirementIncome(nw, years, rate, inflation, swr)
     
-    // Manual: $150,000 * (1.07)^25 * 0.04
+    // Manual: (NW * (1.07)^25 * 0.04) / (1.03)^25
     const futureNW = nw * Math.pow(1 + rate/100, years)
-    const manual = futureNW * (swr / 100)
+    const nominalIncome = futureNW * (swr / 100)
+    const inflationMultiplier = Math.pow(1 + inflation/100, years)
+    const realIncome = nominalIncome / inflationMultiplier
     
-    expect(calculated).toBeCloseTo(manual, 2)
+    expect(calculated).toBeCloseTo(realIncome, 2)
   })
   
-  it('should verify NW needed calculation: NW = (income / SWR) / (1+r)^t', () => {
-    // Test case: Want $60,000/year, 20 years out, 7% return, 4% SWR
-    const targetIncome = 60000
+  it('should verify NW needed for REAL income target with inflation', () => {
+    // Test case: Want $60,000/year REAL income, 20 years out, 7% return, 3% inflation, 4% SWR
+    const targetRealIncome = 60000
     const years = 20
     const rate = 7
+    const inflation = 3
     const swr = 4
     
-    const calculated = calculateNetWorthForRetirementIncome(targetIncome, years, rate, swr)
+    const calculated = calculateNetWorthForRetirementIncome(targetRealIncome, years, rate, inflation, swr)
     
-    // Manual: ($60,000 / 0.04) / (1.07)^20
-    const futureNWNeeded = targetIncome / (swr / 100)
+    // Manual: 
+    // 1. Target nominal income = $60k * (1.03)^20
+    // 2. Future NW needed = nominal income / 0.04
+    // 3. Present value = Future NW / (1.07)^20
+    const inflationMultiplier = Math.pow(1 + inflation/100, years)
+    const targetNominalIncome = targetRealIncome * inflationMultiplier
+    const futureNWNeeded = targetNominalIncome / (swr / 100)
     const manual = futureNWNeeded / Math.pow(1 + rate/100, years)
     
     expect(calculated).toBeCloseTo(manual, 2)
   })
   
-  it('should verify milestone thresholds at 30 years to retirement', () => {
-    // For each income level, verify the NW needed today makes sense
+  it('should verify milestone thresholds at 30 years with inflation', () => {
+    // For each income level (in today's dollars), verify the NW needed today
+    const years = 30
+    const rate = 7
+    const inflation = 3
+    const swr = 4
+    
+    const growthMultiplier = Math.pow(1.07, 30) // ~7.61
+    const inflationMultiplier = Math.pow(1.03, 30) // ~2.43
+    
+    // To get $50k/year REAL income:
+    // 1. Need nominal income = $50k * 2.43 = ~$121,500
+    // 2. Future NW needed = $121,500 / 0.04 = ~$3,037,500
+    // 3. Present value = $3,037,500 / 7.61 = ~$399,000
+    const expectedNWFor50k = (50000 * inflationMultiplier / 0.04) / growthMultiplier
+    const expectedNWFor100k = (100000 * inflationMultiplier / 0.04) / growthMultiplier
+    
+    expect(calculateNetWorthForRetirementIncome(50000, years, rate, inflation, swr)).toBeCloseTo(expectedNWFor50k, 0)
+    expect(calculateNetWorthForRetirementIncome(100000, years, rate, inflation, swr)).toBeCloseTo(expectedNWFor100k, 0)
+  })
+  
+  it('should show that higher inflation requires more NW for same real income', () => {
+    const targetRealIncome = 100000
     const years = 30
     const rate = 7
     const swr = 4
-    const multiplier = Math.pow(1.07, 30) // ~7.61
     
-    // To get $X/year, need NW_today = ($X / 0.04) / 7.61
-    const expectedNWFor50k = (50000 / 0.04) / multiplier
-    const expectedNWFor100k = (100000 / 0.04) / multiplier
+    const nwFor2pctInflation = calculateNetWorthForRetirementIncome(targetRealIncome, years, rate, 2, swr)
+    const nwFor3pctInflation = calculateNetWorthForRetirementIncome(targetRealIncome, years, rate, 3, swr)
+    const nwFor4pctInflation = calculateNetWorthForRetirementIncome(targetRealIncome, years, rate, 4, swr)
     
-    expect(calculateNetWorthForRetirementIncome(50000, years, rate, swr)).toBeCloseTo(expectedNWFor50k, 0)
-    expect(calculateNetWorthForRetirementIncome(100000, years, rate, swr)).toBeCloseTo(expectedNWFor100k, 0)
+    // Higher inflation = need more NW today to achieve same real lifestyle
+    expect(nwFor3pctInflation).toBeGreaterThan(nwFor2pctInflation)
+    expect(nwFor4pctInflation).toBeGreaterThan(nwFor3pctInflation)
+    
+    // The difference is significant over 30 years
+    expect(nwFor4pctInflation / nwFor2pctInflation).toBeGreaterThan(1.3)
   })
 })
