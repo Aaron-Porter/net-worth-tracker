@@ -1205,11 +1205,12 @@ export function createTrackedLifestyleMilestone(
 export function createTrackedRetirementIncomeMilestone(
   milestoneId: string,
   milestoneName: string,
-  targetAnnualIncome: number,
+  targetRealIncome: number, // Target in TODAY's purchasing power
   currentNetWorth: number,
   currentAge: number | null,
   retirementAge: number,
   annualReturnRate: number,
+  inflationRate: number,
   swr: number,
   netWorthAtMilestone: number | null,
   year: number | null,
@@ -1220,32 +1221,41 @@ export function createTrackedRetirementIncomeMilestone(
     : 30;
   
   const returnRate = annualReturnRate / 100;
+  const inflation = inflationRate / 100;
   const withdrawalRate = swr / 100;
   
-  // Calculate what NW is needed today to achieve target income at retirement
-  const futureNetWorthNeeded = targetAnnualIncome / withdrawalRate;
+  // Calculate multipliers
+  const dollarMultiplier = Math.pow(1 + returnRate, yearsToRetirement);
+  const inflationMultiplier = Math.pow(1 + inflation, yearsToRetirement);
+  
+  // Convert target real income to nominal income at retirement
+  const targetNominalIncome = targetRealIncome * inflationMultiplier;
+  
+  // Calculate what NW is needed today to achieve target REAL income at retirement
+  const futureNetWorthNeeded = targetNominalIncome / withdrawalRate;
   const targetCurrentNW = yearsToRetirement > 0 
-    ? futureNetWorthNeeded / Math.pow(1 + returnRate, yearsToRetirement)
+    ? futureNetWorthNeeded / dollarMultiplier
     : futureNetWorthNeeded;
   
-  // Calculate current projected retirement income
-  const futureNetWorth = currentNetWorth * Math.pow(1 + returnRate, yearsToRetirement);
-  const currentProjectedIncome = futureNetWorth * withdrawalRate;
+  // Calculate current projected retirement income (in today's dollars)
+  const futureNetWorth = currentNetWorth * dollarMultiplier;
+  const currentNominalIncome = futureNetWorth * withdrawalRate;
+  const currentRealIncome = currentNominalIncome / inflationMultiplier;
   
   const amountNeeded = Math.max(0, targetCurrentNW - currentNetWorth);
   const yearsAway = year ? year - currentYear : null;
-  const dollarMultiplier = Math.pow(1 + returnRate, yearsToRetirement);
 
   const targetValueTracked = new CalculationBuilder(`${milestoneId}_target`, `${milestoneName} Target`, 'milestone')
-    .setDescription(`The net worth you need today so that compound growth alone will let you withdraw $${targetAnnualIncome.toLocaleString()}/year at retirement age ${retirementAge}. This is what you could live on if you never saved another dollar.`)
-    .setFormula('(Target Income ÷ SWR%) ÷ Growth Multiplier')
+    .setDescription(`The net worth you need today to have the purchasing power of $${targetRealIncome.toLocaleString()}/year (in today's dollars) at retirement. The actual withdrawal will be $${Math.round(targetNominalIncome).toLocaleString()}/year to maintain the same lifestyle.`)
+    .setFormula('(Target Real Income × Inflation Multiplier ÷ SWR%) ÷ Growth Multiplier')
     .setUnit('$')
-    .addInputWithSource('Target Annual Income', targetAnnualIncome, 'constant', { 
+    .addInputWithSource('Target Real Income', targetRealIncome, 'constant', { 
       unit: '$',
-      description: `Milestone: $${targetAnnualIncome.toLocaleString()}/year at retirement`
+      description: `$${targetRealIncome.toLocaleString()}/year in today's purchasing power`
     })
     .addSetting('SWR', swr, 'swr', { unit: '%' })
     .addSetting('Return Rate', annualReturnRate, 'currentRate', { unit: '%' })
+    .addSetting('Inflation Rate', inflationRate, 'inflationRate', { unit: '%' })
     .addInputWithSource('Years to Retirement', yearsToRetirement, 'calculated', { 
       unit: 'years',
       description: currentAge !== null 
@@ -1253,8 +1263,22 @@ export function createTrackedRetirementIncomeMilestone(
         : `Using default of ${yearsToRetirement} years`
     })
     .addStep(
+      'Calculate inflation multiplier',
+      `(1 + ${inflationRate}%)^${yearsToRetirement} = ${inflationMultiplier.toFixed(2)}x`,
+      [],
+      inflationMultiplier,
+      'x'
+    )
+    .addStep(
+      'Calculate target nominal income',
+      `$${targetRealIncome.toLocaleString()} × ${inflationMultiplier.toFixed(2)} = $${Math.round(targetNominalIncome).toLocaleString()}/year`,
+      [],
+      targetNominalIncome,
+      '$'
+    )
+    .addStep(
       'Calculate future NW needed',
-      `$${targetAnnualIncome.toLocaleString()} ÷ ${swr}% = $${futureNetWorthNeeded.toLocaleString()}`,
+      `$${Math.round(targetNominalIncome).toLocaleString()} ÷ ${swr}% = $${Math.round(futureNetWorthNeeded).toLocaleString()}`,
       [],
       futureNetWorthNeeded,
       '$'
@@ -1268,7 +1292,7 @@ export function createTrackedRetirementIncomeMilestone(
     )
     .addStep(
       'Calculate NW needed today',
-      `$${futureNetWorthNeeded.toLocaleString()} ÷ ${dollarMultiplier.toFixed(2)} = $${targetCurrentNW.toLocaleString()}`,
+      `$${Math.round(futureNetWorthNeeded).toLocaleString()} ÷ ${dollarMultiplier.toFixed(2)} = $${Math.round(targetCurrentNW).toLocaleString()}`,
       [],
       targetCurrentNW,
       '$'
@@ -1276,18 +1300,18 @@ export function createTrackedRetirementIncomeMilestone(
     .build(targetCurrentNW);
 
   const amountNeededTracked = amountNeeded > 0 ? new CalculationBuilder(`${milestoneId}_amount`, `Amount to ${milestoneName}`, 'milestone')
-    .setDescription(`The additional net worth you need to secure $${targetAnnualIncome.toLocaleString()}/year at retirement`)
+    .setDescription(`The additional net worth you need to secure the purchasing power of $${targetRealIncome.toLocaleString()}/year (today's dollars) at retirement`)
     .setFormula('Target Net Worth - Current Net Worth')
     .setUnit('$')
     .addTrackedInput(`${milestoneName} Target`, targetValueTracked)
     .addInputWithSource('Current Net Worth', currentNetWorth, 'calculated', { unit: '$' })
-    .addInputWithSource('Current Projected Income', currentProjectedIncome, 'calculated', { 
+    .addInputWithSource('Current Projected Real Income', currentRealIncome, 'calculated', { 
       unit: '$/year',
-      description: `If you stopped saving today, you'd have $${currentProjectedIncome.toLocaleString()}/year at retirement`
+      description: `If you stopped saving today, you'd have the purchasing power of $${Math.round(currentRealIncome).toLocaleString()}/year (today's dollars)`
     })
     .addStep(
       'Calculate remaining amount',
-      `$${targetCurrentNW.toLocaleString()} - $${currentNetWorth.toLocaleString()} = $${amountNeeded.toLocaleString()}`,
+      `$${Math.round(targetCurrentNW).toLocaleString()} - $${currentNetWorth.toLocaleString()} = $${Math.round(amountNeeded).toLocaleString()}`,
       [],
       amountNeeded,
       '$'
@@ -1295,7 +1319,7 @@ export function createTrackedRetirementIncomeMilestone(
     .build(amountNeeded) : null;
 
   const yearsToMilestoneTracked = yearsAway !== null ? new CalculationBuilder(`${milestoneId}_years`, `Years to ${milestoneName}`, 'milestone')
-    .setDescription(`Projected years until you can secure $${targetAnnualIncome.toLocaleString()}/year at retirement`)
+    .setDescription(`Projected years until you secure the purchasing power of $${targetRealIncome.toLocaleString()}/year at retirement`)
     .setFormula('Milestone Year - Current Year')
     .setUnit('years')
     .addInputWithSource('Milestone Year', year!, 'calculated')
@@ -1303,7 +1327,7 @@ export function createTrackedRetirementIncomeMilestone(
     .build(yearsAway) : null;
 
   const netWorthAtMilestoneTracked = netWorthAtMilestone !== null ? new CalculationBuilder(`${milestoneId}_nw`, `Net Worth at ${milestoneName}`, 'milestone')
-    .setDescription(`Your projected net worth when you secure $${targetAnnualIncome.toLocaleString()}/year at retirement`)
+    .setDescription(`Your projected net worth when you secure the purchasing power of $${targetRealIncome.toLocaleString()}/year at retirement`)
     .setFormula('Projected Net Worth at Milestone')
     .setUnit('$')
     .addInputWithSource('Net Worth', netWorthAtMilestone, 'calculated', { unit: '$' })
@@ -1319,19 +1343,21 @@ export function createTrackedRetirementIncomeMilestone(
 
 /**
  * Create tracked projected retirement income info
- * Shows current situation: what income you'd have at retirement if you stopped saving today
+ * Shows current situation: what income (in today's purchasing power) you'd have at retirement if you stopped saving today
  */
 export function createTrackedRetirementIncomeInfo(
   currentNetWorth: number,
   currentAge: number | null,
   retirementAge: number,
   annualReturnRate: number,
+  inflationRate: number,
   swr: number
 ): {
-  projectedAnnualIncome: TrackedValue;
-  projectedMonthlyIncome: TrackedValue;
-  netWorthNeededFor100k: TrackedValue;
+  projectedRealAnnualIncome: TrackedValue;    // In today's purchasing power
+  projectedRealMonthlyIncome: TrackedValue;
+  projectedNominalAnnualIncome: TrackedValue; // Actual future dollars
   dollarMultiplier: TrackedValue;
+  inflationMultiplier: TrackedValue;
   yearsToRetirement: TrackedValue;
 } {
   const yearsToRetirement = currentAge !== null 
@@ -1339,16 +1365,15 @@ export function createTrackedRetirementIncomeInfo(
     : 30;
   
   const returnRate = annualReturnRate / 100;
+  const inflation = inflationRate / 100;
   const withdrawalRate = swr / 100;
   
   const dollarMultiplier = Math.pow(1 + returnRate, yearsToRetirement);
+  const inflationMultiplier = Math.pow(1 + inflation, yearsToRetirement);
   const futureNetWorth = currentNetWorth * dollarMultiplier;
-  const projectedAnnualIncome = futureNetWorth * withdrawalRate;
-  const projectedMonthlyIncome = projectedAnnualIncome / 12;
-  
-  // What NW do you need today for $100k/year?
-  const futureNWFor100k = 100000 / withdrawalRate;
-  const currentNWFor100k = futureNWFor100k / dollarMultiplier;
+  const nominalAnnualIncome = futureNetWorth * withdrawalRate;
+  const realAnnualIncome = nominalAnnualIncome / inflationMultiplier; // Today's purchasing power
+  const realMonthlyIncome = realAnnualIncome / 12;
 
   const yearsToRetirementTracked = new CalculationBuilder('ret_years', 'Years to Retirement', 'milestone')
     .setDescription('Years until retirement age')
@@ -1358,14 +1383,14 @@ export function createTrackedRetirementIncomeInfo(
     .addInputWithSource('Retirement Age', retirementAge, 'constant')
     .build(yearsToRetirement);
 
-  const dollarMultiplierTracked = new CalculationBuilder('ret_multiplier', 'Dollar Multiplier', 'milestone')
-    .setDescription('How much $1 saved today becomes at retirement')
-    .setFormula('(1 + Rate)^Years')
+  const dollarMultiplierTracked = new CalculationBuilder('ret_multiplier', 'Growth Multiplier', 'milestone')
+    .setDescription('How much $1 invested today grows to at retirement (before inflation)')
+    .setFormula('(1 + Return Rate)^Years')
     .setUnit('x')
     .addSetting('Return Rate', annualReturnRate, 'currentRate', { unit: '%' })
     .addTrackedInput('Years to Retirement', yearsToRetirementTracked)
     .addStep(
-      'Calculate multiplier',
+      'Calculate growth multiplier',
       `(1 + ${annualReturnRate}%)^${yearsToRetirement} = ${dollarMultiplier.toFixed(2)}x`,
       [],
       dollarMultiplier,
@@ -1373,70 +1398,79 @@ export function createTrackedRetirementIncomeInfo(
     )
     .build(dollarMultiplier);
 
-  const projectedAnnualIncomeTracked = new CalculationBuilder('ret_income_annual', 'Projected Retirement Income', 'milestone')
-    .setDescription('If you stopped saving today, this is the annual income you could withdraw at retirement. This is your "coast number" - what you\'re guaranteed if you never save another dollar.')
-    .setFormula('(Current NW × Multiplier) × SWR%')
+  const inflationMultiplierTracked = new CalculationBuilder('ret_inflation', 'Inflation Multiplier', 'milestone')
+    .setDescription('How much prices increase by retirement (reduces purchasing power)')
+    .setFormula('(1 + Inflation Rate)^Years')
+    .setUnit('x')
+    .addSetting('Inflation Rate', inflationRate, 'inflationRate', { unit: '%' })
+    .addTrackedInput('Years to Retirement', yearsToRetirementTracked)
+    .addStep(
+      'Calculate inflation multiplier',
+      `(1 + ${inflationRate}%)^${yearsToRetirement} = ${inflationMultiplier.toFixed(2)}x`,
+      [],
+      inflationMultiplier,
+      'x'
+    )
+    .build(inflationMultiplier);
+
+  const nominalIncomeTracked = new CalculationBuilder('ret_income_nominal', 'Nominal Retirement Income', 'milestone')
+    .setDescription('The actual dollars you could withdraw at retirement (future dollars)')
+    .setFormula('(Current NW × Growth Multiplier) × SWR%')
     .setUnit('$')
     .addInputWithSource('Current Net Worth', currentNetWorth, 'calculated', { unit: '$' })
-    .addTrackedInput('Dollar Multiplier', dollarMultiplierTracked)
+    .addTrackedInput('Growth Multiplier', dollarMultiplierTracked)
     .addSetting('SWR', swr, 'swr', { unit: '%' })
     .addStep(
       'Calculate future net worth',
-      `$${currentNetWorth.toLocaleString()} × ${dollarMultiplier.toFixed(2)} = $${futureNetWorth.toLocaleString()}`,
+      `$${currentNetWorth.toLocaleString()} × ${dollarMultiplier.toFixed(2)} = $${Math.round(futureNetWorth).toLocaleString()}`,
       [],
       futureNetWorth,
       '$'
     )
     .addStep(
-      'Calculate annual income',
-      `$${futureNetWorth.toLocaleString()} × ${swr}% = $${projectedAnnualIncome.toLocaleString()}/year`,
+      'Calculate nominal annual income',
+      `$${Math.round(futureNetWorth).toLocaleString()} × ${swr}% = $${Math.round(nominalAnnualIncome).toLocaleString()}/year`,
       [],
-      projectedAnnualIncome,
+      nominalAnnualIncome,
       '$/year'
     )
-    .build(projectedAnnualIncome);
+    .build(nominalAnnualIncome);
 
-  const projectedMonthlyIncomeTracked = new CalculationBuilder('ret_income_monthly', 'Monthly Retirement Income', 'milestone')
-    .setDescription('Your projected monthly retirement income if you stopped saving today')
-    .setFormula('Annual Income ÷ 12')
+  const realIncomeTracked = new CalculationBuilder('ret_income_real', 'Real Retirement Income (Today\'s $)', 'milestone')
+    .setDescription('The purchasing power of your retirement income, expressed in today\'s dollars. This is what matters - it tells you what lifestyle you could actually afford.')
+    .setFormula('Nominal Income ÷ Inflation Multiplier')
     .setUnit('$')
-    .addTrackedInput('Annual Income', projectedAnnualIncomeTracked)
+    .addTrackedInput('Nominal Income', nominalIncomeTracked)
+    .addTrackedInput('Inflation Multiplier', inflationMultiplierTracked)
+    .addStep(
+      'Convert to today\'s purchasing power',
+      `$${Math.round(nominalAnnualIncome).toLocaleString()} ÷ ${inflationMultiplier.toFixed(2)} = $${Math.round(realAnnualIncome).toLocaleString()}/year (today's dollars)`,
+      [],
+      realAnnualIncome,
+      '$/year'
+    )
+    .build(realAnnualIncome);
+
+  const realMonthlyIncomeTracked = new CalculationBuilder('ret_income_monthly', 'Monthly (Today\'s $)', 'milestone')
+    .setDescription('Your monthly retirement income in today\'s purchasing power')
+    .setFormula('Real Annual Income ÷ 12')
+    .setUnit('$')
+    .addTrackedInput('Real Annual Income', realIncomeTracked)
     .addStep(
       'Convert to monthly',
-      `$${projectedAnnualIncome.toLocaleString()} ÷ 12 = $${projectedMonthlyIncome.toLocaleString()}/month`,
+      `$${Math.round(realAnnualIncome).toLocaleString()} ÷ 12 = $${Math.round(realMonthlyIncome).toLocaleString()}/month`,
       [],
-      projectedMonthlyIncome,
+      realMonthlyIncome,
       '$/month'
     )
-    .build(projectedMonthlyIncome);
-
-  const netWorthNeededFor100kTracked = new CalculationBuilder('ret_nw_100k', 'NW Needed for $100k/year', 'milestone')
-    .setDescription('How much net worth you need today to have $100,000/year at retirement')
-    .setFormula('($100,000 ÷ SWR%) ÷ Multiplier')
-    .setUnit('$')
-    .addSetting('SWR', swr, 'swr', { unit: '%' })
-    .addTrackedInput('Dollar Multiplier', dollarMultiplierTracked)
-    .addStep(
-      'Calculate future NW needed',
-      `$100,000 ÷ ${swr}% = $${futureNWFor100k.toLocaleString()}`,
-      [],
-      futureNWFor100k,
-      '$'
-    )
-    .addStep(
-      'Calculate current NW needed',
-      `$${futureNWFor100k.toLocaleString()} ÷ ${dollarMultiplier.toFixed(2)} = $${currentNWFor100k.toLocaleString()}`,
-      [],
-      currentNWFor100k,
-      '$'
-    )
-    .build(currentNWFor100k);
+    .build(realMonthlyIncome);
 
   return {
-    projectedAnnualIncome: projectedAnnualIncomeTracked,
-    projectedMonthlyIncome: projectedMonthlyIncomeTracked,
-    netWorthNeededFor100k: netWorthNeededFor100kTracked,
+    projectedRealAnnualIncome: realIncomeTracked,
+    projectedRealMonthlyIncome: realMonthlyIncomeTracked,
+    projectedNominalAnnualIncome: nominalIncomeTracked,
     dollarMultiplier: dollarMultiplierTracked,
+    inflationMultiplier: inflationMultiplierTracked,
     yearsToRetirement: yearsToRetirementTracked,
   };
 }

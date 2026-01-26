@@ -490,24 +490,25 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
     icon: 'trending-up',
   },
   
-  // Retirement Income milestones - concrete pre-tax salary you could pull at retirement if you stopped saving today
-  // These answer: "If I never save another dollar, what salary equivalent will my investments provide at age 65?"
+  // Retirement Income milestones - purchasing power (in TODAY's dollars) at retirement if you stopped saving today
+  // These answer: "If I never save another dollar, what lifestyle (in today's terms) could I afford at retirement?"
+  // All values are in TODAY's purchasing power - inflation is accounted for in the calculations
   // The earlier you achieve these, the more time compounding has to work for you
   {
     id: 'retirement_income_10k',
-    name: '$10k/year at Retirement',
-    shortName: '$10k Retirement',
-    description: 'If you stopped saving today, you could withdraw $10,000/year at retirement. A small but meaningful foundation.',
+    name: '$10k/year (today\'s $)',
+    shortName: '$10k Today\'s $',
+    description: 'Secure the purchasing power of $10,000/year (in today\'s dollars) at retirement. A small but meaningful foundation.',
     type: 'retirement_income',
-    targetValue: 10000, // $10,000 annual income at retirement
+    targetValue: 10000, // $10,000 in today's purchasing power
     color: '#94a3b8', // slate-400
     icon: 'piggy-bank',
   },
   {
     id: 'retirement_income_15k',
-    name: '$15k/year at Retirement',
-    shortName: '$15k Retirement',
-    description: 'If you stopped saving today, you could withdraw $15,000/year at retirement. Covers basic necessities.',
+    name: '$15k/year (today\'s $)',
+    shortName: '$15k Today\'s $',
+    description: 'Secure the purchasing power of $15,000/year (in today\'s dollars) at retirement. Covers basic necessities.',
     type: 'retirement_income',
     targetValue: 15000,
     color: '#64748b', // slate-500
@@ -515,9 +516,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_20k',
-    name: '$20k/year at Retirement',
-    shortName: '$20k Retirement',
-    description: 'If you stopped saving today, you could withdraw $20,000/year at retirement. Roughly equivalent to Social Security benefits.',
+    name: '$20k/year (today\'s $)',
+    shortName: '$20k Today\'s $',
+    description: 'Secure the purchasing power of $20,000/year (in today\'s dollars) at retirement. Roughly equivalent to Social Security benefits today.',
     type: 'retirement_income',
     targetValue: 20000,
     color: '#60a5fa', // blue-400
@@ -525,9 +526,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_25k',
-    name: '$25k/year at Retirement',
-    shortName: '$25k Retirement',
-    description: 'If you stopped saving today, you could withdraw $25,000/year at retirement. A modest but comfortable baseline.',
+    name: '$25k/year (today\'s $)',
+    shortName: '$25k Today\'s $',
+    description: 'Secure the purchasing power of $25,000/year (in today\'s dollars) at retirement. A modest but comfortable baseline.',
     type: 'retirement_income',
     targetValue: 25000,
     color: '#3b82f6', // blue-500
@@ -535,9 +536,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_30k',
-    name: '$30k/year at Retirement',
-    shortName: '$30k Retirement',
-    description: 'If you stopped saving today, you could withdraw $30,000/year at retirement. Equivalent to minimum wage full-time work.',
+    name: '$30k/year (today\'s $)',
+    shortName: '$30k Today\'s $',
+    description: 'Secure the purchasing power of $30,000/year (in today\'s dollars) at retirement. Equivalent to minimum wage full-time work today.',
     type: 'retirement_income',
     targetValue: 30000,
     color: '#8b5cf6', // violet-500
@@ -545,9 +546,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_35k',
-    name: '$35k/year at Retirement',
-    shortName: '$35k Retirement',
-    description: 'If you stopped saving today, you could withdraw $35,000/year at retirement. Building toward a comfortable lifestyle.',
+    name: '$35k/year (today\'s $)',
+    shortName: '$35k Today\'s $',
+    description: 'Secure the purchasing power of $35,000/year (in today\'s dollars) at retirement. Building toward a comfortable lifestyle.',
     type: 'retirement_income',
     targetValue: 35000,
     color: '#a78bfa', // violet-400
@@ -555,9 +556,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_40k',
-    name: '$40k/year at Retirement',
-    shortName: '$40k Retirement',
-    description: 'If you stopped saving today, you could withdraw $40,000/year at retirement. Close to median individual income.',
+    name: '$40k/year (today\'s $)',
+    shortName: '$40k Today\'s $',
+    description: 'Secure the purchasing power of $40,000/year (in today\'s dollars) at retirement. Close to today\'s median individual income.',
     type: 'retirement_income',
     targetValue: 40000,
     color: '#22c55e', // green-500
@@ -565,9 +566,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_50k',
-    name: '$50k/year at Retirement',
-    shortName: '$50k Retirement',
-    description: 'If you stopped saving today, you could withdraw $50,000/year at retirement. A solid middle-class income.',
+    name: '$50k/year (today\'s $)',
+    shortName: '$50k Today\'s $',
+    description: 'Secure the purchasing power of $50,000/year (in today\'s dollars) at retirement. A solid middle-class lifestyle.',
     type: 'retirement_income',
     targetValue: 50000,
     color: '#14b8a6', // teal-500
@@ -575,9 +576,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_60k',
-    name: '$60k/year at Retirement',
-    shortName: '$60k Retirement',
-    description: 'If you stopped saving today, you could withdraw $60,000/year at retirement. A comfortable lifestyle with room for discretionary spending.',
+    name: '$60k/year (today\'s $)',
+    shortName: '$60k Today\'s $',
+    description: 'Secure the purchasing power of $60,000/year (in today\'s dollars) at retirement. A comfortable lifestyle with room for discretionary spending.',
     type: 'retirement_income',
     targetValue: 60000,
     color: '#10b981', // emerald-500
@@ -585,9 +586,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_75k',
-    name: '$75k/year at Retirement',
-    shortName: '$75k Retirement',
-    description: 'If you stopped saving today, you could withdraw $75,000/year at retirement. Well above median household income.',
+    name: '$75k/year (today\'s $)',
+    shortName: '$75k Today\'s $',
+    description: 'Secure the purchasing power of $75,000/year (in today\'s dollars) at retirement. Well above today\'s median household income.',
     type: 'retirement_income',
     targetValue: 75000,
     color: '#f59e0b', // amber-500
@@ -595,9 +596,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_100k',
-    name: '$100k/year at Retirement',
-    shortName: '$100k Retirement',
-    description: 'If you stopped saving today, you could withdraw $100,000/year at retirement. A six-figure retirement income!',
+    name: '$100k/year (today\'s $)',
+    shortName: '$100k Today\'s $',
+    description: 'Secure the purchasing power of $100,000/year (in today\'s dollars) at retirement. A six-figure lifestyle!',
     type: 'retirement_income',
     targetValue: 100000,
     color: '#eab308', // yellow-500
@@ -605,9 +606,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_125k',
-    name: '$125k/year at Retirement',
-    shortName: '$125k Retirement',
-    description: 'If you stopped saving today, you could withdraw $125,000/year at retirement. An affluent retirement lifestyle.',
+    name: '$125k/year (today\'s $)',
+    shortName: '$125k Today\'s $',
+    description: 'Secure the purchasing power of $125,000/year (in today\'s dollars) at retirement. An affluent lifestyle.',
     type: 'retirement_income',
     targetValue: 125000,
     color: '#f97316', // orange-500
@@ -615,9 +616,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_150k',
-    name: '$150k/year at Retirement',
-    shortName: '$150k Retirement',
-    description: 'If you stopped saving today, you could withdraw $150,000/year at retirement. Upper-class retirement security.',
+    name: '$150k/year (today\'s $)',
+    shortName: '$150k Today\'s $',
+    description: 'Secure the purchasing power of $150,000/year (in today\'s dollars) at retirement. Upper-class security.',
     type: 'retirement_income',
     targetValue: 150000,
     color: '#ef4444', // red-500
@@ -625,9 +626,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_200k',
-    name: '$200k/year at Retirement',
-    shortName: '$200k Retirement',
-    description: 'If you stopped saving today, you could withdraw $200,000/year at retirement. Exceptional wealth and freedom.',
+    name: '$200k/year (today\'s $)',
+    shortName: '$200k Today\'s $',
+    description: 'Secure the purchasing power of $200,000/year (in today\'s dollars) at retirement. Exceptional wealth and freedom.',
     type: 'retirement_income',
     targetValue: 200000,
     color: '#ec4899', // pink-500
@@ -635,9 +636,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_250k',
-    name: '$250k/year at Retirement',
-    shortName: '$250k Retirement',
-    description: 'If you stopped saving today, you could withdraw $250,000/year at retirement. Top 5% retirement income.',
+    name: '$250k/year (today\'s $)',
+    shortName: '$250k Today\'s $',
+    description: 'Secure the purchasing power of $250,000/year (in today\'s dollars) at retirement. Top 5% lifestyle.',
     type: 'retirement_income',
     targetValue: 250000,
     color: '#dc2626', // red-600
@@ -645,9 +646,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_300k',
-    name: '$300k/year at Retirement',
-    shortName: '$300k Retirement',
-    description: 'If you stopped saving today, you could withdraw $300,000/year at retirement. True financial abundance.',
+    name: '$300k/year (today\'s $)',
+    shortName: '$300k Today\'s $',
+    description: 'Secure the purchasing power of $300,000/year (in today\'s dollars) at retirement. True financial abundance.',
     type: 'retirement_income',
     targetValue: 300000,
     color: '#b91c1c', // red-700
@@ -655,9 +656,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_400k',
-    name: '$400k/year at Retirement',
-    shortName: '$400k Retirement',
-    description: 'If you stopped saving today, you could withdraw $400,000/year at retirement. Elite financial status.',
+    name: '$400k/year (today\'s $)',
+    shortName: '$400k Today\'s $',
+    description: 'Secure the purchasing power of $400,000/year (in today\'s dollars) at retirement. Elite financial status.',
     type: 'retirement_income',
     targetValue: 400000,
     color: '#7c3aed', // violet-600
@@ -665,9 +666,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_500k',
-    name: '$500k/year at Retirement',
-    shortName: '$500k Retirement',
-    description: 'If you stopped saving today, you could withdraw $500,000/year at retirement. Half a million annually!',
+    name: '$500k/year (today\'s $)',
+    shortName: '$500k Today\'s $',
+    description: 'Secure the purchasing power of $500,000/year (in today\'s dollars) at retirement. Half a million in today\'s lifestyle!',
     type: 'retirement_income',
     targetValue: 500000,
     color: '#6d28d9', // violet-700
@@ -675,9 +676,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_750k',
-    name: '$750k/year at Retirement',
-    shortName: '$750k Retirement',
-    description: 'If you stopped saving today, you could withdraw $750,000/year at retirement. Extraordinary wealth.',
+    name: '$750k/year (today\'s $)',
+    shortName: '$750k Today\'s $',
+    description: 'Secure the purchasing power of $750,000/year (in today\'s dollars) at retirement. Extraordinary wealth.',
     type: 'retirement_income',
     targetValue: 750000,
     color: '#4c1d95', // violet-900
@@ -685,9 +686,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_1m',
-    name: '$1M/year at Retirement',
-    shortName: '$1M Retirement',
-    description: 'If you stopped saving today, you could withdraw $1,000,000/year at retirement. Seven-figure annual retirement income!',
+    name: '$1M/year (today\'s $)',
+    shortName: '$1M Today\'s $',
+    description: 'Secure the purchasing power of $1,000,000/year (in today\'s dollars) at retirement. Seven-figure lifestyle!',
     type: 'retirement_income',
     targetValue: 1000000,
     color: '#fbbf24', // amber-400 (gold)
@@ -695,9 +696,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_1_5m',
-    name: '$1.5M/year at Retirement',
-    shortName: '$1.5M Retirement',
-    description: 'If you stopped saving today, you could withdraw $1,500,000/year at retirement. Ultra-high net worth territory.',
+    name: '$1.5M/year (today\'s $)',
+    shortName: '$1.5M Today\'s $',
+    description: 'Secure the purchasing power of $1,500,000/year (in today\'s dollars) at retirement. Ultra-high net worth territory.',
     type: 'retirement_income',
     targetValue: 1500000,
     color: '#f59e0b', // amber-500 (gold)
@@ -705,9 +706,9 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
   },
   {
     id: 'retirement_income_2m',
-    name: '$2M/year at Retirement',
-    shortName: '$2M Retirement',
-    description: 'If you stopped saving today, you could withdraw $2,000,000/year at retirement. Generational wealth secured.',
+    name: '$2M/year (today\'s $)',
+    shortName: '$2M Today\'s $',
+    description: 'Secure the purchasing power of $2,000,000/year (in today\'s dollars) at retirement. Generational wealth secured.',
     type: 'retirement_income',
     targetValue: 2000000,
     color: '#d97706', // amber-600 (gold)
@@ -789,64 +790,109 @@ export function calculateCoastFiPercent(
 
 /**
  * Calculate the projected annual retirement income if you stopped saving today.
- * This answers: "If I never contribute another dollar, what salary can I withdraw at retirement?"
+ * Returns the income in TODAY'S PURCHASING POWER (inflation-adjusted).
  * 
- * This is the concrete dollar amount version of coast FI - instead of showing percentages,
- * it shows the actual income you could sustain at retirement age.
+ * This answers: "If I never contribute another dollar, what lifestyle (in today's terms) 
+ * could I afford at retirement?"
  * 
  * @param currentNetWorth - Current net worth
  * @param yearsToRetirement - Years until retirement (age 65 typically)
  * @param annualReturnRate - Expected annual return rate as percentage (e.g., 7 for 7%)
+ * @param inflationRate - Expected annual inflation rate as percentage (e.g., 3 for 3%)
  * @param swr - Safe withdrawal rate as percentage (e.g., 4 for 4%)
- * @returns Annual income you could withdraw at retirement (in today's dollars)
+ * @returns Annual income in TODAY's purchasing power (real dollars)
  */
 export function calculateProjectedRetirementIncome(
+  currentNetWorth: number,
+  yearsToRetirement: number,
+  annualReturnRate: number,
+  inflationRate: number,
+  swr: number
+): number {
+  if (yearsToRetirement <= 0) {
+    // Already at retirement - return current SWR (no inflation adjustment needed)
+    return currentNetWorth * (swr / 100);
+  }
+  
+  const returnRate = annualReturnRate / 100;
+  const inflation = inflationRate / 100;
+  const withdrawalRate = swr / 100;
+  
+  // Calculate what current NW would grow to with no additional contributions
+  const futureNetWorth = currentNetWorth * Math.pow(1 + returnRate, yearsToRetirement);
+  
+  // Calculate nominal annual income at retirement
+  const nominalIncome = futureNetWorth * withdrawalRate;
+  
+  // Adjust for inflation to get real income (today's purchasing power)
+  const inflationMultiplier = Math.pow(1 + inflation, yearsToRetirement);
+  const realIncome = nominalIncome / inflationMultiplier;
+  
+  return realIncome;
+}
+
+/**
+ * Calculate the NOMINAL (future dollars) retirement income.
+ * This is what the actual withdrawal check will say, not adjusted for inflation.
+ * 
+ * @param currentNetWorth - Current net worth
+ * @param yearsToRetirement - Years until retirement
+ * @param annualReturnRate - Expected annual return rate as percentage
+ * @param swr - Safe withdrawal rate as percentage
+ * @returns Nominal annual income at retirement (future dollars)
+ */
+export function calculateProjectedRetirementIncomeNominal(
   currentNetWorth: number,
   yearsToRetirement: number,
   annualReturnRate: number,
   swr: number
 ): number {
   if (yearsToRetirement <= 0) {
-    // Already at retirement - return current SWR
     return currentNetWorth * (swr / 100);
   }
   
   const returnRate = annualReturnRate / 100;
   const withdrawalRate = swr / 100;
   
-  // Calculate what current NW would grow to with no additional contributions
   const futureNetWorth = currentNetWorth * Math.pow(1 + returnRate, yearsToRetirement);
-  
-  // Calculate annual income at that future date using SWR
   return futureNetWorth * withdrawalRate;
 }
 
 /**
- * Calculate the net worth needed TODAY to achieve a target retirement income.
+ * Calculate the net worth needed TODAY to achieve a target retirement income
+ * expressed in TODAY's purchasing power.
+ * 
  * This is the inverse of calculateProjectedRetirementIncome.
  * 
- * @param targetAnnualIncome - Desired annual income at retirement
+ * @param targetRealIncome - Desired annual income in TODAY's dollars (purchasing power)
  * @param yearsToRetirement - Years until retirement
  * @param annualReturnRate - Expected annual return rate as percentage
+ * @param inflationRate - Expected annual inflation rate as percentage
  * @param swr - Safe withdrawal rate as percentage
- * @returns Net worth needed today to achieve target income at retirement
+ * @returns Net worth needed today to achieve target real income at retirement
  */
 export function calculateNetWorthForRetirementIncome(
-  targetAnnualIncome: number,
+  targetRealIncome: number,
   yearsToRetirement: number,
   annualReturnRate: number,
+  inflationRate: number,
   swr: number
 ): number {
   if (yearsToRetirement <= 0) {
     // Already at retirement - need full amount now
-    return targetAnnualIncome / (swr / 100);
+    return targetRealIncome / (swr / 100);
   }
   
   const returnRate = annualReturnRate / 100;
+  const inflation = inflationRate / 100;
   const withdrawalRate = swr / 100;
   
-  // Future NW needed = targetIncome / SWR
-  const futureNetWorthNeeded = targetAnnualIncome / withdrawalRate;
+  // Convert target real income to nominal income at retirement
+  const inflationMultiplier = Math.pow(1 + inflation, yearsToRetirement);
+  const targetNominalIncome = targetRealIncome * inflationMultiplier;
+  
+  // Future NW needed = nominalIncome / SWR
+  const futureNetWorthNeeded = targetNominalIncome / withdrawalRate;
   
   // Present value of that future amount
   return futureNetWorthNeeded / Math.pow(1 + returnRate, yearsToRetirement);
@@ -863,16 +909,21 @@ export interface RetirementIncomeInfo {
   retirementAge: number;
   
   // Projected retirement income (if stopped saving today)
-  projectedAnnualIncome: number;
-  projectedMonthlyIncome: number;
+  // Real = in today's purchasing power, Nominal = actual future dollars
+  projectedRealAnnualIncome: number;    // What you can buy (today's dollars)
+  projectedRealMonthlyIncome: number;
+  projectedNominalAnnualIncome: number; // What the check will say (future dollars)
+  projectedNominalMonthlyIncome: number;
   
-  // How much $1 saved today becomes at retirement
-  dollarMultiplier: number;
+  // Multipliers
+  dollarMultiplier: number;      // Growth multiplier: (1 + rate)^years
+  inflationMultiplier: number;   // Inflation multiplier: (1 + inflation)^years
   
-  // Net worth thresholds for various income levels
-  // Shows "you need $X today to have $Y/year at retirement"
+  // Net worth thresholds for various income levels (in today's purchasing power)
+  // Shows "you need $X today to have purchasing power of $Y/year at retirement"
   incomeThresholds: Array<{
-    annualIncome: number;
+    realAnnualIncome: number;     // Target in today's dollars
+    nominalAnnualIncome: number;  // What that translates to in future dollars
     netWorthNeeded: number;
     isAchieved: boolean;
     percentComplete: number;
@@ -883,6 +934,7 @@ export function calculateRetirementIncomeInfo(
   netWorth: number,
   birthYear: number | null,
   annualReturnRate: number,
+  inflationRate: number,
   swr: number,
   retirementAge: number = DEFAULT_RETIREMENT_AGE
 ): RetirementIncomeInfo {
@@ -893,22 +945,32 @@ export function calculateRetirementIncomeInfo(
     : 30; // Default assumption if no birth year
   
   const dollarMultiplier = calculateDollarMultiplier(yearsToRetirement, annualReturnRate);
-  const projectedAnnualIncome = calculateProjectedRetirementIncome(
+  const inflationMultiplier = Math.pow(1 + inflationRate / 100, yearsToRetirement);
+  
+  // Calculate projected income in today's purchasing power (real)
+  const projectedRealAnnualIncome = calculateProjectedRetirementIncome(
+    netWorth, yearsToRetirement, annualReturnRate, inflationRate, swr
+  );
+  
+  // Calculate projected income in future dollars (nominal)
+  const projectedNominalAnnualIncome = calculateProjectedRetirementIncomeNominal(
     netWorth, yearsToRetirement, annualReturnRate, swr
   );
   
-  // Common income milestones
+  // Common income milestones (these represent TODAY's purchasing power)
   const incomeLevels = [10000, 15000, 20000, 25000, 30000, 35000, 40000, 50000, 60000, 75000, 100000, 125000, 150000, 200000, 250000, 300000, 400000, 500000, 750000, 1000000, 1500000, 2000000];
   
-  const incomeThresholds = incomeLevels.map(income => {
+  const incomeThresholds = incomeLevels.map(realIncome => {
     const netWorthNeeded = calculateNetWorthForRetirementIncome(
-      income, yearsToRetirement, annualReturnRate, swr
+      realIncome, yearsToRetirement, annualReturnRate, inflationRate, swr
     );
+    const nominalIncome = realIncome * inflationMultiplier;
     const isAchieved = netWorth >= netWorthNeeded;
     const percentComplete = netWorthNeeded > 0 ? Math.min(100, (netWorth / netWorthNeeded) * 100) : 0;
     
     return {
-      annualIncome: income,
+      realAnnualIncome: realIncome,
+      nominalAnnualIncome: nominalIncome,
       netWorthNeeded,
       isAchieved,
       percentComplete,
@@ -920,9 +982,12 @@ export function calculateRetirementIncomeInfo(
     currentAge,
     yearsToRetirement,
     retirementAge,
-    projectedAnnualIncome,
-    projectedMonthlyIncome: projectedAnnualIncome / 12,
+    projectedRealAnnualIncome,
+    projectedRealMonthlyIncome: projectedRealAnnualIncome / 12,
+    projectedNominalAnnualIncome,
+    projectedNominalMonthlyIncome: projectedNominalAnnualIncome / 12,
     dollarMultiplier,
+    inflationMultiplier,
     incomeThresholds,
   };
 }
@@ -1583,47 +1648,56 @@ export function calculateFiMilestones(
         netWorthAtMilestone: milestoneNetWorth,
       };
     } else if (def.type === 'retirement_income') {
-      // Retirement Income milestones - what pre-tax salary could you pull at retirement if you stopped saving today?
-      // These are concrete dollar amounts that show the power of compounding over time.
-      // The earlier you achieve these, the fewer years of compounding you need.
-      const targetAnnualIncome = def.targetValue;
+      // Retirement Income milestones - what purchasing power (in today's dollars) could you have at retirement?
+      // Target values represent TODAY's purchasing power, accounting for inflation.
+      // Example: "$100k Retirement" means you'll have the lifestyle equivalent of $100k/year today.
+      const targetRealIncome = def.targetValue; // This is in today's dollars
       const retirementAge = 65;
       const currentAge = birthYear ? currentYear - birthYear : null;
       const yearsToRetirement = currentAge !== null ? Math.max(0, retirementAge - currentAge) : 30;
       const returnRate = settings.currentRate / 100;
+      const inflationRate = settings.inflationRate / 100;
       const withdrawalRate = settings.swr / 100;
       
-      // Calculate what annual income current NW would provide at retirement
-      const futureNetWorth = currentNetWorth * Math.pow(1 + returnRate, yearsToRetirement);
-      const projectedAnnualIncome = futureNetWorth * withdrawalRate;
-      const isAchieved = projectedAnnualIncome >= targetAnnualIncome;
+      // Calculate inflation multiplier
+      const inflationMultiplier = Math.pow(1 + inflationRate, yearsToRetirement);
       
-      // Calculate the net worth needed today to achieve this milestone
-      const futureNetWorthNeeded = targetAnnualIncome / withdrawalRate;
+      // Calculate what REAL (inflation-adjusted) income current NW would provide at retirement
+      const futureNetWorth = currentNetWorth * Math.pow(1 + returnRate, yearsToRetirement);
+      const nominalIncome = futureNetWorth * withdrawalRate;
+      const realIncome = nominalIncome / inflationMultiplier; // Today's purchasing power
+      const isAchieved = realIncome >= targetRealIncome;
+      
+      // Calculate the net worth needed today to achieve this milestone (in real terms)
+      // We need nominal income at retirement = targetRealIncome * inflationMultiplier
+      const targetNominalIncome = targetRealIncome * inflationMultiplier;
+      const futureNetWorthNeeded = targetNominalIncome / withdrawalRate;
       const netWorthNeededToday = yearsToRetirement > 0 
         ? futureNetWorthNeeded / Math.pow(1 + returnRate, yearsToRetirement)
         : futureNetWorthNeeded;
       
-      // Find the first year when this income milestone is achieved
-      // For each year, calculate: if we stopped contributing THEN, would we reach targetAnnualIncome?
+      // Find the first year when this income milestone is achieved (in real terms)
+      // For each year, calculate: if we stopped contributing THEN, would we reach targetRealIncome?
       let milestoneYear: number | null = null;
       let milestoneNetWorth: number | null = null;
       
       for (const row of projections) {
         const rowAge = birthYear ? row.year - birthYear : null;
         const rowYearsToRetirement = rowAge !== null ? Math.max(0, retirementAge - rowAge) : Math.max(0, 30 - row.yearsFromEntry);
+        const rowInflationMultiplier = Math.pow(1 + inflationRate, rowYearsToRetirement);
         
-        // Calculate the projected annual income if we stopped contributing at this row
-        let rowProjectedIncome: number;
+        // Calculate the projected REAL income if we stopped contributing at this row
+        let rowRealIncome: number;
         if (rowYearsToRetirement <= 0) {
-          // Already at or past retirement - just use SWR on current NW
-          rowProjectedIncome = row.netWorth * withdrawalRate;
+          // Already at or past retirement - no more inflation adjustment needed
+          rowRealIncome = row.netWorth * withdrawalRate;
         } else {
           const rowFutureNW = row.netWorth * Math.pow(1 + returnRate, rowYearsToRetirement);
-          rowProjectedIncome = rowFutureNW * withdrawalRate;
+          const rowNominalIncome = rowFutureNW * withdrawalRate;
+          rowRealIncome = rowNominalIncome / rowInflationMultiplier;
         }
         
-        if (rowProjectedIncome >= targetAnnualIncome) {
+        if (rowRealIncome >= targetRealIncome) {
           milestoneYear = row.year;
           milestoneNetWorth = row.netWorth;
           break;

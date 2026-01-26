@@ -554,9 +554,10 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
       currentAge,
       retirementAge,
       scenario.currentRate,
+      scenario.inflationRate,
       scenario.swr
     );
-  }, [currentNetWorth.total, currentAge, retirementAge, scenario.currentRate, scenario.swr]);
+  }, [currentNetWorth.total, currentAge, retirementAge, scenario.currentRate, scenario.inflationRate, scenario.swr]);
   
   return (
     <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
@@ -751,28 +752,36 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-slate-400">
-            Retirement Income Milestones
+            Retirement Income (Today's $)
           </h3>
           <div className="text-right">
-            <span className="text-xs text-slate-500">Projected: </span>
             <TrackedValue 
-              value={trackedRetirementIncome.projectedAnnualIncome}
+              value={trackedRetirementIncome.projectedRealAnnualIncome}
               showCurrency={true}
               formatter={(v) => `$${Math.round(v).toLocaleString()}/yr`}
               className="text-sm font-mono text-amber-400"
             />
+            <span className="text-xs text-slate-500 block">in today's purchasing power</span>
           </div>
         </div>
         <p className="text-xs text-slate-500 mb-2">
-          If you stopped saving today, what income could you withdraw at retirement (age {retirementAge})?
+          If you stopped saving today, what lifestyle (in today's terms) could you afford at retirement (age {retirementAge})?
+        </p>
+        <p className="text-xs text-slate-400/80 mb-1">
+          Actual withdrawal: <TrackedValue 
+            value={trackedRetirementIncome.projectedNominalAnnualIncome}
+            showCurrency={true}
+            formatter={(v) => `$${Math.round(v).toLocaleString()}/yr`}
+            className="font-mono text-slate-400"
+          /> (future dollars, same purchasing power)
         </p>
         <p className="text-xs text-amber-400/80 mb-3">
-          💡 Every $1 you save today = <TrackedValue 
-            value={trackedRetirementIncome.dollarMultiplier}
+          💡 Prices will be <TrackedValue 
+            value={trackedRetirementIncome.inflationMultiplier}
             showCurrency={false}
-            formatter={(v) => `$${v.toFixed(2)}`}
+            formatter={(v) => `${v.toFixed(1)}×`}
             className="font-mono font-semibold text-amber-400"
-          /> at retirement
+          /> higher by retirement
         </p>
         <div className="space-y-2">
           {/* Only show upcoming/unachieved milestones, sorted by target value */}
@@ -980,6 +989,7 @@ function TrackedMilestoneRow({
         currentAge,
         retirementAge,
         scenario.currentRate,
+        scenario.inflationRate,
         scenario.swr,
         milestone.netWorthAtMilestone,
         milestone.year,
