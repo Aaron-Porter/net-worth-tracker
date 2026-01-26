@@ -162,6 +162,9 @@ export function useFinancials(options: UseFinancialsOptions = {}): UseFinancials
       userId: e.userId,
       amount: e.amount,
       timestamp: e.timestamp,
+      cashChecking: e.cashChecking,
+      cashSavings: e.cashSavings,
+      investments: e.investments,
     })),
     [rawEntries]
   );
@@ -184,10 +187,16 @@ export function useFinancials(options: UseFinancialsOptions = {}): UseFinancials
     return () => clearInterval(interval);
   }, [latestEntry, settings, includeContributions, realTimeUpdateInterval]);
   
-  // Calculate growth rates
+  // Calculate growth rates with asset breakdown if available
+  const assetBreakdown = useMemo(() => latestEntry ? {
+    cashChecking: latestEntry.cashChecking,
+    cashSavings: latestEntry.cashSavings,
+    investments: latestEntry.investments,
+  } : undefined, [latestEntry]);
+  
   const growthRates = useMemo(
-    () => calculateGrowthRates(realTimeNetWorth.total, settings, includeContributions),
-    [realTimeNetWorth.total, settings, includeContributions]
+    () => calculateGrowthRates(realTimeNetWorth.total, settings, includeContributions, assetBreakdown),
+    [realTimeNetWorth.total, settings, includeContributions, assetBreakdown]
   );
   
   // Generate projections - always use spending levels (inflation is built into levels)
