@@ -7,7 +7,8 @@ import { useAuthActions } from '@convex-dev/auth/react'
 import { api } from '../../convex/_generated/api'
 import { Id } from '../../convex/_generated/dataModel'
 import { SignIn } from './components/SignIn'
-import { useScenarios, Scenario, ScenarioProjection, SCENARIO_TEMPLATES } from '../lib/useScenarios'
+import { useScenarios, Scenario, ScenarioProjection, SCENARIO_TEMPLATES, getDisplayValue } from '../lib/useScenarios'
+import type { InflatedValue, InflationDisplayMode } from '../lib/useScenarios'
 import {
   formatCurrency,
   formatDate,
@@ -30,6 +31,8 @@ import {
   calculateRunwayAndCoastInfo,
   calculateProjectedRetirementIncome,
 } from '../lib/calculations'
+import { InflationToggle } from './components/InflationToggle'
+import { useInflationDisplay } from '../lib/useInflationDisplay'
 import { TrackedValue, SimpleTrackedValue } from './components/TrackedValue'
 import { 
   generateTrackedDashboardValues, 
@@ -2154,6 +2157,10 @@ function ProjectionsTab({
         >
           {showScenarioPanel ? 'Hide' : 'Manage'} Scenarios
         </button>
+        
+        {/* Inflation Display Toggle */}
+        <InflationToggle compact />
+        
         <div className="flex rounded-lg border border-slate-600 overflow-hidden">
           <button
             onClick={() => setProjectionsView('table')}
@@ -2230,6 +2237,23 @@ function ProjectionsTable({
   const birthYear = birthDate ? new Date(birthDate).getFullYear() : null;
   const [showYearlyDetail, setShowYearlyDetail] = useState(true);
   const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('yearly');
+  
+  // Inflation display mode
+  const { mode: inflationMode, modeLabel: inflationModeLabel } = useInflationDisplay();
+  
+  // Helper to get inflation-adjusted value for display
+  // yearsFromNow = year - currentYear
+  const getInflatedValue = (
+    nominalValue: number,
+    year: number,
+    inflationRate: number
+  ): number => {
+    if (inflationMode === 'nominal') return nominalValue;
+    const yearsFromNow = Math.max(0, year - currentYear);
+    if (yearsFromNow === 0) return nominalValue;
+    const multiplier = Math.pow(1 + inflationRate / 100, yearsFromNow);
+    return nominalValue / multiplier;
+  };
   
   // Find the best and worst scenarios for various metrics
   const getBestWorst = (getValue: (sp: ScenarioProjection) => number | null, lowerIsBetter = false) => {
@@ -2858,16 +2882,28 @@ function ProjectionsTable({
                     Scenario
                   </th>
                   <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    Net Worth
+                    <span>Net Worth</span>
+                    <span className={`ml-1 text-xs ${inflationMode === 'real' ? 'text-emerald-400/60' : 'text-amber-400/60'}`}>
+                      ({inflationMode === 'real' ? "today's $" : "future $"})
+                    </span>
                   </th>
                   <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    Spending/{viewMode === 'monthly' ? 'mo' : 'yr'}
+                    <span>Spending/{viewMode === 'monthly' ? 'mo' : 'yr'}</span>
+                    <span className={`ml-1 text-xs ${inflationMode === 'real' ? 'text-emerald-400/60' : 'text-amber-400/60'}`}>
+                      ({inflationMode === 'real' ? "today's $" : "future $"})
+                    </span>
                   </th>
                   <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    Savings/{viewMode === 'monthly' ? 'mo' : 'yr'}
+                    <span>Savings/{viewMode === 'monthly' ? 'mo' : 'yr'}</span>
+                    <span className={`ml-1 text-xs ${inflationMode === 'real' ? 'text-emerald-400/60' : 'text-amber-400/60'}`}>
+                      ({inflationMode === 'real' ? "today's $" : "future $"})
+                    </span>
                   </th>
                   <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    SWR/{viewMode === 'monthly' ? 'mo' : 'yr'}
+                    <span>SWR/{viewMode === 'monthly' ? 'mo' : 'yr'}</span>
+                    <span className={`ml-1 text-xs ${inflationMode === 'real' ? 'text-emerald-400/60' : 'text-amber-400/60'}`}>
+                      ({inflationMode === 'real' ? "today's $" : "future $"})
+                    </span>
                   </th>
                   <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
                     FI %
@@ -3049,78 +3085,84 @@ function ProjectionsTable({
                         <td className="py-2 px-3 text-sm font-medium" style={{ color: sp.scenario.color }}>
                           {sp.scenario.name}
                         </td>
-                        {/* Net Worth */}
+                        {/* Net Worth - inflation adjusted based on mode */}
                         <td className="py-2 px-3 text-right font-mono" style={{ color: sp.scenario.color }}>
                           <SimpleTrackedValue
-                            value={netWorthValue}
-                            name={`Net Worth (${displayYearValue})`}
-                            description={`Projected net worth for ${sp.scenario.name} in ${displayYearValue}`}
+                            value={getInflatedValue(netWorthValue, lookupYear, sp.inflationRate)}
+                            name={`Net Worth (${displayYearValue}) - ${inflationModeLabel}`}
+                            description={`Projected net worth for ${sp.scenario.name} in ${displayYearValue}${inflationMode === 'real' ? " (today's purchasing power)" : ' (future dollars)'}`}
                             formula="Previous NW × (1 + Rate) + Contributions - Spending"
                             inputs={[
                               { name: 'Return Rate', value: `${sp.scenario.currentRate}%` },
                               { name: 'Scenario', value: sp.scenario.name },
+                              { name: 'Display Mode', value: inflationModeLabel },
                             ]}
                             className="font-mono"
                           />
                           {isFiYear && <span className="ml-1 text-xs text-emerald-400">FI</span>}
                         </td>
-                        {/* Spending */}
+                        {/* Spending - inflation adjusted based on mode */}
                         <td className="py-2 px-3 text-right font-mono text-rose-400/80">
                           <SimpleTrackedValue
-                            value={spendingDisplayValue}
-                            name={`Spending (${displayYearValue})`}
-                            description={`Level-based spending budget for ${displayYearValue}`}
+                            value={getInflatedValue(spendingDisplayValue, lookupYear, sp.inflationRate)}
+                            name={`Spending (${displayYearValue}) - ${inflationModeLabel}`}
+                            description={`Level-based spending budget for ${displayYearValue}${inflationMode === 'real' ? " (today's purchasing power)" : ' (future dollars)'}`}
                             formula={`Base Budget (inflation-adj) + Net Worth × ${sp.scenario.spendingGrowthRate}%`}
                             inputs={[
                               { name: 'Period', value: viewMode === 'monthly' ? 'Monthly' : 'Annual' },
                               { name: 'Base Budget', value: sp.scenario.baseMonthlyBudget, unit: '$' },
+                              { name: 'Display Mode', value: inflationModeLabel },
                             ]}
                             className="font-mono text-rose-400/80"
                           />
                         </td>
-                        {/* Savings */}
+                        {/* Savings - inflation adjusted based on mode */}
                         <td className={`py-2 px-3 text-right font-mono ${
                           savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'
                         }`}>
                           <SimpleTrackedValue
-                            value={savingsDisplayValue}
-                            name={`Savings (${displayYearValue})`}
-                            description={`Net savings after spending for ${displayYearValue}`}
+                            value={getInflatedValue(savingsDisplayValue, lookupYear, sp.inflationRate)}
+                            name={`Savings (${displayYearValue}) - ${inflationModeLabel}`}
+                            description={`Net savings after spending for ${displayYearValue}${inflationMode === 'real' ? " (today's purchasing power)" : ' (future dollars)'}`}
                             formula="Income - Taxes - Spending"
                             inputs={[
                               { name: 'Period', value: viewMode === 'monthly' ? 'Monthly' : 'Annual' },
+                              { name: 'Display Mode', value: inflationModeLabel },
                             ]}
                             className={`font-mono ${savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'}`}
                           />
                         </td>
-                        {/* SWR */}
+                        {/* SWR - inflation adjusted based on mode */}
                         <td className={`py-2 px-3 text-right font-mono ${
                           swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'
                         }`}>
                           <SimpleTrackedValue
-                            value={swrDisplayValue}
-                            name={`SWR (${displayYearValue})`}
-                            description={`Safe withdrawal amount for ${displayYearValue} at ${sp.scenario.swr}% SWR`}
+                            value={getInflatedValue(swrDisplayValue, lookupYear, sp.inflationRate)}
+                            name={`SWR (${displayYearValue}) - ${inflationModeLabel}`}
+                            description={`Safe withdrawal amount for ${displayYearValue} at ${sp.scenario.swr}% SWR${inflationMode === 'real' ? " (today's purchasing power)" : ' (future dollars)'}`}
                             formula={`Net Worth × ${sp.scenario.swr}%${viewMode === 'monthly' ? ' ÷ 12' : ''}`}
                             inputs={[
-                              { name: 'Net Worth', value: netWorthValue, unit: '$' },
+                              { name: 'Net Worth', value: getInflatedValue(netWorthValue, lookupYear, sp.inflationRate), unit: '$' },
                               { name: 'SWR', value: `${sp.scenario.swr}%` },
+                              { name: 'Display Mode', value: inflationModeLabel },
                             ]}
                             className={`font-mono ${swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'}`}
                           />
                         </td>
-                        {/* FI Progress */}
+                        {/* FI Progress - same in both modes (ratio cancels out) */}
                         <td className={`py-2 px-3 text-right font-mono ${
                           fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'
                         }`}>
                           <SimpleTrackedValue
                             value={fiProgress}
                             name={`FI Progress (${displayYearValue})`}
-                            description={`Progress towards financial independence for ${displayYearValue}`}
+                            description={`Progress towards financial independence for ${displayYearValue}. FI Progress is the same in both nominal and real terms (the ratio cancels out inflation).`}
                             formula={`(Net Worth ÷ FI Target) × 100`}
                             inputs={[
-                              { name: 'Net Worth', value: netWorthValue, unit: '$' },
-                              { name: 'FI Target', value: fiTarget, unit: '$' },
+                              { name: 'Net Worth', value: getInflatedValue(netWorthValue, lookupYear, sp.inflationRate), unit: '$' },
+                              { name: 'FI Target', value: getInflatedValue(fiTarget, lookupYear, sp.inflationRate), unit: '$' },
+                              { name: 'Display Mode', value: inflationModeLabel },
+                              { name: 'Note', value: 'Same in both modes' },
                             ]}
                             unit="%"
                             className={`font-mono ${fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}

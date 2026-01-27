@@ -10,10 +10,12 @@ import {
   UserSettings,
   NetWorthEntry,
   ProjectionRow,
+  ProjectionRowInflated,
   MonthlyProjectionRow,
   LevelInfo,
   generateProjections,
   generateMonthlyProjections,
+  convertToInflatedProjections,
   calculateRealTimeNetWorth,
   calculateLevelInfo,
   calculateGrowthRates,
@@ -28,7 +30,14 @@ import {
   FiMilestoneDefinition,
   FI_MILESTONE_DEFINITIONS,
   calculateFiMilestones,
+  InflatedValue,
+  InflationDisplayMode,
+  getDisplayValue,
 } from './calculations';
+
+// Re-export inflation types
+export type { InflatedValue, InflationDisplayMode, ProjectionRowInflated };
+export { getDisplayValue };
 
 // Re-export FI milestone types for convenience
 export type { FiMilestonesInfo, FiMilestone, FiMilestoneDefinition };
@@ -65,6 +74,8 @@ export interface Scenario {
 export interface ScenarioProjection {
   scenario: Scenario;
   projections: ProjectionRow[];
+  /** Projections with both nominal and real values for inflation toggle */
+  projectionsInflated: ProjectionRowInflated[];
   levelInfo: LevelInfo;
   growthRates: GrowthRates;
   currentNetWorth: RealTimeNetWorth;
@@ -80,6 +91,8 @@ export interface ScenarioProjection {
   fiMilestones: FiMilestonesInfo;
   // Monthly projections (spending updates each month based on net worth)
   monthlyProjections: MonthlyProjectionRow[];
+  /** The inflation rate used for this scenario */
+  inflationRate: number;
 }
 
 export interface UserProfile {
@@ -343,9 +356,16 @@ export function useScenarios(): UseScenariosReturn {
         120 // 10 years of monthly data
       );
 
+      // Convert projections to inflated format for dual-display
+      const projectionsInflated = convertToInflatedProjections(
+        projections,
+        scenario.inflationRate
+      );
+
       return {
         scenario,
         projections,
+        projectionsInflated,
         levelInfo,
         growthRates,
         currentNetWorth,
@@ -358,6 +378,7 @@ export function useScenarios(): UseScenariosReturn {
         hasDynamicIncome,
         fiMilestones,
         monthlyProjections,
+        inflationRate: scenario.inflationRate,
       };
     });
   }, [latestEntry, selectedScenarios, localProfile, entries, realtimeTick]);

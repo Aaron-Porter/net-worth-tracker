@@ -56,6 +56,72 @@ export interface ProjectionRow {
   preTaxContributions?: number; // Pre-tax retirement contributions
 }
 
+// ============================================================================
+// INFLATED VALUE TYPES - For showing values in both nominal and real terms
+// ============================================================================
+
+import type { InflatedValue, InflationDisplayMode } from './inflation';
+import { 
+  createInflatedValueFromNominal, 
+  createCurrentInflatedValue,
+  nominalToReal,
+  inflationMultiplier,
+  getDisplayValue,
+} from './inflation';
+
+// Re-export inflation types for convenience
+export type { InflatedValue, InflationDisplayMode };
+export { getDisplayValue };
+
+/**
+ * Enhanced projection row with both nominal and real values
+ * 
+ * Nominal = actual future dollar amounts
+ * Real = today's purchasing power equivalent
+ * 
+ * Note: fiProgress and boolean fields are the same in both views
+ */
+export interface ProjectionRowInflated {
+  year: number;
+  age: number | null;
+  yearsFromNow: number;
+  
+  // Net worth (grows via returns + contributions)
+  netWorth: InflatedValue;
+  interest: InflatedValue;
+  contributed: InflatedValue;
+  
+  // SWR amounts (based on net worth)
+  annualSwr: InflatedValue;
+  monthlySwr: InflatedValue;
+  weeklySwr: InflatedValue;
+  dailySwr: InflatedValue;
+  
+  // Spending (grows with inflation + net worth portion)
+  monthlySpend: InflatedValue;
+  annualSpending: InflatedValue;
+  annualSavings: InflatedValue;
+  
+  // FI target (based on spending)
+  fiTarget: InflatedValue;
+  
+  // Progress metrics (inflation-neutral - same in both views)
+  fiProgress: number;
+  swrCoversSpend: boolean;
+  isFiYear: boolean;
+  isCrossover: boolean;
+  
+  // Coast FI
+  coastFiYear: number | null;
+  coastFiAge: number | null;
+  
+  // Tax information (optional - only when using dynamic projections)
+  grossIncome?: InflatedValue;
+  totalTax?: InflatedValue;
+  netIncome?: InflatedValue;
+  preTaxContributions?: InflatedValue;
+}
+
 /** Monthly projection row - for month-by-month detail where spending updates with net worth */
 export interface MonthlyProjectionRow {
   month: number;              // Month number (1-12)
@@ -2030,6 +2096,122 @@ export function generateProjections(
   }
   
   return data;
+}
+
+/**
+ * Convert a standard ProjectionRow to a ProjectionRowInflated
+ * 
+ * This adds both nominal and real representations of all monetary values.
+ * The original ProjectionRow values are treated as NOMINAL (actual future amounts).
+ * Real values are derived by deflating nominal values by the inflation multiplier.
+ * 
+ * @param row - The original projection row (values are nominal)
+ * @param yearsFromNow - Years from the base year (year 0)
+ * @param inflationRate - Annual inflation rate as percentage
+ */
+export function convertToInflatedRow(
+  row: ProjectionRow,
+  yearsFromNow: number,
+  inflationRate: number
+): ProjectionRowInflated {
+  const createInflated = (nominal: number): InflatedValue => 
+    createInflatedValueFromNominal(nominal, yearsFromNow, inflationRate);
+  
+  return {
+    year: row.year,
+    age: row.age,
+    yearsFromNow,
+    
+    // Net worth values
+    netWorth: createInflated(row.netWorth),
+    interest: createInflated(row.interest),
+    contributed: createInflated(row.contributed),
+    
+    // SWR amounts
+    annualSwr: createInflated(row.annualSwr),
+    monthlySwr: createInflated(row.monthlySwr),
+    weeklySwr: createInflated(row.weeklySwr),
+    dailySwr: createInflated(row.dailySwr),
+    
+    // Spending values
+    monthlySpend: createInflated(row.monthlySpend),
+    annualSpending: createInflated(row.annualSpending),
+    annualSavings: createInflated(row.annualSavings),
+    
+    // FI target
+    fiTarget: createInflated(row.fiTarget),
+    
+    // Progress metrics (unchanged)
+    fiProgress: row.fiProgress,
+    swrCoversSpend: row.swrCoversSpend,
+    isFiYear: row.isFiYear,
+    isCrossover: row.isCrossover,
+    
+    // Coast FI (unchanged)
+    coastFiYear: row.coastFiYear,
+    coastFiAge: row.coastFiAge,
+    
+    // Tax information (if available)
+    grossIncome: row.grossIncome !== undefined ? createInflated(row.grossIncome) : undefined,
+    totalTax: row.totalTax !== undefined ? createInflated(row.totalTax) : undefined,
+    netIncome: row.netIncome !== undefined ? createInflated(row.netIncome) : undefined,
+    preTaxContributions: row.preTaxContributions !== undefined ? createInflated(row.preTaxContributions) : undefined,
+  };
+}
+
+/**
+ * Convert an array of ProjectionRows to ProjectionRowInflated[]
+ * 
+ * @param rows - The original projection rows
+ * @param inflationRate - Annual inflation rate as percentage
+ * @param baseYear - The reference year (defaults to first row's year)
+ */
+export function convertToInflatedProjections(
+  rows: ProjectionRow[],
+  inflationRate: number,
+  baseYear?: number
+): ProjectionRowInflated[] {
+  if (rows.length === 0) return [];
+  
+  const referenceYear = baseYear ?? rows[0].year;
+  
+  return rows.map(row => {
+    const yearsFromNow = row.year - referenceYear;
+    return convertToInflatedRow(row, yearsFromNow, inflationRate);
+  });
+}
+
+/**
+ * Extract the display value from an InflatedValue based on display mode
+ * Useful for components that need to show values in the selected mode
+ * 
+ * @param value - The InflatedValue
+ * @param mode - 'nominal' or 'real'
+ */
+export function getInflatedDisplayValue(value: InflatedValue, mode: InflationDisplayMode): number {
+  return mode === 'nominal' ? value.nominal : value.real;
+}
+
+/**
+ * Get the display value for a regular number based on mode
+ * For year 0 values, nominal and real are the same
+ * For future values, this applies the appropriate conversion
+ * 
+ * @param value - The monetary value (assumed nominal)
+ * @param yearsFromNow - Years from the base year
+ * @param inflationRate - Annual inflation rate as percentage
+ * @param mode - 'nominal' or 'real'
+ */
+export function getDisplayValueForYear(
+  value: number,
+  yearsFromNow: number,
+  inflationRate: number,
+  mode: InflationDisplayMode
+): number {
+  if (mode === 'nominal' || yearsFromNow <= 0) {
+    return value;
+  }
+  return nominalToReal(value, yearsFromNow, inflationRate);
 }
 
 /**
