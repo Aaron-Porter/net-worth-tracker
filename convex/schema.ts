@@ -5,10 +5,12 @@ import { authTables } from "@convex-dev/auth/server";
 export default defineSchema({
   ...authTables,
 
-  // User profile - personal info only, not financial assumptions
+  // User profile - personal info and display preferences
   userProfile: defineTable({
     userId: v.id("users"),
     birthDate: v.string(),
+    // Display preferences
+    inflationDisplayMode: v.optional(v.union(v.literal("nominal"), v.literal("real"))), // How to show projected values
   }).index("by_user", ["userId"]),
 
   netWorthEntries: defineTable({
