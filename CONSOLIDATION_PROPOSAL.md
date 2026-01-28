@@ -65,6 +65,81 @@ The home page currently has **3 cards with 11 sub-sections**:
 5. Too much scrolling to see everything
 6. Cognitive overload - user can't focus on what matters
 
+### Projections Tab Complexity Analysis
+
+The Projections tab has **2 views with 12+ UI components**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  PROJECTIONS TAB                                            │
+├─────────────────────────────────────────────────────────────┤
+│  Summary Bar                                                │
+│  ├── Scenario chips                                         │
+│  ├── "Manage Scenarios" button ←── DUPLICATES Scenarios tab │
+│  └── Table/Chart toggle                                     │
+├─────────────────────────────────────────────────────────────┤
+│  TABLE VIEW (when selected)                                 │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ Scenario Comparison Summary (MASSIVE)                   ││
+│  │ ├── Key Milestones (4 rows)                            ││
+│  │ ├── FI Journey Milestones (7 rows) ←── DUPLICATES Dash ││
+│  │ ├── Net Worth Projections (7 rows)                     ││
+│  │ ├── Monthly Safe Withdrawal (4 rows)                   ││
+│  │ ├── FI Progress (4 rows)                               ││
+│  │ ├── Annual Income Projections (7 rows, conditional)    ││
+│  │ └── Scenario Settings (6 rows)                         ││
+│  └─────────────────────────────────────────────────────────┘│
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ Year-by-Year Detail (collapsible, hidden by default)   ││
+│  │ ├── Monthly/Yearly toggle                              ││
+│  │ └── 11 columns × 30+ years × N scenarios               ││
+│  └─────────────────────────────────────────────────────────┘│
+├─────────────────────────────────────────────────────────────┤
+│  CHART VIEW (when selected)                                 │
+│  ├── Annual/Monthly toggle                                  │
+│  ├── 4 Small Multiple Charts (FI%, NW, Spending, Savings)  │
+│  ├── Year Range Sliders (from/to)                          │
+│  └── FI Timeline Comparison Cards (N scenarios)            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Problems:**
+1. **Scenario management in TWO places** — Projections has "Manage Scenarios" panel AND there's a Scenarios tab
+2. **Comparison table is overwhelming** — 39+ rows in 7 categories
+3. **FI Journey Milestones duplicate Dashboard** — same data shown twice
+4. **Year-by-Year table hidden because it's too complex** — defeats its purpose
+5. **Too many toggles** — Table/Chart, Monthly/Yearly, Show/Hide Detail, Year Range
+6. **4 separate charts** when one with a metric selector would suffice
+
+### Scenarios Tab Complexity
+
+The Scenarios tab is actually a **multi-step wizard**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  SCENARIOS TAB                                              │
+│  ├── Personal Info (birth date)                            │
+│  ├── "Build New Scenario" CTA                              │
+│  └── Scenario List with actions                            │
+│                                                             │
+│  WIZARD MODE (6 steps):                                     │
+│  ├── Income step                                           │
+│  ├── Filing status step                                    │
+│  ├── Pre-tax contributions step                            │
+│  ├── Spending step                                         │
+│  ├── Investment assumptions step                           │
+│  └── Summary step                                          │
+│                                                             │
+│  ALSO: QuickEditPanel (slide-out sidebar)                  │
+│  ALSO: ScenarioEditor (modal, used in Projections too)     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Problems:**
+1. **Three ways to edit scenarios**: Wizard, QuickEditPanel, ScenarioEditor modal
+2. **Projections tab has its own scenario management** — redundant
+3. **No projections visible** in the Scenarios tab — they're in a different tab
+
 ### Core Issues
 
 1. **Multiple ways to express the same concept** (milestones, progress metrics)
@@ -72,6 +147,7 @@ The home page currently has **3 cards with 11 sub-sections**:
 3. **Scattered scenario management** across multiple UI surfaces
 4. **Calculation library has grown into a monolith**
 5. **Too many milestone types** that are variations of the same core question: "When can I stop working?"
+6. **Projections and Scenarios are artificially separated** — they should be one thing
 
 ---
 
@@ -274,7 +350,99 @@ const milestones = [
 
 This replaces 6 separate filtered lists with ONE unified, sortable list.
 
-### 5. Calculation Library Refactor
+### 5. Merge Projections + Scenarios into One Tab
+
+**Before:** Two separate tabs that constantly reference each other
+
+**After:** One unified "Scenarios" tab with projections inline
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  SCENARIOS TAB (unified)                                    │
+├─────────────────────────────────────────────────────────────┤
+│  Personal Info (birth date)              [+ New Scenario]   │
+├─────────────────────────────────────────────────────────────┤
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ SCENARIO CARDS (horizontal scroll on mobile)           │ │
+│  │                                                        │ │
+│  │ ┌──────────┐ ┌──────────┐ ┌──────────┐                │ │
+│  │ │ Base     │ │ Aggress. │ │ Conserv. │                │ │
+│  │ │ ✓ Active │ │ ○        │ │ ○        │                │ │
+│  │ │          │ │          │ │          │                │ │
+│  │ │ FI: 2030 │ │ FI: 2028 │ │ FI: 2033 │                │ │
+│  │ │ 12 years │ │ 10 years │ │ 15 years │                │ │
+│  │ │          │ │          │ │          │                │ │
+│  │ │ [Edit]   │ │ [Edit]   │ │ [Edit]   │                │ │
+│  │ └──────────┘ └──────────┘ └──────────┘                │ │
+│  └────────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ COMPARISON VIEW (only when 2+ scenarios selected)      │ │
+│  │                                                        │ │
+│  │ Key Metrics Comparison (simplified)                    │ │
+│  │ ┌────────────┬────────────┬────────────┬────────────┐ │ │
+│  │ │            │ Base       │ Aggressive │ Difference │ │ │
+│  │ ├────────────┼────────────┼────────────┼────────────┤ │ │
+│  │ │ FI Year    │ 2030       │ 2028       │ -2 years   │ │ │
+│  │ │ FI Age     │ 45         │ 43         │ -2 years   │ │ │
+│  │ │ NW at FI   │ $1.26M     │ $1.18M     │ -$80k      │ │ │
+│  │ │ Return %   │ 7%         │ 9%         │ +2%        │ │ │
+│  │ │ SWR %      │ 4%         │ 4.5%       │ +0.5%      │ │ │
+│  │ └────────────┴────────────┴────────────┴────────────┘ │ │
+│  └────────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ NET WORTH PROJECTION CHART                             │ │
+│  │                                                        │ │
+│  │  $2M ─┬─────────────────────────────────────────────  │ │
+│  │       │                                    ╱╱╱        │ │
+│  │  $1M ─┤                           ╱╱╱╱╱╱╱╱           │ │
+│  │       │                  ╱╱╱╱╱╱╱╱                     │ │
+│  │  $0  ─┴───────────────────────────────────────────    │ │
+│  │       2025    2030    2035    2040    2045            │ │
+│  │                                                        │ │
+│  │  [FI Progress ▼]  ← metric selector dropdown          │ │
+│  └────────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│  [▼ Show detailed year-by-year table]  ← collapsed         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Changes:**
+
+1. **Scenario cards replace the list** — visual, scannable
+2. **Comparison only when needed** — appears when 2+ scenarios selected
+3. **Simplified comparison table** — 5 key rows, not 39
+4. **One chart with dropdown** — replaces 4 small multiples
+5. **Year-by-year collapsed** — power users can expand
+6. **No "Manage Scenarios" button** — scenarios ARE the content
+
+### 6. Simplified Chart View
+
+**Before:** 4 separate small multiple charts + range sliders + timeline cards
+
+**After:** One chart with metric selector
+
+```tsx
+// Single chart with dropdown selector
+<ProjectionChart
+  scenarios={selectedScenarios}
+  metric="netWorth" // or "fiProgress", "spending", "savings"
+/>
+
+// Dropdown options:
+// - Net Worth (default)
+// - FI Progress %
+// - Monthly Spending
+// - Annual Savings
+```
+
+This eliminates:
+- 4 separate chart components
+- Year range sliders (use chart zoom/pan instead)
+- FI Timeline cards (info is in scenario cards above)
+
+### 7. Calculation Library Refactor
 
 **Before:** One 139KB `calculations.ts` file
 
@@ -324,11 +492,35 @@ function traceValue(
 
 ## Implementation Priorities
 
-### Phase 1: Dashboard Consolidation (High Impact, User-Facing)
+### Phase 1: Tab Structure Consolidation (Foundation)
+
+**Goal:** Go from 4 tabs to 3 tabs with clear purposes
+
+```
+BEFORE: Dashboard | Entries | Projections | Scenarios
+AFTER:  Dashboard | History | Scenarios
+```
+
+1. **Merge Projections tab INTO Scenarios tab**
+   - Scenarios tab becomes the home for all "what-if" analysis
+   - Projections are displayed inline with scenario cards
+   - Remove standalone Projections tab
+
+2. **Rename Entries → History**
+   - Clearer purpose
+   - Future: add net worth history chart
+
+3. **Delete `/projections` route** — Already just redirects anyway
+
+**Files affected:**
+- `src/app/page.tsx` — Remove ProjectionsTab, merge into ScenariosTab
+- `src/app/projections/page.tsx` — Can delete entirely
+
+### Phase 2: Dashboard Consolidation (User-Facing)
 
 **Goal:** Transform the 11-section dashboard into a clean 2-card layout
 
-1. **Create new `DashboardCard` component** with:
+1. **Create new `MoneyCard` component** with:
    - Hero net worth number with inline growth rate
    - 3-metric grid (SWR, Budget, Runway)
    
@@ -336,37 +528,59 @@ function traceValue(
    - Single progress bar with milestone markers
    - "Next milestone" highlight
    - 3 key numbers (Coast %, Retirement Income, FI Target)
-   - Expandable unified milestone list
+   - Expandable unified milestone list (collapsed by default)
 
-3. **Delete old components:**
+3. **Delete old dashboard sections:**
    - Remove 6 separate milestone section renderers
    - Remove duplicate FI Progress display
    - Remove verbose appreciation rate grid (6 values → 1 line)
 
 **Estimated code reduction:** ~400 lines from page.tsx
 
-### Phase 2: Data Model Simplification
+### Phase 3: Scenarios Tab Redesign
+
+**Goal:** Unify the 3 ways to edit scenarios + add inline projections
+
+1. **Replace scenario list with cards**
+   - Visual, scannable scenario cards
+   - FI year prominently displayed
+   - Quick toggle for selection
+
+2. **Simplify scenario editing**
+   - Remove ScenarioEditor modal (used in Projections)
+   - Keep QuickEditPanel (slide-out)
+   - Keep Wizard for new scenarios
+   - Result: 2 editing modes, not 3
+
+3. **Add inline comparison**
+   - Only shows when 2+ scenarios selected
+   - 5 key metrics, not 39
+   - No separate "comparison table"
+
+4. **One chart with metric dropdown**
+   - Replace 4 small multiples
+   - Dropdown: Net Worth, FI %, Spending, Savings
+   - Remove year range sliders (use zoom/pan)
+
+5. **Hide year-by-year table by default**
+   - Collapsible section for power users
+   - Remove monthly/yearly toggle (default to yearly)
+
+### Phase 4: Data Model Simplification
 
 1. **Delete `useFinancials.ts`** — Unused legacy code
 2. **Consolidate milestone types** — 6 types → 1 unified model
-3. **Remove `/projections` route** — Already just redirects
+3. **Simplify TrackedValue creators** — 12+ functions → 1 generic
 
 **Files affected:**
 - Delete: `src/lib/useFinancials.ts`
-- Simplify: `src/lib/calculations.ts` (remove 6 milestone creator functions)
-- Simplify: `src/lib/trackedScenarioValues.ts` (remove specialized create functions)
+- Simplify: `src/lib/calculations.ts`
+- Simplify: `src/lib/trackedScenarioValues.ts`
 
-### Phase 3: Tab Structure
-
-1. **Merge Projections into Scenarios tab**
-2. **Rename Entries → History**
-3. **Result:** 3 tabs (Dashboard, History, Scenarios)
-
-### Phase 4: Library Refactor (Lower Priority)
+### Phase 5: Library Refactor (Lower Priority)
 
 1. **Split calculations.ts into modules**
-2. **Simplify TrackedValue system**
-3. **Clean up unused code paths**
+2. **Clean up unused code paths**
 
 ---
 
@@ -391,24 +605,31 @@ This consolidation preserves:
 
 | Metric | Before | After | Reduction |
 |--------|--------|-------|-----------|
-| Dashboard cards | 3 | 2 | 33% |
-| Dashboard sections | 11 | 6 | 45% |
-| Milestone type handlers | 6 | 1 | 83% |
-| Tabs | 4 | 3 | 25% |
-| Custom hooks | 2 | 1 | 50% |
-| Lines in page.tsx | ~5000 | ~3000 | 40% |
-| TrackedValue create functions | 12+ | 1 | 90%+ |
-| Scrolling required on Dashboard | ~3 screens | ~1.5 screens | 50% |
+| **Tabs** | 4 | 3 | 25% |
+| **Dashboard cards** | 3 | 2 | 33% |
+| **Dashboard sections** | 11 | 6 | 45% |
+| **Projections comparison rows** | 39 | 5 | 87% |
+| **Charts in Projections** | 4 | 1 (with selector) | 75% |
+| **Ways to edit scenarios** | 3 | 2 | 33% |
+| **Milestone type handlers** | 6 | 1 | 83% |
+| **Custom hooks** | 2 | 1 | 50% |
+| **Lines in page.tsx** | ~5000 | ~2800 | 44% |
+| **TrackedValue create functions** | 12+ | 1 | 90%+ |
+| **UI toggles** | 6 | 2 | 67% |
+| **Scrolling on Dashboard** | ~3 screens | ~1.5 screens | 50% |
 
 ### Qualitative
 
 | Aspect | Before | After |
 |--------|--------|-------|
-| **User Focus** | Scattered across 11 sections | Clear hierarchy: Money → Progress |
-| **Key Question** | Buried in noise | Front and center: "67.4% to FI" |
-| **Cognitive Load** | High (remember where things are) | Low (everything in 2 cards) |
-| **Mobile Experience** | Lots of scrolling | Most info above fold |
-| **New User Onboarding** | Overwhelming | Clear story: here's what you have, here's where you're going |
+| **Tab Purposes** | Overlapping (Projections vs Scenarios) | Distinct (Dashboard, History, Scenarios) |
+| **User Focus** | Scattered across tabs and sections | Clear hierarchy per tab |
+| **Key Question** | Buried in 39-row comparison table | Front and center in scenario cards |
+| **Cognitive Load** | High (which tab? which section?) | Low (3 tabs, clear purposes) |
+| **Scenario Comparison** | Separate tab with complex table | Inline when 2+ selected |
+| **Chart Experience** | 4 charts + sliders + cards | One chart with metric dropdown |
+| **Mobile Experience** | Constant tab switching | Most actions in one tab |
+| **New User Onboarding** | "Why are there two tabs for scenarios?" | Clear progression: see money → track history → plan scenarios |
 
 ---
 
@@ -536,29 +757,120 @@ The current architecture evolved organically (which is natural), but now it's ti
 
 ---
 
+## Complete App Architecture: Before & After
+
+### Before (4 Tabs, Overlapping Concerns)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Dashboard          │  Entries       │  Projections    │  Scenarios     │
+├─────────────────────┼────────────────┼─────────────────┼────────────────┤
+│ • Net Worth         │ • Add entry    │ • Comparison    │ • Birth date   │
+│ • Appreciation      │ • Entry list   │   table (39     │ • Scenario     │
+│   rates (6)         │                │   rows!)        │   wizard (6    │
+│ • SWR amounts       │                │ • Scenario      │   steps)       │
+│ • Spending budget   │                │   management    │ • Scenario     │
+│ • FI progress       │                │   panel         │   list         │
+│ • Milestones:       │                │ • Table/Chart   │ • Quick edit   │
+│   - Runway (5)      │                │   toggle        │   panel        │
+│   - Coast (4)       │                │ • 4 charts      │                │
+│   - Retirement (5+) │                │ • Year sliders  │                │
+│   - Progress (5)    │                │ • Year-by-year  │                │
+│   - Lifestyle (3)   │                │   table         │                │
+│   - Special (1)     │                │                 │                │
+├─────────────────────┴────────────────┴─────────────────┴────────────────┤
+│                           PROBLEMS                                       │
+│  • Scenario management in TWO tabs (Projections + Scenarios)            │
+│  • FI milestones in Dashboard, ALSO in Projections table                │
+│  • 3 ways to edit scenarios (wizard, modal, panel)                      │
+│  • User constantly switches tabs to compare scenarios                   │
+│  • 39-row comparison table is overwhelming                              │
+│  • Dashboard requires 3 screens of scrolling                            │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### After (3 Tabs, Clear Purposes)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Dashboard              │  History           │  Scenarios               │
+│  "What do I have?"      │  "What happened?"  │  "What could happen?"    │
+├─────────────────────────┼────────────────────┼──────────────────────────┤
+│                         │                    │                          │
+│ ┌─────────────────────┐ │ • Add entry        │ ┌──────────────────────┐ │
+│ │ YOUR MONEY          │ │ • Entry list       │ │ Birth date + New btn │ │
+│ │ $847,234            │ │ • (future: chart)  │ └──────────────────────┘ │
+│ │ ↑$2.34/sec          │ │                    │                          │
+│ │                     │ │                    │ ┌──────┐┌──────┐┌──────┐ │
+│ │ SWR    Budget  Run  │ │                    │ │ Base ││ Aggr ││ Cons │ │
+│ │ $2.8k  $4.2k   17yr │ │                    │ │ 2030 ││ 2028 ││ 2033 │ │
+│ └─────────────────────┘ │                    │ │[Edit]││[Edit]││[Edit]│ │
+│                         │                    │ └──────┘└──────┘└──────┘ │
+│ ┌─────────────────────┐ │                    │                          │
+│ │ YOUR PROGRESS       │ │                    │ ┌──────────────────────┐ │
+│ │ [████████░░░] 67%   │ │                    │ │ Comparison (if 2+)   │ │
+│ │                     │ │                    │ │ FI Year: 2030 vs 2028│ │
+│ │ Next: 75% FI        │ │                    │ │ (5 key metrics)      │ │
+│ │ $63k to go · 2027   │ │                    │ └──────────────────────┘ │
+│ │                     │ │                    │                          │
+│ │ Coast: 142% FI      │ │                    │ ┌──────────────────────┐ │
+│ │ Ret Income: $48k/yr │ │                    │ │ 📈 Chart             │ │
+│ │ FI Target: $1.26M   │ │                    │ │ [Net Worth ▼]        │ │
+│ │                     │ │                    │ │ (one chart, dropdown)│ │
+│ │ [▼ All milestones]  │ │                    │ └──────────────────────┘ │
+│ └─────────────────────┘ │                    │                          │
+│                         │                    │ [▼ Year-by-year detail] │
+├─────────────────────────┴────────────────────┴──────────────────────────┤
+│                           BENEFITS                                       │
+│  • Each tab has ONE clear purpose                                       │
+│  • Scenarios + Projections in ONE place (they're the same thing!)       │
+│  • Dashboard fits on 1.5 screens, not 3                                 │
+│  • Milestones in ONE place (Dashboard), not scattered                   │
+│  • 2 ways to edit (wizard for new, panel for quick edits)               │
+│  • Comparison appears automatically when you select 2+ scenarios        │
+│  • One chart with dropdown, not 4 charts                                │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Summary: What Changes, What Stays
 
 ### Removed (Redundant)
-- ❌ Duplicate FI Progress displays
-- ❌ 6 separate milestone sections
-- ❌ Verbose appreciation rate grid (6 values)
+- ❌ Projections tab (merged into Scenarios)
+- ❌ Duplicate FI Progress displays (Dashboard + Projections)
+- ❌ Duplicate scenario management (Projections + Scenarios tabs)
+- ❌ 6 separate milestone sections on Dashboard
+- ❌ 39-row comparison table (replaced with 5-row focused comparison)
+- ❌ 4 separate charts (replaced with 1 chart + dropdown)
+- ❌ ScenarioEditor modal (keep QuickEditPanel instead)
+- ❌ Year range sliders
+- ❌ Monthly/yearly toggles
+- ❌ Verbose appreciation rate grid (6 values → 1 line)
 - ❌ `useFinancials` hook
 - ❌ 12+ milestone create functions
 
 ### Consolidated (Unified)
-- 🔄 6 milestone types → 1 unified model with views
+- 🔄 4 tabs → 3 tabs (Dashboard, History, Scenarios)
+- 🔄 Projections + Scenarios → one "Scenarios" tab
+- 🔄 6 milestone types → 1 unified model with computed views
 - 🔄 11 dashboard sections → 6 sections in 2 cards
-- 🔄 4 tabs → 3 tabs
-- 🔄 Projections tab → merged into Scenarios
+- 🔄 3 scenario edit modes → 2 modes (wizard + quick panel)
+- 🔄 4 projection charts → 1 chart with metric dropdown
+- 🔄 39 comparison metrics → 5 key metrics
 
 ### Kept (Valuable)
 - ✅ Real-time net worth updates
-- ✅ Click-to-see-calculation transparency
-- ✅ Scenario comparison
-- ✅ All milestone tracking (just unified, not removed)
+- ✅ Click-to-see-calculation transparency (TrackedValue)
+- ✅ Scenario comparison (simplified, inline)
+- ✅ All milestone tracking (unified list, not 6 sections)
 - ✅ Tax calculations
 - ✅ Level-based spending
 - ✅ Income projections
+- ✅ Year-by-year detail (collapsible for power users)
+- ✅ Scenario wizard for new scenarios
+- ✅ Quick edit panel for adjustments
+- ✅ Birth date / age calculations
 
 ---
 
