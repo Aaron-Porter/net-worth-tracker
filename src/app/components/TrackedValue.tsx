@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { TrackedCalculation, TrackedValue as TrackedValueType, CalculationInput, ValueSource, formatNumber } from '../../lib/calculationTrace'
+import { useInflationDisplay } from '../../lib/useInflationDisplay'
 
 // ============================================================================
 // TYPES
@@ -560,4 +561,166 @@ export function useTrackedValue(
       timestamp: Date.now(),
     },
   }), [value, name, description, formula, inputs, unit])
+}
+
+// ============================================================================
+// INFLATION-AWARE COMPONENTS
+// ============================================================================
+
+interface InflationAwareTrackedValueProps extends Omit<SimpleTrackedValueProps, 'value'> {
+  /** The nominal (future) value */
+  value: number;
+  /** The year this value applies to. If undefined, treated as current year (no adjustment) */
+  year?: number;
+  /** The inflation rate percentage (e.g., 3 for 3%) */
+  inflationRate?: number;
+  /** Whether to show the inflation mode indicator */
+  showModeIndicator?: boolean;
+}
+
+/**
+ * Inflation-aware SimpleTrackedValue - automatically adjusts value based on display mode
+ * 
+ * Use this for all projected monetary values that need inflation adjustment.
+ * Current year values (year undefined or equal to current) are not adjusted.
+ * 
+ * @example
+ * ```tsx
+ * // Future projected value
+ * <InflationAwareTrackedValue
+ *   value={1500000}
+ *   year={2035}
+ *   inflationRate={3}
+ *   name="Projected Net Worth"
+ *   description="Your net worth in 2035"
+ *   formula="Current NW × (1 + rate)^years"
+ * />
+ * 
+ * // Current value (no adjustment)
+ * <InflationAwareTrackedValue
+ *   value={500000}
+ *   name="Current Net Worth"
+ *   description="Your net worth today"
+ *   formula="Sum of all assets"
+ * />
+ * ```
+ */
+export function InflationAwareTrackedValue({
+  value,
+  year,
+  inflationRate = 3,
+  name,
+  description,
+  formula,
+  inputs = [],
+  steps = [],
+  decimals = 2,
+  className = '',
+  unit = '$',
+  formatAs,
+  showModeIndicator = false,
+}: InflationAwareTrackedValueProps) {
+  const { adjustValue, currentYear, mode, modeLabelShort } = useInflationDisplay();
+  
+  const targetYear = year ?? currentYear;
+  const isFutureValue = targetYear > currentYear;
+  const displayValue = adjustValue(value, targetYear, inflationRate);
+  
+  // Add inflation info to description and inputs
+  const enhancedDescription = isFutureValue
+    ? `${description}${mode === 'real' ? " (shown in today's purchasing power)" : " (shown as future amount)"}`
+    : description;
+  
+  const enhancedInputs: SimpleInput[] = [
+    ...inputs,
+    ...(isFutureValue ? [
+      { name: 'Display Mode', value: modeLabelShort },
+      { name: 'Inflation Rate', value: `${inflationRate}%` },
+      { name: 'Years from now', value: targetYear - currentYear },
+    ] : []),
+  ];
+  
+  return (
+    <span className="inline-flex items-center gap-1">
+      <SimpleTrackedValue
+        value={displayValue}
+        name={name}
+        description={enhancedDescription}
+        formula={formula}
+        inputs={enhancedInputs}
+        steps={steps}
+        decimals={decimals}
+        className={className}
+        unit={unit}
+        formatAs={formatAs}
+      />
+      {showModeIndicator && isFutureValue && (
+        <span className={`text-xs ${mode === 'real' ? 'text-emerald-400/60' : 'text-amber-400/60'}`}>
+          ({modeLabelShort})
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * Shorthand for common inflation-aware currency display
+ */
+export function InflationAwareCurrency({
+  value,
+  year,
+  inflationRate = 3,
+  name,
+  className = '',
+  showModeIndicator = false,
+}: {
+  value: number;
+  year?: number;
+  inflationRate?: number;
+  name?: string;
+  className?: string;
+  showModeIndicator?: boolean;
+}) {
+  const { adjustValue, currentYear, mode, modeLabelShort } = useInflationDisplay();
+  
+  const targetYear = year ?? currentYear;
+  const isFutureValue = targetYear > currentYear;
+  const displayValue = adjustValue(value, targetYear, inflationRate);
+  
+  const formatted = displayValue.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  });
+  
+  return (
+    <span 
+      className={className}
+      title={name ? `${name}${isFutureValue ? ` - ${mode === 'real' ? "today's dollars" : "future dollars"}` : ''}` : undefined}
+    >
+      {formatted}
+      {showModeIndicator && isFutureValue && (
+        <span className={`ml-1 text-xs ${mode === 'real' ? 'text-emerald-400/60' : 'text-amber-400/60'}`}>
+          ({modeLabelShort})
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * Hook to get an inflation-adjusted value
+ */
+export function useInflationAdjustedValue(
+  nominalValue: number,
+  year: number | undefined,
+  inflationRate: number = 3
+): { displayValue: number; isFuture: boolean; mode: string } {
+  const { adjustValue, currentYear, mode, modeLabelShort } = useInflationDisplay();
+  
+  const targetYear = year ?? currentYear;
+  const isFuture = targetYear > currentYear;
+  const displayValue = adjustValue(nominalValue, targetYear, inflationRate);
+  
+  return { displayValue, isFuture, mode: modeLabelShort };
 }

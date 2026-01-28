@@ -31,9 +31,14 @@ import {
   calculateRunwayAndCoastInfo,
   calculateProjectedRetirementIncome,
 } from '../lib/calculations'
-import { InflationToggle } from './components/InflationToggle'
-import { useInflationDisplay } from '../lib/useInflationDisplay'
-import { TrackedValue, SimpleTrackedValue } from './components/TrackedValue'
+import { useInflationDisplay, InflationToggle } from '../lib/useInflationDisplay'
+import { 
+  TrackedValue, 
+  SimpleTrackedValue, 
+  InflationAwareTrackedValue,
+  InflationAwareCurrency,
+  useInflationAdjustedValue,
+} from './components/TrackedValue'
 import { 
   generateTrackedDashboardValues, 
   createTrackedAmount, 
@@ -200,6 +205,10 @@ function AuthenticatedApp() {
               )}
             </button>
             <div className="flex-1" />
+            
+            {/* Global Inflation Toggle */}
+            <InflationToggle compact className="mr-2 shrink-0" />
+            
             <button
               onClick={() => signOut()}
               className="px-3 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors shrink-0"
