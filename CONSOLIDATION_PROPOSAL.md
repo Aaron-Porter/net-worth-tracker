@@ -29,6 +29,42 @@ After reviewing the codebase, I've identified several areas where bespoke featur
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Dashboard Complexity Analysis
+
+The home page currently has **3 cards with 11 sub-sections**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  CARD 1: Current Net Worth                                  │
+│  ├── Real-time net worth display                           │
+│  ├── Base Amount + Appreciation breakdown                  │
+│  └── Last updated time                                      │
+├─────────────────────────────────────────────────────────────┤
+│  CARD 2: Metrics                                            │
+│  ├── Appreciation Rate (per sec/min/hour/day/year)         │
+│  ├── Safe Withdrawal Rate (annual/monthly)                 │
+│  ├── Monthly Spending Budget (with breakdown)              │
+│  └── FI Progress (target + percentage) ←── DUPLICATE       │
+├─────────────────────────────────────────────────────────────┤
+│  CARD 3: FI Milestones                                      │
+│  ├── Progress Overview (bar + next milestone) ←── DUPLICATE│
+│  ├── Runway Milestones (6mo, 1yr, 2yr, 5yr, 10yr)         │
+│  ├── Coast Milestones (25%, 50%, 75%, 100%)               │
+│  ├── Retirement Income ($20k, $30k, $40k...)              │
+│  ├── Progress Milestones (10%, 25%, 50%, 75%, 100%)       │
+│  ├── Lifestyle Milestones (Lean, Regular, Fat FI)         │
+│  └── Special Milestones (Crossover)                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Problems:**
+1. FI Progress shown in BOTH Metrics card AND Milestones card
+2. Progress Milestones (10-100%) are just another view of FI Progress %
+3. Runway, Coast, and Retirement Income are 3 ways of asking "how secure am I?"
+4. Lifestyle milestones (Lean/Fat FI) overlap with percentage milestones
+5. Too much scrolling to see everything
+6. Cognitive overload - user can't focus on what matters
+
 ### Core Issues
 
 1. **Multiple ways to express the same concept** (milestones, progress metrics)
@@ -141,27 +177,102 @@ The `useFinancials` hook appears to be legacy code. All its functionality is alr
 - **Rename "Entries" to "History"** — Clearer, and could expand to show net worth chart over time
 - **Dashboard stays focused** — Current state and progress, not future projections
 
-### 4. Simplified Milestone Display
+### 4. Unified Dashboard Design
 
-**Before:** Dashboard shows 6 sections of milestones (Runway, Coast, Retirement Income, Progress, Lifestyle, Special)
+**Before:** 3 cards, 11 sub-sections, redundant information everywhere
 
-**After:** One unified "Progress" section with configurable views
+**After:** 2 cards with clear hierarchy
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  CARD 1: Your Money (Current State)                         │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │  $847,234.56                    [scenario indicator]    ││
+│  │  ↑ $2.34/sec · $8,472/day · $141,205/yr appreciation   ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Safe to      │  │ Monthly      │  │ Runway       │      │
+│  │ Withdraw     │  │ Budget       │  │              │      │
+│  │ $2,824/mo    │  │ $4,200/mo    │  │ 16.8 years   │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  CARD 2: Your Progress (Journey to FI)                      │
+│                                                             │
+│  [=============================............] 67.4%          │
+│   0%      25%      50%      75%     100%                   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ 🎯 Next: 75% FI ($63,200 to go) · 2027 (age 42)        ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                             │
+│  Key Numbers:                                               │
+│  • Coast to 142% FI if you stopped saving now              │
+│  • $47,800/yr retirement income (today's dollars)          │
+│  • FI target: $1.26M at current spending                   │
+│                                                             │
+│  [▼ Show all milestones]  ← expandable, collapsed default  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Design Principles:**
+
+1. **Card 1 = Present** (what you have now)
+2. **Card 2 = Future** (where you're going)
+3. **One progress bar** (not duplicated)
+4. **Three key metrics** that answer different questions:
+   - **Runway**: "How long could I survive without income?"
+   - **Coast %**: "What if I stopped saving today?"
+   - **Retirement Income**: "What lifestyle can I afford at 65?"
+5. **Milestones collapsed by default** — power users can expand
+
+### Current vs New Information Architecture
+
+| Current (11 sections) | New (6 sections) | What Changed |
+|----------------------|------------------|--------------|
+| Net Worth display | Your Money → hero number | Same |
+| Appreciation Rate (5 time periods) | Your Money → single line | Condensed to one line |
+| Safe Withdrawal Rate | Your Money → "Safe to Withdraw" | Kept, renamed |
+| Monthly Spending Budget | Your Money → "Monthly Budget" | Kept |
+| FI Progress (in Metrics) | **REMOVED** (duplicate) | Merged into Progress card |
+| Progress Overview | Your Progress → progress bar | Kept |
+| Runway Milestones (5 items) | Your Progress → "Runway" number | Single number, details in expandable |
+| Coast Milestones (4 items) | Your Progress → "Coast to X%" | Single number, details in expandable |
+| Retirement Income (5+ items) | Your Progress → "$X/yr income" | Single number, details in expandable |
+| Progress Milestones (5 items) | Your Progress → progress bar markers | Built into the bar |
+| Lifestyle Milestones (3 items) | Expandable section | Only if user wants detail |
+| Special Milestones (1 item) | Expandable section | Only if user wants detail |
+
+### The Unified Milestone List (Expandable)
+
+When the user clicks "Show all milestones", they see ONE sorted list:
 
 ```tsx
-// Instead of 6 separate milestone sections, one unified view
-<ProgressCard>
-  <ProgressBar percent={fiProgress.percentOfFi} />
-  
-  <MetricRow label="Runway" value={`${fiProgress.runwayYears} years`} />
-  <MetricRow label="Coast to" value={`${fiProgress.coastToPercentAtRetirement}% FI`} />
-  <MetricRow label="Next milestone" value={nextMilestone.name} eta={nextMilestone.yearsAway} />
-  
-  <ExpandableSection title="All Milestones">
-    {/* Simple list, not 6 separate sections */}
-    <MilestoneList milestones={milestones} />
-  </ExpandableSection>
-</ProgressCard>
+interface UnifiedMilestone {
+  name: string;           // "50% FI", "2-Year Runway", "Coast to 100%"
+  isAchieved: boolean;
+  year: number | null;
+  age: number | null;
+  amountNeeded: number;   // $0 if achieved
+}
+
+// All milestones sorted by: achieved first, then by year/amount
+const milestones = [
+  { name: "6-Month Runway", isAchieved: true, year: 2021, ... },
+  { name: "1-Year Runway", isAchieved: true, year: 2022, ... },
+  { name: "25% FI", isAchieved: true, year: 2023, ... },
+  { name: "Coast to 50%", isAchieved: true, year: 2024, ... },
+  // --- achieved above, upcoming below ---
+  { name: "50% FI", isAchieved: false, year: 2026, amountNeeded: 42000 },
+  { name: "2-Year Runway", isAchieved: false, year: 2026, ... },
+  { name: "Lean FI", isAchieved: false, year: 2027, ... },
+  ...
+];
 ```
+
+This replaces 6 separate filtered lists with ONE unified, sortable list.
 
 ### 5. Calculation Library Refactor
 
@@ -213,19 +324,45 @@ function traceValue(
 
 ## Implementation Priorities
 
-### Phase 1: Quick Wins (Low Risk, High Impact)
+### Phase 1: Dashboard Consolidation (High Impact, User-Facing)
 
-1. **Delete `useFinancials.ts`** — It's unused legacy code
-2. **Remove `/projections` route** — It already just redirects to main page
-3. **Consolidate milestone types into one model** — Biggest code reduction
+**Goal:** Transform the 11-section dashboard into a clean 2-card layout
 
-### Phase 2: UI Consolidation (Medium Risk)
+1. **Create new `DashboardCard` component** with:
+   - Hero net worth number with inline growth rate
+   - 3-metric grid (SWR, Budget, Runway)
+   
+2. **Create new `ProgressCard` component** with:
+   - Single progress bar with milestone markers
+   - "Next milestone" highlight
+   - 3 key numbers (Coast %, Retirement Income, FI Target)
+   - Expandable unified milestone list
 
-1. **Merge Projections tab into Scenarios tab**
-2. **Simplify Dashboard milestone display**
-3. **Rename Entries → History, add net worth chart**
+3. **Delete old components:**
+   - Remove 6 separate milestone section renderers
+   - Remove duplicate FI Progress display
+   - Remove verbose appreciation rate grid (6 values → 1 line)
 
-### Phase 3: Library Refactor (Higher Risk, Do Last)
+**Estimated code reduction:** ~400 lines from page.tsx
+
+### Phase 2: Data Model Simplification
+
+1. **Delete `useFinancials.ts`** — Unused legacy code
+2. **Consolidate milestone types** — 6 types → 1 unified model
+3. **Remove `/projections` route** — Already just redirects
+
+**Files affected:**
+- Delete: `src/lib/useFinancials.ts`
+- Simplify: `src/lib/calculations.ts` (remove 6 milestone creator functions)
+- Simplify: `src/lib/trackedScenarioValues.ts` (remove specialized create functions)
+
+### Phase 3: Tab Structure
+
+1. **Merge Projections into Scenarios tab**
+2. **Rename Entries → History**
+3. **Result:** 3 tabs (Dashboard, History, Scenarios)
+
+### Phase 4: Library Refactor (Lower Priority)
 
 1. **Split calculations.ts into modules**
 2. **Simplify TrackedValue system**
@@ -250,14 +387,142 @@ This consolidation preserves:
 
 ## Expected Outcomes
 
-| Metric | Before | After |
+### Quantitative
+
+| Metric | Before | After | Reduction |
+|--------|--------|-------|-----------|
+| Dashboard cards | 3 | 2 | 33% |
+| Dashboard sections | 11 | 6 | 45% |
+| Milestone type handlers | 6 | 1 | 83% |
+| Tabs | 4 | 3 | 25% |
+| Custom hooks | 2 | 1 | 50% |
+| Lines in page.tsx | ~5000 | ~3000 | 40% |
+| TrackedValue create functions | 12+ | 1 | 90%+ |
+| Scrolling required on Dashboard | ~3 screens | ~1.5 screens | 50% |
+
+### Qualitative
+
+| Aspect | Before | After |
 |--------|--------|-------|
-| Tabs | 4 | 3 |
-| Milestone types | 6 | 1 (with views) |
-| Custom hooks | 2 | 1 |
-| Calculation files | 3 (139KB total) | 6 (~70KB total) |
-| Lines in page.tsx | ~5000 | ~3000 |
-| TrackedValue create functions | 12+ | 1 |
+| **User Focus** | Scattered across 11 sections | Clear hierarchy: Money → Progress |
+| **Key Question** | Buried in noise | Front and center: "67.4% to FI" |
+| **Cognitive Load** | High (remember where things are) | Low (everything in 2 cards) |
+| **Mobile Experience** | Lots of scrolling | Most info above fold |
+| **New User Onboarding** | Overwhelming | Clear story: here's what you have, here's where you're going |
+
+---
+
+## Detailed Dashboard Mockup
+
+### Card 1: Your Money (Current State)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│                        ┌─────────────────────┐                     │
+│                        │ 🟢 Base Plan        │  ← scenario chip    │
+│                        └─────────────────────┘                     │
+│                                                                     │
+│                        $847,234.56                                 │
+│                        ═══════════                                 │
+│                     ↑ $2.34/sec · $141K/yr                         │
+│                                                                     │
+│         (click any number to see how it's calculated)              │
+│                                                                     │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐   │
+│  │ 💰 Safe to       │ │ 🏠 Monthly       │ │ 🛡️ Runway        │   │
+│  │    Withdraw      │ │    Budget        │ │                  │   │
+│  │                  │ │                  │ │                  │   │
+│  │  $2,824/mo       │ │  $4,200/mo       │ │  16.8 years      │   │
+│  │  $33,889/yr      │ │  $50,400/yr      │ │                  │   │
+│  └──────────────────┘ └──────────────────┘ └──────────────────┘   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**What each metric answers:**
+- **Safe to Withdraw**: "How much can I spend forever without running out?"
+- **Monthly Budget**: "What's my current spending level?"
+- **Runway**: "If I lost my income today, how long before I'm broke?"
+
+### Card 2: Your Progress (Journey to FI)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│  Your FI Journey                                                   │
+│                                                                     │
+│  [███████████████████████████████░░░░░░░░░░░░░] 67.4%              │
+│   ↑         ↑              ↑              ↑          ↑             │
+│   0%       25%            50%            75%       100%            │
+│            ✓              ✓                                        │
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  🎯 Next Milestone: 75% FI                                  │   │
+│  │     $95,600 to go · Expected 2027 (age 42)                  │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│  ┌───────────────────┐ ┌───────────────────┐ ┌─────────────────┐   │
+│  │ If you stopped    │ │ Retirement Income │ │ FI Target       │   │
+│  │ saving today...   │ │ at 65 (today's $) │ │                 │   │
+│  │                   │ │                   │ │                 │   │
+│  │ Coast to 142% FI  │ │ $47,800/year      │ │ $1,260,000      │   │
+│  │ by age 65         │ │ $3,983/month      │ │                 │   │
+│  └───────────────────┘ └───────────────────┘ └─────────────────┘   │
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  ▶ View all 23 milestones (14 achieved)                     │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**What each metric answers:**
+- **Coast %**: "What if I stopped contributing and let it grow?"
+- **Retirement Income**: "What lifestyle can I afford at 65?"
+- **FI Target**: "What's my finish line?"
+
+### Expanded Milestone List (When Clicked)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  All Milestones                                          [Collapse] │
+│                                                                     │
+│  ✅ Achieved                                                        │
+│  ─────────────────────────────────────────────────────────────────  │
+│  ✓ 6-Month Runway          2021   age 36                           │
+│  ✓ 1-Year Runway           2022   age 37                           │
+│  ✓ 10% FI                  2022   age 37                           │
+│  ✓ 25% FI                  2023   age 38                           │
+│  ✓ Coast to 25%            2023   age 38                           │
+│  ✓ 2-Year Runway           2024   age 39                           │
+│  ✓ Coast to 50%            2024   age 39                           │
+│  ✓ 50% FI                  2025   age 40                           │
+│  ✓ Barista FI              2025   age 40                           │
+│  ✓ $30k Retirement Income  2025   age 40                           │
+│  ... (4 more)                                                       │
+│                                                                     │
+│  ⏳ Upcoming                                                        │
+│  ─────────────────────────────────────────────────────────────────  │
+│  ○ 75% FI                  2027   age 42   $95,600 to go           │
+│  ○ 5-Year Runway           2027   age 42   $108,000 to go          │
+│  ○ Lean FI                 2028   age 43   $142,000 to go          │
+│  ○ Coast to 100%           2028   age 43   $156,000 to go          │
+│  ○ $50k Retirement Income  2029   age 44   $189,000 to go          │
+│  ○ 100% FI                 2030   age 45   $412,766 to go          │
+│  ○ Crossover Point         2030   age 45                           │
+│  ○ Fat FI                  2033   age 48   $876,000 to go          │
+│  ○ 10-Year Runway          2034   age 49   $924,000 to go          │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key improvements:**
+1. **One sorted list** instead of 6 separate sections
+2. **Clear achieved/upcoming split**
+3. **All milestone types mixed together** (runway, coast, percentage, lifestyle)
+4. **Consistent format** for every milestone
+5. **Amount to go** shown for upcoming milestones
 
 ---
 
@@ -271,10 +536,36 @@ The current architecture evolved organically (which is natural), but now it's ti
 
 ---
 
+## Summary: What Changes, What Stays
+
+### Removed (Redundant)
+- ❌ Duplicate FI Progress displays
+- ❌ 6 separate milestone sections
+- ❌ Verbose appreciation rate grid (6 values)
+- ❌ `useFinancials` hook
+- ❌ 12+ milestone create functions
+
+### Consolidated (Unified)
+- 🔄 6 milestone types → 1 unified model with views
+- 🔄 11 dashboard sections → 6 sections in 2 cards
+- 🔄 4 tabs → 3 tabs
+- 🔄 Projections tab → merged into Scenarios
+
+### Kept (Valuable)
+- ✅ Real-time net worth updates
+- ✅ Click-to-see-calculation transparency
+- ✅ Scenario comparison
+- ✅ All milestone tracking (just unified, not removed)
+- ✅ Tax calculations
+- ✅ Level-based spending
+- ✅ Income projections
+
+---
+
 ## Next Steps
 
 1. **Review this proposal** — Does this match your vision?
-2. **Pick a starting point** — I recommend Phase 1 (quick wins) first
+2. **Pick a starting point** — I recommend Phase 1 (Dashboard consolidation) first since it's the most user-facing
 3. **Iterate** — We can adjust as we go
 
 Let me know which direction resonates, and I'll start implementing.
