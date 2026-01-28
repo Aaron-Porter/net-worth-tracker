@@ -361,6 +361,13 @@ function DashboardTab({
         </div>
       )}
 
+      {/* Display Settings Section */}
+      {primaryProjection && (
+        <div className="mt-8">
+          <InflationToggle prominent />
+        </div>
+      )}
+
       {/* Metrics Section */}
       {latestEntry && primaryProjection && trackedValues && (
         <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
@@ -571,11 +578,22 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
     );
   }, [currentNetWorth.total, currentAge, retirementAge, scenario.currentRate, scenario.inflationRate, scenario.swr]);
   
+  const { mode: inflationMode } = useInflationDisplay();
+  
   return (
     <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
-      <h2 className="text-lg font-semibold text-slate-300 mb-2">
-        FI Milestones
-      </h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-lg font-semibold text-slate-300">
+          FI Milestones
+        </h2>
+        <span className={`text-xs px-2 py-0.5 rounded ${
+          inflationMode === 'real' 
+            ? 'bg-emerald-500/20 text-emerald-400' 
+            : 'bg-amber-500/20 text-amber-400'
+        }`}>
+          {inflationMode === 'real' ? "Today's $" : "Future $"}
+        </span>
+      </div>
       <p className="text-slate-500 text-sm mb-6">
         Your journey to financial independence
       </p>
@@ -764,31 +782,54 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-slate-400">
-            Retirement Income (Today's $)
+            Projected Retirement Income
           </h3>
           <div className="text-right">
-            <TrackedValue 
-              value={trackedRetirementIncome.projectedRealAnnualIncome}
-              showCurrency={true}
-              formatter={(v) => `$${Math.round(v).toLocaleString()}/yr`}
-              className="text-sm font-mono text-amber-400"
-            />
-            <span className="text-xs text-slate-500 block">in today's purchasing power</span>
+            {inflationMode === 'real' ? (
+              <>
+                <TrackedValue 
+                  value={trackedRetirementIncome.projectedRealAnnualIncome}
+                  showCurrency={true}
+                  formatter={(v) => `$${Math.round(v).toLocaleString()}/yr`}
+                  className="text-sm font-mono text-emerald-400"
+                />
+                <span className="text-xs text-emerald-400/60 block">today's $</span>
+              </>
+            ) : (
+              <>
+                <TrackedValue 
+                  value={trackedRetirementIncome.projectedNominalAnnualIncome}
+                  showCurrency={true}
+                  formatter={(v) => `$${Math.round(v).toLocaleString()}/yr`}
+                  className="text-sm font-mono text-amber-400"
+                />
+                <span className="text-xs text-amber-400/60 block">future $</span>
+              </>
+            )}
           </div>
         </div>
         <p className="text-xs text-slate-500 mb-2">
-          If you stopped saving today, what lifestyle (in today's terms) could you afford at retirement (age {retirementAge})?
+          If you stopped saving today, what could you withdraw annually at retirement (age {retirementAge})?
         </p>
         <p className="text-xs text-slate-400/80 mb-1">
-          Actual withdrawal: <TrackedValue 
-            value={trackedRetirementIncome.projectedNominalAnnualIncome}
-            showCurrency={true}
-            formatter={(v) => `$${Math.round(v).toLocaleString()}/yr`}
-            className="font-mono text-slate-400"
-          /> (future dollars, same purchasing power)
+          {inflationMode === 'real' ? (
+            <>Nominal withdrawal: <TrackedValue 
+              value={trackedRetirementIncome.projectedNominalAnnualIncome}
+              showCurrency={true}
+              formatter={(v) => `$${Math.round(v).toLocaleString()}/yr`}
+              className="font-mono text-slate-400"
+            /> (what you'll actually withdraw)</>
+          ) : (
+            <>Real value: <TrackedValue 
+              value={trackedRetirementIncome.projectedRealAnnualIncome}
+              showCurrency={true}
+              formatter={(v) => `$${Math.round(v).toLocaleString()}/yr`}
+              className="font-mono text-slate-400"
+            /> (today's purchasing power)</>
+          )}
         </p>
         <p className="text-xs text-amber-400/80 mb-3">
-          💡 Prices will be <TrackedValue 
+          Prices will be <TrackedValue 
             value={trackedRetirementIncome.inflationMultiplier}
             showCurrency={false}
             formatter={(v) => `${v.toFixed(1)}×`}
@@ -926,6 +967,7 @@ function TrackedMilestoneRow({
   scenario,
 }: TrackedMilestoneRowProps) {
   const [showDescription, setShowDescription] = React.useState(false);
+  const { mode: inflationMode, adjustValue } = useInflationDisplay();
   
   // Create tracked milestone info based on type
   const trackedInfo = useMemo(() => {
@@ -1102,14 +1144,19 @@ function TrackedMilestoneRow({
             </div>
           )}
           
-          {/* Net worth at milestone */}
-          {trackedInfo?.netWorthAtMilestone && (
+          {/* Net worth at milestone - inflation adjusted */}
+          {trackedInfo?.netWorthAtMilestone && milestone.year && (
             <div className="bg-slate-800/50 rounded p-2">
               <span className="text-slate-500">Net worth at milestone: </span>
-              <TrackedValue 
-                value={trackedInfo.netWorthAtMilestone}
-                className="text-slate-300"
+              <InflationAwareCurrency
+                value={trackedInfo.netWorthAtMilestone.value}
+                year={milestone.year}
+                inflationRate={scenario.inflationRate}
+                className="text-slate-300 font-mono"
               />
+              <span className={`ml-1 text-xs ${inflationMode === 'real' ? 'text-emerald-400/60' : 'text-amber-400/60'}`}>
+                ({inflationMode === 'real' ? "today's $" : "future $"})
+              </span>
             </div>
           )}
         </div>
@@ -2416,7 +2463,7 @@ function ProjectionsTable({
       ]
     },
     {
-      category: 'Net Worth Projections',
+      category: `Net Worth Projections ${inflationMode === 'real' ? "(Today's $)" : "(Future $)"}`,
       metrics: [
         {
           label: 'Current',
@@ -2429,11 +2476,14 @@ function ProjectionsTable({
           label: `In ${years} Years (${currentYear + years})`,
           getValue: (sp: ScenarioProjection) => {
             const row = sp.projections.find(p => p.year === currentYear + years);
-            return row ? formatCurrency(row.netWorth) : '-';
+            if (!row) return '-';
+            const adjusted = getInflatedValue(row.netWorth, currentYear + years, sp.inflationRate);
+            return formatCurrency(adjusted);
           },
           getNumericValue: (sp: ScenarioProjection) => {
             const row = sp.projections.find(p => p.year === currentYear + years);
-            return row?.netWorth ?? null;
+            if (!row) return null;
+            return getInflatedValue(row.netWorth, currentYear + years, sp.inflationRate);
           },
           lowerIsBetter: false,
           format: 'currency' as const,
@@ -2441,7 +2491,7 @@ function ProjectionsTable({
       ]
     },
     {
-      category: 'Monthly Safe Withdrawal',
+      category: `Monthly Safe Withdrawal ${inflationMode === 'real' ? "(Today's $)" : "(Future $)"}`,
       metrics: [
         {
           label: 'Current',
@@ -2454,11 +2504,14 @@ function ProjectionsTable({
           label: `In ${years} Years`,
           getValue: (sp: ScenarioProjection) => {
             const row = sp.projections.find(p => p.year === currentYear + years);
-            return row ? formatCurrency(row.monthlySwr) : '-';
+            if (!row) return '-';
+            const adjusted = getInflatedValue(row.monthlySwr, currentYear + years, sp.inflationRate);
+            return formatCurrency(adjusted);
           },
           getNumericValue: (sp: ScenarioProjection) => {
             const row = sp.projections.find(p => p.year === currentYear + years);
-            return row?.monthlySwr ?? null;
+            if (!row) return null;
+            return getInflatedValue(row.monthlySwr, currentYear + years, sp.inflationRate);
           },
           lowerIsBetter: false,
           format: 'currency' as const,
@@ -2492,7 +2545,7 @@ function ProjectionsTable({
     },
     // Only show income projections if at least one scenario has income data
     ...(scenarioProjections.some(sp => sp.hasDynamicIncome) ? [{
-      category: 'Annual Income Projections',
+      category: `Annual Income Projections ${inflationMode === 'real' ? "(Today's $)" : "(Future $)"}`,
       metrics: [
         {
           label: 'Current',
@@ -2511,11 +2564,14 @@ function ProjectionsTable({
           label: `In ${years} Years (${currentYear + years})`,
           getValue: (sp: ScenarioProjection) => {
             const row = sp.dynamicProjections?.find(d => d.yearsFromNow === years);
-            return row ? formatCurrency(row.grossIncome) : '-';
+            if (!row) return '-';
+            const adjusted = getInflatedValue(row.grossIncome, currentYear + years, sp.inflationRate);
+            return formatCurrency(adjusted);
           },
           getNumericValue: (sp: ScenarioProjection) => {
             const row = sp.dynamicProjections?.find(d => d.yearsFromNow === years);
-            return row?.grossIncome ?? null;
+            if (!row) return null;
+            return getInflatedValue(row.grossIncome, currentYear + years, sp.inflationRate);
           },
           lowerIsBetter: false,
           format: 'currency' as const,
@@ -2723,7 +2779,16 @@ function ProjectionsTable({
       {/* Summary Comparison Table */}
       <div className="bg-slate-800/30 rounded-xl border border-slate-700">
         <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-300">Scenario Comparison Summary</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-semibold text-slate-300">Scenario Comparison Summary</h3>
+            <span className={`text-xs px-2 py-0.5 rounded ${
+              inflationMode === 'real' 
+                ? 'bg-emerald-500/20 text-emerald-400' 
+                : 'bg-amber-500/20 text-amber-400'
+            }`}>
+              {inflationMode === 'real' ? "Today's $" : "Future $"}
+            </span>
+          </div>
         </div>
         <table className="w-full text-sm">
           <thead className="bg-slate-800">
@@ -2839,6 +2904,13 @@ function ProjectionsTable({
         <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h3 className="text-sm font-semibold text-slate-300">Year-by-Year Breakdown</h3>
+            <span className={`text-xs px-2 py-0.5 rounded ${
+              inflationMode === 'real' 
+                ? 'bg-emerald-500/20 text-emerald-400' 
+                : 'bg-amber-500/20 text-amber-400'
+            }`}>
+              {inflationMode === 'real' ? "Today's $" : "Future $"}
+            </span>
             {/* Monthly/Yearly Toggle */}
             <div className="flex items-center bg-slate-700/50 rounded-lg p-0.5">
               <button
@@ -3383,6 +3455,7 @@ function ProjectionsChart({
 }) {
   const [brushRange, setBrushRange] = React.useState<{ startIndex: number; endIndex: number } | null>(null);
   const [timeUnit, setTimeUnit] = React.useState<TimeUnit>('annual');
+  const { mode: inflationMode, adjustValue } = useInflationDisplay();
 
   // Get metrics config based on current time unit
   const metrics = React.useMemo(() => getMetrics(timeUnit), [timeUnit]);
@@ -3393,32 +3466,40 @@ function ProjectionsChart({
 
   // Prepare unified chart data with all metrics for all scenarios
   // Convert spending/savings values based on selected time unit
+  // Apply inflation adjustment based on display mode
   const unifiedChartData = React.useMemo(() => {
     const yearMap = new Map<number, any>();
 
     scenarioProjections.forEach(sp => {
+      const inflationRate = sp.scenario.inflationRate;
+      
       sp.projections.forEach(proj => {
         if (!yearMap.has(proj.year)) {
           yearMap.set(proj.year, { year: proj.year });
         }
         const yearData = yearMap.get(proj.year);
 
+        // Apply inflation adjustment for monetary values (not percentages)
+        const adjustedNetWorth = adjustValue(proj.netWorth, proj.year, inflationRate);
+        const adjustedMonthlySpend = adjustValue(proj.monthlySpend, proj.year, inflationRate);
+        const adjustedAnnualSavings = adjustValue(proj.annualSavings, proj.year, inflationRate);
+
         // Store all metrics for this scenario at this year
-        yearData[`${sp.scenario.name}_fiProgress`] = proj.fiProgress;
-        yearData[`${sp.scenario.name}_netWorth`] = proj.netWorth;
+        yearData[`${sp.scenario.name}_fiProgress`] = proj.fiProgress; // Percentage stays the same
+        yearData[`${sp.scenario.name}_netWorth`] = adjustedNetWorth;
         // Convert spending/savings based on time unit
         if (timeUnit === 'annual') {
-          yearData[`${sp.scenario.name}_spending`] = proj.monthlySpend * 12; // Monthly to annual
-          yearData[`${sp.scenario.name}_savings`] = proj.annualSavings;
+          yearData[`${sp.scenario.name}_spending`] = adjustedMonthlySpend * 12; // Monthly to annual
+          yearData[`${sp.scenario.name}_savings`] = adjustedAnnualSavings;
         } else {
-          yearData[`${sp.scenario.name}_spending`] = proj.monthlySpend;
-          yearData[`${sp.scenario.name}_savings`] = proj.annualSavings / 12; // Annual to monthly
+          yearData[`${sp.scenario.name}_spending`] = adjustedMonthlySpend;
+          yearData[`${sp.scenario.name}_savings`] = adjustedAnnualSavings / 12; // Annual to monthly
         }
       });
     });
 
     return Array.from(yearMap.values()).sort((a, b) => a.year - b.year);
-  }, [scenarioProjections, timeUnit]);
+  }, [scenarioProjections, timeUnit, adjustValue]);
 
   // Filter data based on brush range for display
   const displayData = React.useMemo(() => {
@@ -3430,8 +3511,17 @@ function ProjectionsChart({
     <div className="flex-1 bg-slate-800/30 rounded-xl border border-slate-700 p-6 overflow-auto">
       <div className="space-y-6">
         {/* Header with scenario indicators */}
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium text-slate-200">Scenario Projections</h3>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-medium text-slate-200">Scenario Projections</h3>
+            <span className={`text-xs px-2 py-0.5 rounded ${
+              inflationMode === 'real' 
+                ? 'bg-emerald-500/20 text-emerald-400' 
+                : 'bg-amber-500/20 text-amber-400'
+            }`}>
+              {inflationMode === 'real' ? "Today's $" : "Future $"}
+            </span>
+          </div>
           <div className="flex gap-2">
             {scenarioProjections.map(sp => (
               sp.fiYear && (

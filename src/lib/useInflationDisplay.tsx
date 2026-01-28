@@ -2,6 +2,7 @@
  * Comprehensive Inflation Display System
  * 
  * This module provides a complete system for handling inflation across the app.
+ * The display mode is stored as a user preference in the database.
  * 
  * Key Concepts:
  * - NOMINAL: Actual future dollar amounts (what you'll see in accounts)
@@ -16,6 +17,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
+import { useQuery, useMutation } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import type { InflationDisplayMode, InflatedValue } from './inflation';
 import { nominalToReal, inflationMultiplier, getDisplayValue, createInflatedValueFromNominal } from './inflation';
 
@@ -26,7 +29,7 @@ import { nominalToReal, inflationMultiplier, getDisplayValue, createInflatedValu
 interface InflationDisplayContextType {
   /** Current display mode */
   mode: InflationDisplayMode;
-  /** Update the display mode */
+  /** Update the display mode (saves to database) */
   setMode: (mode: InflationDisplayMode) => void;
   /** Toggle between modes */
   toggle: () => void;
@@ -42,6 +45,8 @@ interface InflationDisplayContextType {
   modeDescription: string;
   /** Current year (reference point) */
   currentYear: number;
+  /** Whether the mode is loading from server */
+  isLoading: boolean;
   
   /** 
    * Adjust a value for display based on current mode 
@@ -69,10 +74,9 @@ interface InflationDisplayContextType {
 const InflationDisplayContext = createContext<InflationDisplayContextType | null>(null);
 
 // ============================================================================
-// STORAGE KEY
+// DEFAULT MODE
 // ============================================================================
 
-const STORAGE_KEY = 'inflation-display-mode';
 const DEFAULT_MODE: InflationDisplayMode = 'real'; // Default to "today's dollars"
 
 // ============================================================================
@@ -81,85 +85,80 @@ const DEFAULT_MODE: InflationDisplayMode = 'real'; // Default to "today's dollar
 
 interface InflationDisplayProviderProps {
   children: ReactNode;
-  /** Override the default mode (useful for testing) */
-  defaultMode?: InflationDisplayMode;
 }
 
-export function InflationDisplayProvider({ 
-  children, 
-  defaultMode = DEFAULT_MODE 
-}: InflationDisplayProviderProps) {
-  const [mode, setModeState] = useState<InflationDisplayMode>(defaultMode);
-  const [isHydrated, setIsHydrated] = useState(false);
+export function InflationDisplayProvider({ children }: InflationDisplayProviderProps) {
+  // Get mode from database
+  const profile = useQuery(api.settings.getProfile);
+  const setModeMutation = useMutation(api.settings.setInflationDisplayMode);
+  
+  // Local state for immediate UI response
+  const [localMode, setLocalMode] = useState<InflationDisplayMode>(DEFAULT_MODE);
+  const [hasInitialized, setHasInitialized] = useState(false);
+  
   const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const isLoading = profile === undefined;
 
-  // Load from localStorage on mount
+  // Sync local state with database
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === 'nominal' || stored === 'real') {
-        setModeState(stored);
+    if (profile !== undefined && !hasInitialized) {
+      const serverMode = profile?.inflationDisplayMode;
+      if (serverMode === 'nominal' || serverMode === 'real') {
+        setLocalMode(serverMode);
       }
-    } catch {
-      // localStorage not available (SSR or privacy mode)
+      setHasInitialized(true);
     }
-    setIsHydrated(true);
-  }, []);
-
-  // Save to localStorage when mode changes
-  useEffect(() => {
-    if (!isHydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, mode);
-    } catch {
-      // localStorage not available
-    }
-  }, [mode, isHydrated]);
+  }, [profile, hasInitialized]);
 
   const setMode = useCallback((newMode: InflationDisplayMode) => {
-    setModeState(newMode);
-  }, []);
+    // Update local state immediately for responsive UI
+    setLocalMode(newMode);
+    // Persist to database
+    setModeMutation({ mode: newMode }).catch(console.error);
+  }, [setModeMutation]);
 
   const toggle = useCallback(() => {
-    setModeState(prev => prev === 'nominal' ? 'real' : 'nominal');
-  }, []);
+    const newMode = localMode === 'nominal' ? 'real' : 'nominal';
+    setMode(newMode);
+  }, [localMode, setMode]);
 
   // Core adjustment function
   const adjustValue = useCallback((value: number, year: number, inflationRate: number): number => {
-    if (mode === 'nominal') return value;
+    if (localMode === 'nominal') return value;
     const yearsFromNow = Math.max(0, year - currentYear);
     if (yearsFromNow === 0) return value;
     return nominalToReal(value, yearsFromNow, inflationRate);
-  }, [mode, currentYear]);
+  }, [localMode, currentYear]);
 
   const getDisplayValueFn = useCallback((value: InflatedValue): number => {
-    return getDisplayValue(value, mode);
-  }, [mode]);
+    return getDisplayValue(value, localMode);
+  }, [localMode]);
 
   const createInflatedValueFn = useCallback((nominal: number, year: number, inflationRate: number): InflatedValue => {
     const yearsFromNow = Math.max(0, year - currentYear);
     return createInflatedValueFromNominal(nominal, yearsFromNow, inflationRate);
   }, [currentYear]);
 
-  const value: InflationDisplayContextType = {
-    mode,
+  const contextValue: InflationDisplayContextType = {
+    mode: localMode,
     setMode,
     toggle,
-    isRealMode: mode === 'real',
-    isNominalMode: mode === 'nominal',
-    modeLabel: mode === 'real' ? "Today's Dollars" : "Future Dollars",
-    modeLabelShort: mode === 'real' ? "Today's $" : "Future $",
-    modeDescription: mode === 'real'
+    isRealMode: localMode === 'real',
+    isNominalMode: localMode === 'nominal',
+    modeLabel: localMode === 'real' ? "Today's Dollars" : "Future Dollars",
+    modeLabelShort: localMode === 'real' ? "Today's $" : "Future $",
+    modeDescription: localMode === 'real'
       ? "Values shown in today's purchasing power. This helps you understand what future amounts are actually worth."
       : "Values shown as actual future amounts. This is what you'll actually see in your accounts.",
     currentYear,
+    isLoading,
     adjustValue,
     getDisplayValue: getDisplayValueFn,
     createInflatedValue: createInflatedValueFn,
   };
 
   return (
-    <InflationDisplayContext.Provider value={value}>
+    <InflationDisplayContext.Provider value={contextValue}>
       {children}
     </InflationDisplayContext.Provider>
   );
@@ -195,12 +194,6 @@ export function useInflationDisplay(): InflationDisplayContextType {
  * @param nominalValue - The nominal (future) value
  * @param year - The year this value applies to (undefined = current year)
  * @param inflationRate - The inflation rate percentage (e.g., 3 for 3%)
- * 
- * @example
- * ```tsx
- * // For a projected value in 2035
- * const displayValue = useAdjustedValue(projection.netWorth, 2035, 3);
- * ```
  */
 export function useAdjustedValue(
   nominalValue: number,
@@ -251,15 +244,6 @@ interface InflationAwareValueProps {
 
 /**
  * Component that displays a monetary value with automatic inflation adjustment
- * 
- * @example
- * ```tsx
- * // Current value (no adjustment)
- * <InflationAwareValue value={500000} />
- * 
- * // Future value (auto-adjusted based on mode)
- * <InflationAwareValue value={750000} year={2035} inflationRate={3} />
- * ```
  */
 export function InflationAwareValue({
   value,
@@ -306,20 +290,76 @@ interface InflationToggleProps {
   compact?: boolean;
   /** Additional CSS classes */
   className?: string;
+  /** Show as a prominent setting */
+  prominent?: boolean;
 }
 
 /**
  * Toggle between "Today's Dollars" and "Future Dollars" display modes
  */
-export function InflationToggle({ compact = false, className = '' }: InflationToggleProps) {
-  const { mode, setMode, modeDescription } = useInflationDisplay();
+export function InflationToggle({ compact = false, className = '', prominent = false }: InflationToggleProps) {
+  const { mode, setMode, modeDescription, isLoading } = useInflationDisplay();
+
+  if (prominent) {
+    return (
+      <div className={`bg-slate-800/50 rounded-xl p-4 border border-slate-700 ${className}`}>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-300">Inflation Display</h3>
+            <p className="text-xs text-slate-500 mt-0.5">How to show projected values</p>
+          </div>
+          <div className="flex rounded-lg overflow-hidden border border-slate-600">
+            <button
+              onClick={() => setMode('real')}
+              disabled={isLoading}
+              className={`px-3 py-2 text-sm font-medium transition-colors ${
+                mode === 'real'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title="Show values in today's purchasing power"
+            >
+              Today's $
+            </button>
+            <button
+              onClick={() => setMode('nominal')}
+              disabled={isLoading}
+              className={`px-3 py-2 text-sm font-medium transition-colors ${
+                mode === 'nominal'
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title="Show actual future amounts"
+            >
+              Future $
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-slate-400">{modeDescription}</p>
+        <div className="mt-3 pt-3 border-t border-slate-700 text-xs text-slate-500">
+          {mode === 'real' ? (
+            <p>
+              <span className="text-emerald-400 font-medium">Today's Dollars:</span> Spending appears "flat" because lifestyle is maintained. 
+              Future $100k shown as ~$74k reflects what you can buy with it today.
+            </p>
+          ) : (
+            <p>
+              <span className="text-amber-400 font-medium">Future Dollars:</span> Spending grows over time due to inflation. 
+              This is what you'll actually see in your accounts.
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (compact) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
         <button
           onClick={() => setMode(mode === 'nominal' ? 'real' : 'nominal')}
-          className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 transition-colors text-sm"
+          disabled={isLoading}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 transition-colors text-sm ${isLoading ? 'opacity-50' : ''}`}
           title={modeDescription}
         >
           <svg 
@@ -350,6 +390,7 @@ export function InflationToggle({ compact = false, className = '' }: InflationTo
         <div className="flex rounded-lg overflow-hidden border border-slate-600">
           <button
             onClick={() => setMode('real')}
+            disabled={isLoading}
             className={`px-3 py-1.5 text-sm font-medium transition-colors ${
               mode === 'real'
                 ? 'bg-emerald-600 text-white'
@@ -361,6 +402,7 @@ export function InflationToggle({ compact = false, className = '' }: InflationTo
           </button>
           <button
             onClick={() => setMode('nominal')}
+            disabled={isLoading}
             className={`px-3 py-1.5 text-sm font-medium transition-colors ${
               mode === 'nominal'
                 ? 'bg-amber-600 text-white'
@@ -381,12 +423,13 @@ export function InflationToggle({ compact = false, className = '' }: InflationTo
  * Inline toggle for use in tight spaces
  */
 export function InflationToggleInline({ className = '' }: { className?: string }) {
-  const { mode, toggle, modeLabel } = useInflationDisplay();
+  const { mode, toggle, modeLabel, isLoading } = useInflationDisplay();
 
   return (
     <button
       onClick={toggle}
-      className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-slate-700/50 hover:bg-slate-700 border border-slate-600 transition-colors ${className}`}
+      disabled={isLoading}
+      className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-slate-700/50 hover:bg-slate-700 border border-slate-600 transition-colors ${className} ${isLoading ? 'opacity-50' : ''}`}
       title={`Currently showing: ${modeLabel}. Click to toggle.`}
     >
       <svg 
@@ -476,7 +519,7 @@ export function InflationModeInfo({ className = '' }: { className?: string }) {
 }
 
 // ============================================================================
-// UTILITY FUNCTION FOR FORMATTING
+// UTILITY FUNCTIONS
 // ============================================================================
 
 /**
@@ -497,4 +540,26 @@ export function formatCurrencyWithMode(
   
   const suffix = mode === 'real' ? " (today's $)" : " (future $)";
   return formatted + suffix;
+}
+
+/**
+ * Helper to format currency with automatic inflation adjustment
+ */
+export function useInflationAwareFormatter() {
+  const { adjustValue, mode, currentYear } = useInflationDisplay();
+  
+  return useCallback((
+    value: number, 
+    year: number | undefined, 
+    inflationRate: number,
+    decimals: number = 0
+  ): string => {
+    const targetYear = year ?? currentYear;
+    const adjustedValue = adjustValue(value, targetYear, inflationRate);
+    return adjustedValue.toLocaleString('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: decimals,
+    });
+  }, [adjustValue, currentYear, mode]);
 }

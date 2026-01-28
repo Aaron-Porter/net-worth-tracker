@@ -75,6 +75,34 @@ export const get = query({
   },
 });
 
+// Update inflation display mode preference
+export const setInflationDisplayMode = mutation({
+  args: {
+    mode: v.union(v.literal("nominal"), v.literal("real")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const existing = await ctx.db
+      .query("userProfile")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { inflationDisplayMode: args.mode });
+      return existing._id;
+    } else {
+      // Create profile with default birth date if it doesn't exist
+      return await ctx.db.insert("userProfile", {
+        userId,
+        birthDate: "",
+        inflationDisplayMode: args.mode,
+      });
+    }
+  },
+});
+
 // Legacy save - redirects to saveProfile
 export const save = mutation({
   args: {
