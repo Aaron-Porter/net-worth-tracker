@@ -60,7 +60,7 @@ import {
   ReferenceLine,
 } from 'recharts'
 
-type Tab = 'dashboard' | 'entries' | 'projections' | 'scenarios'
+type Tab = 'dashboard' | 'history' | 'scenarios'
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useConvexAuth()
@@ -153,28 +153,15 @@ function AuthenticatedApp() {
               )}
             </button>
             <button
-              onClick={() => setActiveTab('entries')}
+              onClick={() => setActiveTab('history')}
               className={`px-3 py-3 sm:px-6 sm:py-4 font-medium transition-colors relative whitespace-nowrap ${
-                activeTab === 'entries'
+                activeTab === 'history'
                   ? 'text-emerald-400'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Entries
-              {activeTab === 'entries' && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('projections')}
-              className={`px-3 py-3 sm:px-6 sm:py-4 font-medium transition-colors relative whitespace-nowrap ${
-                activeTab === 'projections'
-                  ? 'text-emerald-400'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Projections
-              {activeTab === 'projections' && (
+              History
+              {activeTab === 'history' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
               )}
             </button>
@@ -217,9 +204,9 @@ function AuthenticatedApp() {
         />
       )}
 
-      {/* Entries Tab */}
-      {activeTab === 'entries' && (
-        <EntriesTab
+      {/* History Tab (formerly Entries) */}
+      {activeTab === 'history' && (
+        <HistoryTab
           entries={scenariosHook.entries}
           newAmount={newAmount}
           setNewAmount={setNewAmount}
@@ -230,24 +217,14 @@ function AuthenticatedApp() {
         />
       )}
 
-      {/* Projections Tab */}
-      {activeTab === 'projections' && (
-        <ProjectionsTab
-          latestEntry={scenariosHook.latestEntry}
-          scenarioProjections={scenariosHook.scenarioProjections}
-          profile={scenariosHook.profile}
-          projectionsView={projectionsView}
-          setProjectionsView={setProjectionsView}
-          setActiveTab={setActiveTab}
-          scenariosHook={scenariosHook}
-        />
-      )}
 
-
-      {/* Scenarios Tab */}
+      {/* Scenarios Tab (includes Projections) */}
       {activeTab === 'scenarios' && (
         <ScenariosTab
           scenariosHook={scenariosHook}
+          latestEntry={scenariosHook.latestEntry}
+          projectionsView={projectionsView}
+          setProjectionsView={setProjectionsView}
         />
       )}
     </main>
@@ -277,6 +254,13 @@ function DashboardTab({
     return generateTrackedDashboardValues(primaryProjection, latestEntry.timestamp);
   }, [latestEntry, primaryProjection]);
 
+  // Calculate runway for the 3-metric grid
+  const currentMonthlySpend = primaryProjection?.projections[0]?.monthlySpend ?? 0;
+  const runwayYears = useMemo(() => {
+    if (!primaryProjection || currentMonthlySpend <= 0) return 0;
+    return calculateRunwayYears(primaryProjection.currentNetWorth.total, currentMonthlySpend);
+  }, [primaryProjection, currentMonthlySpend]);
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
@@ -286,13 +270,13 @@ function DashboardTab({
         Watch your investments grow in real-time
       </p>
 
-      {/* Current Total Display */}
+      {/* CARD 1: Your Money (Current State) */}
       {latestEntry && primaryProjection && trackedValues ? (
-        <div className="mb-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-emerald-500/30">
+        <div className="mb-6 bg-slate-800/50 backdrop-blur rounded-2xl p-6 shadow-xl border border-emerald-500/30">
           {/* Scenario indicator */}
-          <div className="flex justify-center mb-4">
-            <div 
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm"
+          <div className="flex justify-center mb-3">
+            <div
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
               style={{ backgroundColor: `${primaryProjection.scenario.color}20`, color: primaryProjection.scenario.color }}
             >
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: primaryProjection.scenario.color }} />
@@ -303,45 +287,60 @@ function DashboardTab({
             </div>
           </div>
 
-          <h2 className="text-sm font-medium text-slate-400 text-center mb-1">
-            Current Net Worth
-          </h2>
-          <div className="text-center">
-            <TrackedValue 
+          {/* Hero net worth with inline growth */}
+          <div className="text-center mb-4">
+            <TrackedValue
               value={trackedValues.currentNetWorth}
               decimals={6}
               className="text-4xl md:text-5xl font-bold font-mono bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent"
             />
-          </div>
-          <p className="text-xs text-slate-500 text-center mt-1">
-            Click any number to see calculation details
-          </p>
-          <div className="mt-4 flex justify-center gap-8 text-sm">
-            <div className="text-center">
-              <p className="text-slate-500">Base Amount</p>
-              <TrackedValue 
-                value={trackedValues.baseAmount}
-                className="text-slate-300 font-mono"
-              />
-            </div>
-            <div className="text-center">
-              <p className="text-slate-500">Appreciation</p>
-              <span className="text-emerald-400 font-mono">+<TrackedValue 
-                value={trackedValues.appreciation}
+            <p className="text-emerald-400 text-sm mt-1 font-mono">
+              ↑ <TrackedValue
+                value={trackedValues.growthPerSecond}
                 decimals={4}
-                className="text-emerald-400 font-mono"
-              /></span>
+                className="text-emerald-400 font-mono inline"
+              />/sec · <TrackedValue
+                value={trackedValues.growthPerYear}
+                className="text-emerald-400 font-mono inline"
+              />/yr
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              Click any number to see calculation details
+            </p>
+          </div>
+
+          {/* 3-metric grid: SWR, Budget, Runway */}
+          <div className="grid grid-cols-3 gap-3 mt-4">
+            <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+              <p className="text-slate-500 text-xs mb-1">💰 Safe to Withdraw</p>
+              <TrackedValue
+                value={trackedValues.monthlySwr}
+                className="text-amber-400 font-mono text-lg font-semibold"
+              />
+              <p className="text-slate-600 text-xs">/month</p>
+            </div>
+            <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+              <p className="text-slate-500 text-xs mb-1">🏠 Monthly Budget</p>
+              <TrackedValue
+                value={trackedValues.currentSpending}
+                className="text-violet-400 font-mono text-lg font-semibold"
+              />
+              <p className="text-slate-600 text-xs">/month</p>
+            </div>
+            <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+              <p className="text-slate-500 text-xs mb-1">🛡️ Runway</p>
+              <p className="text-sky-400 font-mono text-lg font-semibold">
+                {runwayYears >= 100 ? '∞' : `${runwayYears.toFixed(1)}`}
+              </p>
+              <p className="text-slate-600 text-xs">{runwayYears >= 100 ? '' : 'years'}</p>
             </div>
           </div>
-          <p className="text-slate-500 text-center mt-4 text-xs">
-            Last updated {getTimeSinceEntry(latestEntry.timestamp)} at {primaryProjection.scenario.currentRate}% annual return
-          </p>
         </div>
       ) : (
-        <div className="mb-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700 text-center">
+        <div className="mb-6 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700 text-center">
           <p className="text-slate-400 mb-4">No net worth data yet.</p>
           <button
-            onClick={() => setActiveTab('entries')}
+            onClick={() => setActiveTab('history')}
             className="text-emerald-400 hover:text-emerald-300 underline"
           >
             Add your first entry
@@ -349,148 +348,242 @@ function DashboardTab({
         </div>
       )}
 
-      {/* Metrics Section */}
+      {/* CARD 2: Your Progress (Journey to FI) */}
       {latestEntry && primaryProjection && trackedValues && (
-        <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
-          <h2 className="text-lg font-semibold text-slate-300 mb-4">
-            Metrics
-          </h2>
-          
-          {/* Growth/Appreciation Rates */}
-          <div className="mb-6">
-            <h3 className="text-sm font-medium text-slate-400 mb-3">
-              Appreciation Rate
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">Per Second</p>
-                <TrackedValue 
-                  value={trackedValues.growthPerSecond}
-                  decimals={6}
-                  className="text-emerald-400 font-mono"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">Per Minute</p>
-                <TrackedValue 
-                  value={trackedValues.growthPerMinute}
-                  decimals={4}
-                  className="text-emerald-400 font-mono"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">Per Hour</p>
-                <TrackedValue 
-                  value={trackedValues.growthPerHour}
-                  className="text-emerald-400 font-mono"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">Per Day</p>
-                <TrackedValue 
-                  value={trackedValues.growthPerDay}
-                  className="text-emerald-400 font-mono"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3 col-span-2 sm:col-span-2">
-                <p className="text-slate-500 text-xs">Per Year</p>
-                <TrackedValue 
-                  value={trackedValues.growthPerYear}
-                  className="text-emerald-400 font-mono text-lg"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Safe Withdrawal Rate */}
-          <div>
-            <h3 className="text-sm font-medium text-slate-400 mb-3">
-              Safe Withdrawal Rate <span className="text-slate-500">({primaryProjection.scenario.swr}%)</span>
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">Annual</p>
-                <TrackedValue 
-                  value={trackedValues.annualSwr}
-                  className="text-amber-400 font-mono text-lg"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">Monthly</p>
-                <TrackedValue 
-                  value={trackedValues.monthlySwr}
-                  className="text-amber-400 font-mono text-lg"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Monthly Spending Budget */}
-          <div className="mt-6">
-            <h3 className="text-sm font-medium text-slate-400 mb-3">
-              Monthly Spending Budget
-            </h3>
-            <div className="bg-slate-900/50 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-slate-500 text-xs">Current Monthly Budget</p>
-                <TrackedValue 
-                  value={trackedValues.currentSpending}
-                  className="text-violet-400 font-mono text-2xl font-semibold"
-                />
-              </div>
-              <div className="text-xs space-y-2 pt-3 border-t border-slate-700">
-                <div className="flex justify-between text-slate-500">
-                  <span>Base budget (inflation-adjusted)</span>
-                  <span className="font-mono text-amber-400">{formatCurrency(primaryProjection.levelInfo.baseBudgetInflationAdjusted, 0)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>+ {primaryProjection.scenario.spendingGrowthRate}% of net worth / 12</span>
-                  <span className="font-mono text-emerald-400">+{formatCurrency(primaryProjection.levelInfo.netWorthPortion, 0)}</span>
-                </div>
-              </div>
-              <p className="text-slate-600 text-xs mt-3">
-                Your spending allowance grows as your net worth increases
-              </p>
-            </div>
-          </div>
-
-          {/* FI Progress */}
-          <div className="mt-6">
-            <h3 className="text-sm font-medium text-slate-400 mb-3">
-              Financial Independence
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">FI Target</p>
-                <TrackedValue 
-                  value={trackedValues.fiTarget}
-                  className="text-violet-400 font-mono text-lg"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">FI Progress</p>
-                <TrackedValue 
-                  value={trackedValues.fiProgress}
-                  showCurrency={false}
-                  formatter={(v) => `${v.toFixed(1)}%`}
-                  className="text-violet-400 font-mono text-lg"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* FI Milestones Section */}
-      {latestEntry && primaryProjection && (
-        <FiMilestonesCard primaryProjection={primaryProjection} />
+        <ProgressCard primaryProjection={primaryProjection} trackedValues={trackedValues} />
       )}
     </div>
   )
 }
 
 // ============================================================================
-// FI MILESTONES CARD
+// PROGRESS CARD (Consolidated FI Journey)
+// ============================================================================
+
+interface ProgressCardProps {
+  primaryProjection: ScenarioProjection;
+  trackedValues: TrackedDashboardValues;
+}
+
+function ProgressCard({ primaryProjection, trackedValues }: ProgressCardProps) {
+  const { fiMilestones, currentFiProgress, currentNetWorth, projections, scenario } = primaryProjection;
+  const [showAllMilestones, setShowAllMilestones] = useState(false);
+  const currentYear = new Date().getFullYear();
+  const currentFiTarget = projections[0]?.fiTarget ?? 0;
+  const currentMonthlySpend = projections[0]?.monthlySpend ?? 0;
+
+  // Get birth year from projections if available
+  const firstRow = projections[0];
+  const birthYear = firstRow?.age ? currentYear - firstRow.age : null;
+  const currentAge = birthYear ? currentYear - birthYear : null;
+  const retirementAge = 65;
+
+  // Calculate coast and retirement info for key metrics
+  const trackedCoast = useMemo(() => {
+    return createTrackedCoastInfo(
+      currentNetWorth.total,
+      currentMonthlySpend,
+      currentAge,
+      retirementAge,
+      scenario.currentRate,
+      scenario.inflationRate,
+      scenario.swr
+    );
+  }, [currentNetWorth.total, currentMonthlySpend, currentAge, scenario]);
+
+  const trackedRetirementIncome = useMemo(() => {
+    return createTrackedRetirementIncomeInfo(
+      currentNetWorth.total,
+      currentAge,
+      retirementAge,
+      scenario.currentRate,
+      scenario.inflationRate,
+      scenario.swr
+    );
+  }, [currentNetWorth.total, currentAge, retirementAge, scenario.currentRate, scenario.inflationRate, scenario.swr]);
+
+  // Create unified milestone list (all types combined, sorted)
+  const unifiedMilestones = useMemo(() => {
+    const achieved = fiMilestones.milestones.filter(m => m.isAchieved).sort((a, b) => (a.year || 0) - (b.year || 0));
+    const upcoming = fiMilestones.milestones.filter(m => !m.isAchieved).sort((a, b) => (a.year || 9999) - (b.year || 9999));
+    return { achieved, upcoming, total: fiMilestones.milestones.length };
+  }, [fiMilestones]);
+
+  return (
+    <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 shadow-xl border border-slate-700">
+      <h2 className="text-lg font-semibold text-slate-300 mb-4">Your FI Journey</h2>
+
+      {/* Progress bar with milestone markers */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-slate-400 text-sm">FI Progress</span>
+          <span className="text-emerald-400 font-mono text-lg font-semibold">{currentFiProgress.toFixed(1)}%</span>
+        </div>
+        <div className="relative">
+          <div className="h-4 bg-slate-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500"
+              style={{ width: `${Math.min(100, currentFiProgress)}%` }}
+            />
+          </div>
+          {/* Milestone markers */}
+          <div className="absolute top-0 left-0 right-0 h-4 flex items-center pointer-events-none">
+            {[25, 50, 75, 100].map(percent => (
+              <div
+                key={percent}
+                className={`absolute h-4 w-0.5 ${currentFiProgress >= percent ? 'bg-emerald-300' : 'bg-slate-600'}`}
+                style={{ left: `${percent}%` }}
+                title={`${percent}% FI`}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="flex justify-between mt-1 text-xs text-slate-500">
+          <span>0%</span>
+          <span>25%</span>
+          <span>50%</span>
+          <span>75%</span>
+          <span>100%</span>
+        </div>
+      </div>
+
+      {/* Next milestone highlight */}
+      {fiMilestones.nextMilestone && (
+        <div className="bg-slate-900/50 rounded-lg p-3 mb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-slate-200 text-sm font-medium">
+                🎯 Next: {fiMilestones.nextMilestone.shortName}
+              </p>
+              <p className="text-slate-500 text-xs">
+                {fiMilestones.nextMilestone.yearsFromNow === 0
+                  ? 'This year'
+                  : fiMilestones.nextMilestone.yearsFromNow === 1
+                    ? 'Next year'
+                    : `In ${fiMilestones.nextMilestone.yearsFromNow} years`}
+                {fiMilestones.nextMilestone.age && ` (age ${fiMilestones.nextMilestone.age})`}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-amber-400 font-mono text-sm">{formatCurrency(fiMilestones.amountToNext, 0)}</p>
+              <p className="text-slate-500 text-xs">to go</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3 key metrics: Coast %, Retirement Income, FI Target */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+          <p className="text-slate-500 text-xs mb-1">Coast to</p>
+          <TrackedValue
+            value={trackedCoast.coastFiPercent}
+            showCurrency={false}
+            formatter={(v) => `${v.toFixed(0)}%`}
+            className="text-violet-400 font-mono text-lg font-semibold"
+          />
+          <p className="text-slate-600 text-xs">FI by 65</p>
+        </div>
+        <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+          <p className="text-slate-500 text-xs mb-1">Ret. Income</p>
+          <TrackedValue
+            value={trackedRetirementIncome.projectedRealAnnualIncome}
+            showCurrency={true}
+            formatter={(v) => `$${Math.round(v / 1000)}k`}
+            className="text-amber-400 font-mono text-lg font-semibold"
+          />
+          <p className="text-slate-600 text-xs">/yr (today's $)</p>
+        </div>
+        <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+          <p className="text-slate-500 text-xs mb-1">FI Target</p>
+          <TrackedValue
+            value={trackedValues.fiTarget}
+            formatter={(v) => `$${(v / 1000000).toFixed(2)}M`}
+            className="text-sky-400 font-mono text-lg font-semibold"
+          />
+          <p className="text-slate-600 text-xs">&nbsp;</p>
+        </div>
+      </div>
+
+      {/* Expandable milestone list */}
+      <button
+        onClick={() => setShowAllMilestones(!showAllMilestones)}
+        className="w-full text-left bg-slate-900/30 rounded-lg p-3 hover:bg-slate-900/50 transition-colors"
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-slate-300 text-sm">
+            {showAllMilestones ? '▼' : '▶'} View all {unifiedMilestones.total} milestones ({unifiedMilestones.achieved.length} achieved)
+          </span>
+        </div>
+      </button>
+
+      {/* Milestone list (collapsed by default) */}
+      {showAllMilestones && (
+        <div className="mt-4 space-y-4">
+          {/* Achieved milestones */}
+          {unifiedMilestones.achieved.length > 0 && (
+            <div>
+              <h4 className="text-xs text-emerald-400 font-medium mb-2 uppercase tracking-wide">✓ Achieved</h4>
+              <div className="space-y-1">
+                {unifiedMilestones.achieved.map(milestone => (
+                  <div key={milestone.id} className="flex items-center justify-between text-sm py-1 px-2 rounded bg-emerald-900/20">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: milestone.color }} />
+                      <span className="text-emerald-300">{milestone.shortName}</span>
+                    </div>
+                    <span className="text-emerald-400 font-mono text-xs">
+                      {milestone.year}{milestone.age && ` (age ${milestone.age})`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upcoming milestones */}
+          {unifiedMilestones.upcoming.length > 0 && (
+            <div>
+              <h4 className="text-xs text-slate-400 font-medium mb-2 uppercase tracking-wide">⏳ Upcoming</h4>
+              <div className="space-y-1">
+                {unifiedMilestones.upcoming.slice(0, 10).map(milestone => {
+                  const amountNeeded = milestone.netWorthAtMilestone
+                    ? Math.max(0, milestone.netWorthAtMilestone - currentNetWorth.total)
+                    : 0;
+                  return (
+                    <div key={milestone.id} className="flex items-center justify-between text-sm py-1 px-2 rounded bg-slate-900/30">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full border border-slate-500" style={{ borderColor: milestone.color }} />
+                        <span className="text-slate-300">{milestone.shortName}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {amountNeeded > 0 && (
+                          <span className="text-amber-400/70 font-mono text-xs">
+                            {formatCurrency(amountNeeded, 0)} to go
+                          </span>
+                        )}
+                        <span className="text-slate-400 font-mono text-xs">
+                          {milestone.year || 'TBD'}{milestone.age && ` (age ${milestone.age})`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {unifiedMilestones.upcoming.length > 10 && (
+                  <p className="text-slate-500 text-xs text-center pt-2">
+                    +{unifiedMilestones.upcoming.length - 10} more milestones
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// LEGACY FI MILESTONES CARD (kept for reference, can be removed)
 // ============================================================================
 
 interface FiMilestonesCardProps {
@@ -502,13 +595,13 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
   const currentYear = new Date().getFullYear();
   const currentFiTarget = projections[0]?.fiTarget ?? 0;
   const currentMonthlySpend = projections[0]?.monthlySpend ?? 0;
-  
+
   // Get birth year from projections if available
   const firstRow = projections[0];
   const birthYear = firstRow?.age ? currentYear - firstRow.age : null;
   const currentAge = birthYear ? currentYear - birthYear : null;
   const retirementAge = 65;
-  
+
   // Calculate runway and coast info for context display
   const runwayAndCoastInfo = useMemo(() => {
     return calculateRunwayAndCoastInfo(
@@ -520,12 +613,12 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
       scenario.swr
     );
   }, [currentNetWorth.total, currentMonthlySpend, birthYear, scenario]);
-  
+
   // Create tracked runway values
   const trackedRunway = useMemo(() => {
     return createTrackedRunwayInfo(currentNetWorth.total, currentMonthlySpend);
   }, [currentNetWorth.total, currentMonthlySpend]);
-  
+
   // Create tracked coast values
   const trackedCoast = useMemo(() => {
     return createTrackedCoastInfo(
@@ -1178,10 +1271,10 @@ function MilestoneRow({ milestone, currentYear }: MilestoneRowProps) {
 }
 
 // ============================================================================
-// ENTRIES TAB
+// HISTORY TAB (formerly Entries)
 // ============================================================================
 
-interface EntriesTabProps {
+interface HistoryTabProps {
   entries: ReturnType<typeof useScenarios>['entries'];
   newAmount: string;
   setNewAmount: (value: string) => void;
@@ -1191,18 +1284,18 @@ interface EntriesTabProps {
   setActiveTab: (tab: Tab) => void;
 }
 
-function EntriesTab({
+function HistoryTab({
   entries,
   newAmount,
   setNewAmount,
   formatNetWorthInput,
   handleAddEntry,
   handleDeleteEntry,
-}: EntriesTabProps) {
+}: HistoryTabProps) {
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
-        Net Worth Entries
+        Net Worth History
       </h1>
       <p className="text-slate-400 text-center mb-10">
         Track changes to your net worth over time
@@ -2091,7 +2184,7 @@ function ProjectionsTab({
         <div className="text-center">
           <p className="text-slate-400 mb-4">No net worth data found.</p>
           <button
-            onClick={() => setActiveTab('entries')}
+            onClick={() => setActiveTab('history')}
             className="text-emerald-400 hover:text-emerald-300 underline"
           >
             Add your first entry
@@ -4142,16 +4235,65 @@ const DEFAULT_WIZARD_STATE: ScenarioWizardState = {
 
 interface ScenariosTabProps {
   scenariosHook: ReturnType<typeof useScenarios>;
+  latestEntry: ReturnType<typeof useScenarios>['latestEntry'];
+  projectionsView: 'table' | 'chart';
+  setProjectionsView: (view: 'table' | 'chart') => void;
 }
 
-function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
+function ScenariosTab({ scenariosHook, latestEntry, projectionsView, setProjectionsView }: ScenariosTabProps) {
   const [wizardStep, setWizardStep] = useState<WizardStep>('list');
   const [wizardState, setWizardState] = useState<ScenarioWizardState>(DEFAULT_WIZARD_STATE);
   const [editingScenarioId, setEditingScenarioId] = useState<string | null>(null);
   const [quickEditScenario, setQuickEditScenario] = useState<Scenario | null>(null);
+  const [showProjections, setShowProjections] = useState(true);
+  const currentYear = new Date().getFullYear();
 
   // Get current net worth for context
   const currentNetWorth = scenariosHook.scenarioProjections[0]?.currentNetWorth.total || 0;
+  const scenarioProjections = scenariosHook.scenarioProjections;
+  const primaryProjection = scenarioProjections[0] || null;
+
+  // Prepare comparison chart data (limited to 30 years)
+  const comparisonChartData = useMemo(() => {
+    if (!primaryProjection) return [];
+
+    const years = primaryProjection.projections
+      .filter((d): d is typeof d & { year: number } => typeof d.year === 'number')
+      .slice(0, 30)
+      .map(d => d.year);
+
+    return years.map(year => {
+      const dataPoint: Record<string, number | string> = { year };
+
+      scenarioProjections.forEach(sp => {
+        const row = sp.projections.find(p => p.year === year);
+        dataPoint[sp.scenario.name] = Math.round(row?.netWorth || 0);
+      });
+
+      return dataPoint;
+    });
+  }, [primaryProjection, scenarioProjections]);
+
+  // Prepare FI progress comparison chart data (limited to 30 years)
+  const fiProgressChartData = useMemo(() => {
+    if (!primaryProjection) return [];
+
+    const years = primaryProjection.projections
+      .filter((d): d is typeof d & { year: number } => typeof d.year === 'number')
+      .slice(0, 30)
+      .map(d => d.year);
+
+    return years.map(year => {
+      const dataPoint: Record<string, number | string> = { year };
+
+      scenarioProjections.forEach(sp => {
+        const row = sp.projections.find(p => p.year === year);
+        dataPoint[sp.scenario.name] = Number((row?.fiProgress || 0).toFixed(1));
+      });
+
+      return dataPoint;
+    });
+  }, [primaryProjection, scenarioProjections]);
 
   // Calculate income breakdown in real-time as user fills wizard
   // Uses total unlocked spending (base + net worth portion)
@@ -4359,6 +4501,83 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Projections Section (inline) */}
+        {latestEntry && scenarioProjections.length > 0 && (
+          <div className="mt-8 bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-200">Projections</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowProjections(!showProjections)}
+                  className="text-sm text-slate-400 hover:text-slate-200"
+                >
+                  {showProjections ? 'Hide' : 'Show'}
+                </button>
+                {showProjections && (
+                  <div className="flex rounded-lg border border-slate-600 overflow-hidden">
+                    <button
+                      onClick={() => setProjectionsView('table')}
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                        projectionsView === 'table'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Table
+                    </button>
+                    <button
+                      onClick={() => setProjectionsView('chart')}
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                        projectionsView === 'chart'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'bg-slate-700/50 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Chart
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Scenario chips */}
+            {showProjections && (
+              <>
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                  {scenarioProjections.map(sp => (
+                    <div
+                      key={sp.scenario._id}
+                      className="flex items-center gap-2 px-2 py-1 rounded-full text-xs"
+                      style={{ backgroundColor: `${sp.scenario.color}20`, color: sp.scenario.color }}
+                    >
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: sp.scenario.color }} />
+                      {sp.scenario.name}
+                      {sp.fiYear && (
+                        <span className="text-slate-400">FI: {sp.fiYear}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Projections Content */}
+                {projectionsView === 'table' ? (
+                  <ProjectionsTable
+                    scenarioProjections={scenarioProjections}
+                    birthDate={scenariosHook.profile.birthDate}
+                  />
+                ) : (
+                  <ProjectionsChart
+                    scenarioProjections={scenarioProjections}
+                    comparisonChartData={comparisonChartData}
+                    fiProgressChartData={fiProgressChartData}
+                    currentYear={currentYear}
+                  />
+                )}
+              </>
+            )}
           </div>
         )}
 
