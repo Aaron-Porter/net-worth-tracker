@@ -19,6 +19,7 @@ export interface UserSettings {
   baseMonthlyBudget: number;  // Base spending floor for levels system
   spendingGrowthRate: number; // % of net worth allowed as additional spending
   incomeGrowthRate?: number;  // Annual income growth rate (e.g., 3 for 3%) - optional
+  scenarioStartDate?: number; // Timestamp when scenario started (for continuous inflation tracking)
 }
 
 export interface NetWorthEntry {
@@ -1453,17 +1454,32 @@ export function calculateLevelInfo(
 /**
  * Calculate spending based on the levels system for a given net worth
  * This accounts for both the base budget (inflation-adjusted) and net worth portion
+ *
+ * Inflation is calculated from the scenario's start date (if provided) to give
+ * continuous inflation tracking. The yearsFromNow parameter represents years
+ * into the future from today; the total inflation years = yearsElapsedSinceStart + yearsFromNow
  */
 export function calculateLevelBasedSpending(
   netWorth: number,
   settings: UserSettings,
   yearsFromNow: number = 0
 ): number {
-  const { baseMonthlyBudget, spendingGrowthRate, inflationRate } = settings;
-  
-  // Adjust base for inflation
-  const inflatedBase = baseMonthlyBudget * Math.pow(1 + inflationRate / 100, yearsFromNow);
-  
+  const { baseMonthlyBudget, spendingGrowthRate, inflationRate, scenarioStartDate } = settings;
+
+  // Calculate years elapsed since scenario start date (if provided)
+  let yearsElapsedSinceStart = 0;
+  if (scenarioStartDate) {
+    const now = Date.now();
+    const msElapsed = now - scenarioStartDate;
+    yearsElapsedSinceStart = msElapsed / (1000 * 60 * 60 * 24 * 365.25);
+  }
+
+  // Total inflation years = time already elapsed + future projection years
+  const totalInflationYears = yearsElapsedSinceStart + yearsFromNow;
+
+  // Adjust base for inflation from the scenario start date
+  const inflatedBase = baseMonthlyBudget * Math.pow(1 + inflationRate / 100, totalInflationYears);
+
   // Add net worth portion (annual rate / 12 for monthly)
   return inflatedBase + (netWorth * (spendingGrowthRate / 100) / 12);
 }

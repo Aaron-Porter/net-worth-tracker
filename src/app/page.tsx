@@ -4121,6 +4121,7 @@ interface ScenarioWizardState {
   currentRate: string;
   swr: string;
   inflationRate: string;
+  startDate: string; // YYYY-MM-DD format - when inflation tracking started
 }
 
 const DEFAULT_WIZARD_STATE: ScenarioWizardState = {
@@ -4138,6 +4139,7 @@ const DEFAULT_WIZARD_STATE: ScenarioWizardState = {
   currentRate: '7',
   swr: '4',
   inflationRate: '3',
+  startDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
 };
 
 interface ScenariosTabProps {
@@ -4192,6 +4194,10 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
   };
 
   const startEditingScenario = (scenario: Scenario) => {
+    // Convert timestamp to YYYY-MM-DD, fallback to createdAt if startDate not set
+    const startTimestamp = scenario.startDate ?? scenario.createdAt;
+    const startDateStr = new Date(startTimestamp).toISOString().split('T')[0];
+
     setWizardState({
       name: scenario.name,
       grossIncome: scenario.grossIncome?.toString() || '',
@@ -4207,6 +4213,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
       currentRate: scenario.currentRate.toString(),
       swr: scenario.swr.toString(),
       inflationRate: scenario.inflationRate.toString(),
+      startDate: startDateStr,
     });
     setEditingScenarioId(scenario._id);
     setWizardStep('income');
@@ -4222,6 +4229,11 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
     const postTaxSavings = incomeBreakdown?.postTaxSavingsAvailable || 0;
     const totalYearlySavings = totalPreTax + postTaxSavings;
 
+    // Convert start date string to timestamp
+    const startDateTimestamp = wizardState.startDate
+      ? new Date(wizardState.startDate).getTime()
+      : Date.now();
+
     const scenarioData = {
       name: wizardState.name.trim() || `Scenario ${new Date().toLocaleDateString()}`,
       currentRate: parseFloat(wizardState.currentRate) || 7,
@@ -4230,6 +4242,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
       inflationRate: parseFloat(wizardState.inflationRate) || 3,
       baseMonthlyBudget: parseFloat(wizardState.baseMonthlyBudget) || 3000,
       spendingGrowthRate: parseFloat(wizardState.spendingGrowthRate) || 2,
+      startDate: startDateTimestamp,
       grossIncome: parseFloat(wizardState.grossIncome) || undefined,
       incomeGrowthRate: parseFloat(wizardState.incomeGrowthRate) || undefined,
       filingStatus: wizardState.filingStatus,
@@ -4391,6 +4404,10 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
     onSave: (updates: any) => Promise<void>;
     currentNetWorth: number;
   }) {
+    // Convert timestamp to YYYY-MM-DD, fallback to createdAt if startDate not set
+    const startTimestamp = scenario.startDate ?? scenario.createdAt;
+    const startDateStr = new Date(startTimestamp).toISOString().split('T')[0];
+
     const [form, setForm] = useState({
       name: scenario.name,
       grossIncome: scenario.grossIncome?.toString() || '',
@@ -4405,6 +4422,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
       currentRate: scenario.currentRate.toString(),
       swr: scenario.swr.toString(),
       inflationRate: scenario.inflationRate.toString(),
+      startDate: startDateStr,
     });
     const [saving, setSaving] = useState(false);
 
@@ -4440,7 +4458,12 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                             (parseFloat(form.preTaxIRA) || 0) +
                             (parseFloat(form.preTaxHSA) || 0);
         const postTaxSavings = liveBreakdown?.postTaxSavingsAvailable || 0;
-        
+
+        // Convert start date string to timestamp
+        const startDateTimestamp = form.startDate
+          ? new Date(form.startDate).getTime()
+          : Date.now();
+
         await onSave({
           name: form.name,
           grossIncome: parseFloat(form.grossIncome) || undefined,
@@ -4455,6 +4478,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
           currentRate: parseFloat(form.currentRate) || 7,
           swr: parseFloat(form.swr) || 4,
           inflationRate: parseFloat(form.inflationRate) || 3,
+          startDate: startDateTimestamp,
           yearlyContribution: totalPreTax + postTaxSavings,
           effectiveTaxRate: liveBreakdown?.taxes.effectiveTotalRate,
         });
@@ -4570,7 +4594,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             {/* Investment Section */}
             <div className="bg-slate-900/30 rounded-xl p-4 border border-slate-700">
               <h3 className="text-sm font-semibold text-sky-400 mb-4 uppercase tracking-wide">Investment Assumptions</h3>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-4 mb-4">
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">Expected Return %</label>
                   <input type="number" value={form.currentRate} onChange={(e) => setForm(f => ({ ...f, currentRate: e.target.value }))} placeholder="7" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500" />
@@ -4583,6 +4607,11 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                   <label className="block text-xs text-slate-400 mb-1">Inflation %</label>
                   <input type="number" value={form.inflationRate} onChange={(e) => setForm(f => ({ ...f, inflationRate: e.target.value }))} placeholder="3" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Scenario Start Date</label>
+                <input type="date" value={form.startDate} onChange={(e) => setForm(f => ({ ...f, startDate: e.target.value }))} className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                <p className="mt-1 text-xs text-slate-500">Inflation is calculated from this date</p>
               </div>
             </div>
 
@@ -4981,6 +5010,11 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
               <label className="block text-sm font-medium text-slate-300 mb-2">Expected Inflation Rate (%)</label>
               <input type="number" value={wizardState.inflationRate} onChange={(e) => setWizardState(s => ({ ...s, inflationRate: e.target.value }))} placeholder="3" step="0.5" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+            </div>
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Scenario Start Date</label>
+              <input type="date" value={wizardState.startDate} onChange={(e) => setWizardState(s => ({ ...s, startDate: e.target.value }))} className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              <p className="mt-2 text-xs text-slate-500">Inflation adjustments are calculated from this date. Your base spending budget represents costs as of this date.</p>
             </div>
           </div>
           <WizardNav />

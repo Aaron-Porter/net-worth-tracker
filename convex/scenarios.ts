@@ -136,6 +136,7 @@ export const create = mutation({
     inflationRate: v.number(),
     baseMonthlyBudget: v.number(),
     spendingGrowthRate: v.number(),
+    startDate: v.optional(v.number()), // When this scenario started (for inflation calculations)
     isSelected: v.optional(v.boolean()),
     // Income & tax fields
     grossIncome: v.optional(v.number()),
@@ -181,6 +182,7 @@ export const create = mutation({
       inflationRate: args.inflationRate,
       baseMonthlyBudget: args.baseMonthlyBudget,
       spendingGrowthRate: args.spendingGrowthRate,
+      startDate: args.startDate ?? now, // Default to creation time if not specified
       grossIncome: args.grossIncome,
       incomeGrowthRate: args.incomeGrowthRate,
       filingStatus: args.filingStatus,
@@ -229,6 +231,7 @@ export const createDefault = mutation({
       inflationRate: DEFAULT_SCENARIO.inflationRate,
       baseMonthlyBudget: DEFAULT_SCENARIO.baseMonthlyBudget,
       spendingGrowthRate: DEFAULT_SCENARIO.spendingGrowthRate,
+      startDate: now, // Start tracking inflation from now
       grossIncome: DEFAULT_SCENARIO.grossIncome,
       filingStatus: DEFAULT_SCENARIO.filingStatus,
       stateCode: DEFAULT_SCENARIO.stateCode,
@@ -256,6 +259,7 @@ export const update = mutation({
     inflationRate: v.optional(v.number()),
     baseMonthlyBudget: v.optional(v.number()),
     spendingGrowthRate: v.optional(v.number()),
+    startDate: v.optional(v.number()),
     grossIncome: v.optional(v.number()),
     incomeGrowthRate: v.optional(v.number()),
     filingStatus: v.optional(v.string()),
@@ -377,6 +381,7 @@ export const duplicate = mutation({
       inflationRate: scenario.inflationRate,
       baseMonthlyBudget: scenario.baseMonthlyBudget,
       spendingGrowthRate: scenario.spendingGrowthRate,
+      startDate: scenario.startDate ?? scenario.createdAt, // Copy start date, or use original creation time
       grossIncome: scenario.grossIncome,
       incomeGrowthRate: scenario.incomeGrowthRate,
       filingStatus: scenario.filingStatus,

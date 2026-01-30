@@ -48,6 +48,7 @@ export interface Scenario {
   inflationRate: number;
   baseMonthlyBudget: number;
   spendingGrowthRate: number;
+  startDate?: number; // When this scenario started (for inflation calculations)
   // Income & tax fields
   grossIncome?: number;
   incomeGrowthRate?: number;
@@ -129,6 +130,7 @@ interface CreateScenarioData {
   inflationRate: number;
   baseMonthlyBudget: number;
   spendingGrowthRate: number;
+  startDate?: number;
   isSelected?: boolean;
   // Income & tax fields
   grossIncome?: number;
@@ -153,6 +155,7 @@ interface UpdateScenarioData {
   inflationRate?: number;
   baseMonthlyBudget?: number;
   spendingGrowthRate?: number;
+  startDate?: number;
   // Income & tax fields
   grossIncome?: number;
   incomeGrowthRate?: number;
@@ -269,6 +272,7 @@ export function useScenarios(): UseScenariosReturn {
         baseMonthlyBudget: scenario.baseMonthlyBudget,
         spendingGrowthRate: scenario.spendingGrowthRate,
         incomeGrowthRate: scenario.incomeGrowthRate,
+        scenarioStartDate: scenario.startDate ?? scenario.createdAt, // For continuous inflation tracking
       };
       
       // Calculate real-time net worth
