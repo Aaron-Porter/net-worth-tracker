@@ -43,6 +43,8 @@ export interface Scenario {
   isSelected: boolean;
   order?: number; // Display order (0-based)
   currentRate: number;
+  cashCheckingRate?: number; // Rate for checking accounts (default: 0%)
+  cashSavingsRate?: number;  // Rate for savings/HYSA (default: 4%)
   swr: number;
   yearlyContribution: number;
   inflationRate: number;
@@ -125,6 +127,8 @@ interface CreateScenarioData {
   description?: string;
   color?: string;
   currentRate: number;
+  cashCheckingRate?: number;
+  cashSavingsRate?: number;
   swr: number;
   yearlyContribution: number;
   inflationRate: number;
@@ -150,6 +154,8 @@ interface UpdateScenarioData {
   color?: string;
   isSelected?: boolean;
   currentRate?: number;
+  cashCheckingRate?: number;
+  cashSavingsRate?: number;
   swr?: number;
   yearlyContribution?: number;
   inflationRate?: number;
@@ -249,6 +255,9 @@ export function useScenarios(): UseScenariosReturn {
       userId: e.userId,
       amount: e.amount,
       timestamp: e.timestamp,
+      cashChecking: e.cashChecking,
+      cashSavings: e.cashSavings,
+      investments: e.investments,
     })),
     [rawEntries]
   );
@@ -264,6 +273,8 @@ export function useScenarios(): UseScenariosReturn {
       // monthlySpend is set to 0 as we use level-based spending from baseMonthlyBudget + spendingGrowthRate
       const scenarioSettings: UserSettings = {
         currentRate: scenario.currentRate,
+        cashCheckingRate: scenario.cashCheckingRate,
+        cashSavingsRate: scenario.cashSavingsRate,
         swr: scenario.swr,
         yearlyContribution: scenario.yearlyContribution,
         birthDate: localProfile.birthDate,
@@ -278,8 +289,13 @@ export function useScenarios(): UseScenariosReturn {
       // Calculate real-time net worth
       const currentNetWorth = calculateRealTimeNetWorth(latestEntry, scenarioSettings, false);
       
-      // Calculate growth rates
-      const growthRates = calculateGrowthRates(currentNetWorth.total, scenarioSettings, false);
+      // Calculate growth rates with asset breakdown if available
+      const assetBreakdown = latestEntry ? {
+        cashChecking: latestEntry.cashChecking,
+        cashSavings: latestEntry.cashSavings,
+        investments: latestEntry.investments,
+      } : undefined;
+      const growthRates = calculateGrowthRates(currentNetWorth.total, scenarioSettings, false, assetBreakdown);
 
       // Generate dynamic projections first if income data is available
       // These will be used to provide tax-aware savings calculations
