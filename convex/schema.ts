@@ -34,6 +34,7 @@ export default defineSchema({
     // Spending assumptions (for levels system)
     baseMonthlyBudget: v.number(), // Floor spending for levels system
     spendingGrowthRate: v.number(), // % of net worth per year for additional spending
+    startDate: v.optional(v.number()), // When this scenario started (for inflation calculations) - defaults to createdAt
     
     // Income & Tax (for guided scenario builder)
     grossIncome: v.optional(v.number()), // Annual gross income
