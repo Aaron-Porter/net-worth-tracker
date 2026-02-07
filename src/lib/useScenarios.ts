@@ -339,7 +339,7 @@ export function useScenarios(): UseScenariosReturn {
         : null;
 
       // Calculate FI milestones along the journey
-      const fiMilestones = calculateFiMilestones(projections, scenarioSettings, birthYear);
+      const fiMilestones = calculateFiMilestones(projections, scenarioSettings, birthYear, currentNetWorth.total);
 
       // Generate monthly projections for more granular spending tracking
       // Spending updates each month based on net worth (not just yearly)

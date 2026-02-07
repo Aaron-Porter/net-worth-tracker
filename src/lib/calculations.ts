@@ -1491,7 +1491,8 @@ export function calculateLevelBasedSpending(
 export function calculateFiMilestones(
   projections: ProjectionRow[],
   settings: UserSettings,
-  birthYear: number | null
+  birthYear: number | null,
+  actualCurrentNetWorth?: number
 ): FiMilestonesInfo {
   if (!projections.length) {
     return {
@@ -1505,10 +1506,11 @@ export function calculateFiMilestones(
   
   const currentYear = new Date().getFullYear();
   const currentRow = projections[0];
-  const currentNetWorth = currentRow.netWorth;
-  const currentFiProgress = currentRow.fiProgress;
+  // Use actual current net worth when provided (projections[0].netWorth is end-of-year)
+  const currentNetWorth = actualCurrentNetWorth ?? currentRow.netWorth;
   const currentMonthlySpend = currentRow.monthlySpend;
   const currentFiTarget = currentRow.fiTarget;
+  const currentFiProgress = currentFiTarget > 0 ? (currentNetWorth / currentFiTarget) * 100 : 0;
   
   const milestones: FiMilestone[] = [];
   
