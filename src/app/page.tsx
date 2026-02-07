@@ -1044,7 +1044,7 @@ function TrackedMilestoneRow({
         <div className="mt-2 text-xs text-slate-400 pl-6 space-y-2">
           <p>{milestone.description}</p>
 
-          {/* Coast milestone math breakdown */}
+          {/* Coast milestone: current coast % with detailed math in tooltip */}
           {milestone.type === 'coast' && (() => {
             const yearsToRetirement = currentAge !== null
               ? Math.max(0, retirementAge - currentAge)
@@ -1061,52 +1061,57 @@ function TrackedMilestoneRow({
             const targetCurrentNW = growthMultiplier > 0 ? targetFutureNW / growthMultiplier : targetFutureNW;
 
             return (
-              <div className="bg-slate-800/50 rounded p-3 space-y-2 font-mono text-[11px]">
-                <p className="text-slate-500 font-sans font-medium mb-1">How this is calculated:</p>
-
-                <div className="space-y-1.5">
-                  <p className="text-slate-500">
-                    <span className="text-slate-400">1.</span> Your net worth grows at {scenario.currentRate}% for {yearsToRetirement} years:
-                  </p>
-                  <p className="pl-3 text-emerald-400/80">
-                    {formatCurrency(currentNetWorth, 0)} x (1 + {returnRate.toFixed(4)})^{yearsToRetirement} = {formatCurrency(futureNW, 0)}
-                  </p>
-
-                  <p className="text-slate-500">
-                    <span className="text-slate-400">2.</span> Your spending inflates at {scenario.inflationRate}% for {yearsToRetirement} years:
-                  </p>
-                  <p className="pl-3 text-amber-400/80">
-                    {formatCurrency(currentMonthlySpend, 0)}/mo x (1 + {inflation.toFixed(4)})^{yearsToRetirement} = {formatCurrency(futureMonthlySpend, 0)}/mo
-                  </p>
-
-                  <p className="text-slate-500">
-                    <span className="text-slate-400">3.</span> Future FI target = annual spending / SWR:
-                  </p>
-                  <p className="pl-3 text-violet-400/80">
-                    ({formatCurrency(futureMonthlySpend, 0)} x 12) / {scenario.swr}% = {formatCurrency(futureFiTarget, 0)}
-                  </p>
-
-                  <p className="text-slate-500">
-                    <span className="text-slate-400">4.</span> Coast FI % = future net worth / future FI target:
-                  </p>
-                  <p className="pl-3 text-violet-400/80">
-                    {formatCurrency(futureNW, 0)} / {formatCurrency(futureFiTarget, 0)} = <span className="text-violet-300 font-semibold">{currentCoastPct.toFixed(1)}%</span>
-                  </p>
-                </div>
-
-                <div className="border-t border-slate-700 pt-2 mt-2">
-                  <p className="text-slate-500">
-                    To coast to {milestone.targetValue}%, you need {formatCurrency(targetCurrentNW, 0)} today:
-                  </p>
-                  <p className="pl-3 text-slate-400">
-                    {formatCurrency(futureFiTarget, 0)} x {milestone.targetValue}% / {growthMultiplier.toFixed(2)}x = {formatCurrency(targetCurrentNW, 0)}
-                  </p>
-                  {targetCurrentNW > currentNetWorth && (
-                    <p className="pl-3 text-amber-400/80 mt-1">
-                      Still need: {formatCurrency(targetCurrentNW - currentNetWorth, 0)}
-                    </p>
-                  )}
-                </div>
+              <div className="bg-slate-800/50 rounded p-2">
+                <span className="text-slate-500">Current coast: </span>
+                <SimpleTrackedValue
+                  value={currentCoastPct}
+                  name={`Coast FI % (toward ${milestone.shortName})`}
+                  description={`If you stopped contributing today, your investments would grow to ${currentCoastPct.toFixed(1)}% of your FI target by age ${retirementAge}. This milestone requires ${milestone.targetValue}%.`}
+                  formula="(Future NW ÷ Future FI Target) × 100"
+                  inputs={[
+                    { name: 'Current Net Worth', value: currentNetWorth, unit: '$' },
+                    { name: 'Current Monthly Spend', value: currentMonthlySpend, unit: '$' },
+                    { name: 'Years to Retirement', value: yearsToRetirement, unit: 'years' },
+                    { name: 'Annual Return Rate', value: `${scenario.currentRate}%` },
+                    { name: 'Inflation Rate', value: `${scenario.inflationRate}%` },
+                    { name: 'SWR', value: `${scenario.swr}%` },
+                  ]}
+                  steps={[
+                    {
+                      description: `Compound net worth at ${scenario.currentRate}% for ${yearsToRetirement} years`,
+                      formula: `${formatCurrency(currentNetWorth, 0)} × (1 + ${returnRate.toFixed(4)})^${yearsToRetirement}`,
+                      result: futureNW,
+                      unit: '$',
+                    },
+                    {
+                      description: `Inflate spending at ${scenario.inflationRate}% for ${yearsToRetirement} years`,
+                      formula: `${formatCurrency(currentMonthlySpend, 0)}/mo × (1 + ${inflation.toFixed(4)})^${yearsToRetirement}`,
+                      result: futureMonthlySpend,
+                      unit: '$',
+                    },
+                    {
+                      description: 'Future FI target (annual spending ÷ SWR)',
+                      formula: `(${formatCurrency(futureMonthlySpend, 0)} × 12) ÷ ${scenario.swr}%`,
+                      result: futureFiTarget,
+                      unit: '$',
+                    },
+                    {
+                      description: 'Coast FI % (future NW ÷ future FI target)',
+                      formula: `(${formatCurrency(futureNW, 0)} ÷ ${formatCurrency(futureFiTarget, 0)}) × 100`,
+                      result: currentCoastPct,
+                      unit: '%',
+                    },
+                    {
+                      description: `NW needed today to coast to ${milestone.targetValue}%`,
+                      formula: `${formatCurrency(futureFiTarget, 0)} × ${milestone.targetValue}% ÷ ${growthMultiplier.toFixed(2)}x`,
+                      result: targetCurrentNW,
+                      unit: '$',
+                    },
+                  ]}
+                  formatAs="percent"
+                  decimals={1}
+                  className="text-violet-400"
+                />
               </div>
             );
           })()}
