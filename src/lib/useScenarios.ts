@@ -28,6 +28,8 @@ import {
   FiMilestoneDefinition,
   FI_MILESTONE_DEFINITIONS,
   calculateFiMilestones,
+  calculateFiTarget,
+  calculateLevelBasedSpending,
 } from './calculations';
 
 // Re-export FI milestone types for convenience
@@ -356,7 +358,11 @@ export function useScenarios(): UseScenariosReturn {
         fiYear: typeof fiRow?.year === 'number' ? fiRow.year : null,
         fiAge: fiRow?.age ?? null,
         crossoverYear: typeof crossoverRow?.year === 'number' ? crossoverRow.year : null,
-        currentFiProgress: firstRow?.fiProgress ?? 0,
+        currentFiProgress: (() => {
+          const currentSpendForFi = calculateLevelBasedSpending(currentNetWorth.total, scenarioSettings, 0);
+          const currentFiTarget = calculateFiTarget(currentSpendForFi, scenarioSettings.swr);
+          return currentFiTarget > 0 ? (currentNetWorth.total / currentFiTarget) * 100 : 0;
+        })(),
         currentMonthlySwr: firstRow?.monthlySwr ?? 0,
         dynamicProjections,
         hasDynamicIncome,
