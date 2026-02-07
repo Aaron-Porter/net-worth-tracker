@@ -353,7 +353,7 @@ function DashboardTab({
       {latestEntry && primaryProjection && trackedValues && (
         <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
           <h2 className="text-lg font-semibold text-slate-300 mb-4">
-            Metrics
+            Current
           </h2>
           
           {/* Growth/Appreciation Rates */}
@@ -454,30 +454,6 @@ function DashboardTab({
             </div>
           </div>
 
-          {/* FI Progress */}
-          <div className="mt-6">
-            <h3 className="text-sm font-medium text-slate-400 mb-3">
-              Financial Independence
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">FI Target</p>
-                <TrackedValue 
-                  value={trackedValues.fiTarget}
-                  className="text-violet-400 font-mono text-lg"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">FI Progress</p>
-                <TrackedValue 
-                  value={trackedValues.fiProgress}
-                  showCurrency={false}
-                  formatter={(v) => `${v.toFixed(1)}%`}
-                  className="text-violet-400 font-mono text-lg"
-                />
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
@@ -1067,34 +1043,106 @@ function TrackedMilestoneRow({
       {showDescription && (
         <div className="mt-2 text-xs text-slate-400 pl-6 space-y-2">
           <p>{milestone.description}</p>
-          
+
+          {/* Coast milestone: current coast % with detailed math in tooltip */}
+          {milestone.type === 'coast' && (() => {
+            const yearsToRetirement = currentAge !== null
+              ? Math.max(0, retirementAge - currentAge)
+              : 30;
+            const returnRate = scenario.currentRate / 100;
+            const inflation = scenario.inflationRate / 100;
+            const growthMultiplier = Math.pow(1 + returnRate, yearsToRetirement);
+            const inflationMultiplier = Math.pow(1 + inflation, yearsToRetirement);
+            const futureNW = currentNetWorth * growthMultiplier;
+            const futureMonthlySpend = currentMonthlySpend * inflationMultiplier;
+            const futureFiTarget = (futureMonthlySpend * 12) / (scenario.swr / 100);
+            const currentCoastPct = futureFiTarget > 0 ? (futureNW / futureFiTarget) * 100 : 0;
+            const targetFutureNW = futureFiTarget * (milestone.targetValue / 100);
+            const targetCurrentNW = growthMultiplier > 0 ? targetFutureNW / growthMultiplier : targetFutureNW;
+
+            return (
+              <div className="bg-slate-800/50 rounded p-2">
+                <span className="text-slate-500">Current coast: </span>
+                <SimpleTrackedValue
+                  value={currentCoastPct}
+                  name={`Coast FI % (toward ${milestone.shortName})`}
+                  description={`If you stopped contributing today, your investments would grow to ${currentCoastPct.toFixed(1)}% of your FI target by age ${retirementAge}. This milestone requires ${milestone.targetValue}%.`}
+                  formula="(Future NW ÷ Future FI Target) × 100"
+                  inputs={[
+                    { name: 'Current Net Worth', value: currentNetWorth, unit: '$' },
+                    { name: 'Current Monthly Spend', value: currentMonthlySpend, unit: '$' },
+                    { name: 'Years to Retirement', value: yearsToRetirement, unit: 'years' },
+                    { name: 'Annual Return Rate', value: `${scenario.currentRate}%` },
+                    { name: 'Inflation Rate', value: `${scenario.inflationRate}%` },
+                    { name: 'SWR', value: `${scenario.swr}%` },
+                  ]}
+                  steps={[
+                    {
+                      description: `Compound net worth at ${scenario.currentRate}% for ${yearsToRetirement} years`,
+                      formula: `${formatCurrency(currentNetWorth, 0)} × (1 + ${returnRate.toFixed(4)})^${yearsToRetirement}`,
+                      result: futureNW,
+                      unit: '$',
+                    },
+                    {
+                      description: `Inflate spending at ${scenario.inflationRate}% for ${yearsToRetirement} years`,
+                      formula: `${formatCurrency(currentMonthlySpend, 0)}/mo × (1 + ${inflation.toFixed(4)})^${yearsToRetirement}`,
+                      result: futureMonthlySpend,
+                      unit: '$',
+                    },
+                    {
+                      description: 'Future FI target (annual spending ÷ SWR)',
+                      formula: `(${formatCurrency(futureMonthlySpend, 0)} × 12) ÷ ${scenario.swr}%`,
+                      result: futureFiTarget,
+                      unit: '$',
+                    },
+                    {
+                      description: 'Coast FI % (future NW ÷ future FI target)',
+                      formula: `(${formatCurrency(futureNW, 0)} ÷ ${formatCurrency(futureFiTarget, 0)}) × 100`,
+                      result: currentCoastPct,
+                      unit: '%',
+                    },
+                    {
+                      description: `NW needed today to coast to ${milestone.targetValue}%`,
+                      formula: `${formatCurrency(futureFiTarget, 0)} × ${milestone.targetValue}% ÷ ${growthMultiplier.toFixed(2)}x`,
+                      result: targetCurrentNW,
+                      unit: '$',
+                    },
+                  ]}
+                  formatAs="percent"
+                  decimals={1}
+                  className="text-violet-400"
+                />
+              </div>
+            );
+          })()}
+
           {/* Target value with full calculation trace */}
           {trackedInfo?.targetValue && (
             <div className="bg-slate-800/50 rounded p-2">
               <span className="text-slate-500">Target: </span>
-              <TrackedValue 
+              <TrackedValue
                 value={trackedInfo.targetValue}
                 className="text-slate-300"
               />
             </div>
           )}
-          
+
           {/* Amount needed if not achieved */}
           {!milestone.isAchieved && trackedInfo?.amountNeeded && (
             <div className="bg-slate-800/50 rounded p-2">
               <span className="text-slate-500">Amount needed: </span>
-              <TrackedValue 
+              <TrackedValue
                 value={trackedInfo.amountNeeded}
                 className="text-amber-400"
               />
             </div>
           )}
-          
+
           {/* Net worth at milestone */}
           {trackedInfo?.netWorthAtMilestone && (
             <div className="bg-slate-800/50 rounded p-2">
               <span className="text-slate-500">Net worth at milestone: </span>
-              <TrackedValue 
+              <TrackedValue
                 value={trackedInfo.netWorthAtMilestone}
                 className="text-slate-300"
               />
