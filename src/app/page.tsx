@@ -353,7 +353,7 @@ function DashboardTab({
       {latestEntry && primaryProjection && trackedValues && (
         <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
           <h2 className="text-lg font-semibold text-slate-300 mb-4">
-            Metrics
+            Current
           </h2>
           
           {/* Growth/Appreciation Rates */}
@@ -454,30 +454,6 @@ function DashboardTab({
             </div>
           </div>
 
-          {/* FI Progress */}
-          <div className="mt-6">
-            <h3 className="text-sm font-medium text-slate-400 mb-3">
-              Financial Independence
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">FI Target</p>
-                <TrackedValue 
-                  value={trackedValues.fiTarget}
-                  className="text-violet-400 font-mono text-lg"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">FI Progress</p>
-                <TrackedValue 
-                  value={trackedValues.fiProgress}
-                  showCurrency={false}
-                  formatter={(v) => `${v.toFixed(1)}%`}
-                  className="text-violet-400 font-mono text-lg"
-                />
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
