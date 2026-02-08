@@ -30,6 +30,9 @@ import {
   calculateFiMilestones,
   calculateFiTarget,
   calculateLevelBasedSpending,
+  getEntryAllocation,
+  getPerBucketRates,
+  getWeightedAverageRate,
 } from './calculations';
 
 // Re-export FI milestone types for convenience
@@ -61,6 +64,12 @@ export interface Scenario {
   preTaxHSA?: number;
   preTaxOther?: number;
   effectiveTaxRate?: number;
+  // Per-bucket growth rate overrides
+  cashRate?: number;
+  retirementRate?: number;
+  hsaRate?: number;
+  brokerageRate?: number;
+  debtRate?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -83,6 +92,8 @@ export interface ScenarioProjection {
   fiMilestones: FiMilestonesInfo;
   // Monthly projections (spending updates each month based on net worth)
   monthlyProjections: MonthlyProjectionRow[];
+  // Weighted average rate across asset buckets (equals currentRate if no breakdown)
+  effectiveRate: number;
 }
 
 export interface UserProfile {
@@ -144,6 +155,11 @@ interface CreateScenarioData {
   preTaxHSA?: number;
   preTaxOther?: number;
   effectiveTaxRate?: number;
+  cashRate?: number;
+  retirementRate?: number;
+  hsaRate?: number;
+  brokerageRate?: number;
+  debtRate?: number;
 }
 
 interface UpdateScenarioData {
@@ -168,6 +184,11 @@ interface UpdateScenarioData {
   preTaxHSA?: number;
   preTaxOther?: number;
   effectiveTaxRate?: number;
+  cashRate?: number;
+  retirementRate?: number;
+  hsaRate?: number;
+  brokerageRate?: number;
+  debtRate?: number;
 }
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -245,12 +266,17 @@ export function useScenarios(): UseScenariosReturn {
   }, [scenarios]);
   
   // Convert raw entries to typed entries
-  const entries: NetWorthEntry[] = useMemo(() => 
+  const entries: NetWorthEntry[] = useMemo(() =>
     rawEntries.map(e => ({
       _id: e._id,
       userId: e.userId,
       amount: e.amount,
       timestamp: e.timestamp,
+      cash: e.cash,
+      retirement: e.retirement,
+      hsa: e.hsa,
+      brokerage: e.brokerage,
+      debts: e.debts,
     })),
     [rawEntries]
   );
@@ -275,6 +301,14 @@ export function useScenarios(): UseScenariosReturn {
         spendingGrowthRate: scenario.spendingGrowthRate,
         incomeGrowthRate: scenario.incomeGrowthRate,
         scenarioStartDate: scenario.startDate ?? scenario.createdAt,
+        cashRate: scenario.cashRate,
+        retirementRate: scenario.retirementRate,
+        hsaRate: scenario.hsaRate,
+        brokerageRate: scenario.brokerageRate,
+        debtRate: scenario.debtRate,
+        preTax401k: scenario.preTax401k,
+        preTaxIRA: scenario.preTaxIRA,
+        preTaxHSA: scenario.preTaxHSA,
       };
 
       // Use entry amount as the stable starting point for projections
@@ -307,6 +341,12 @@ export function useScenarios(): UseScenariosReturn {
           30
         );
       }
+
+      // Compute weighted rate from per-bucket allocation and override currentRate
+      const entryAllocation = getEntryAllocation(latestEntry);
+      const bucketRates = getPerBucketRates(scenarioSettings);
+      const effectiveRate = getWeightedAverageRate(entryAllocation, bucketRates) || scenario.currentRate;
+      scenarioSettings.currentRate = effectiveRate;
 
       const projections = generateProjections(
         latestEntry,
@@ -349,6 +389,7 @@ export function useScenarios(): UseScenariosReturn {
         fiMilestones,
         monthlyProjections,
         scenarioSettings,
+        effectiveRate,
       };
     });
   }, [latestEntry, selectedScenarios, localProfile, entries]);
@@ -378,6 +419,7 @@ export function useScenarios(): UseScenariosReturn {
         hasDynamicIncome: sp.hasDynamicIncome,
         fiMilestones: sp.fiMilestones,
         monthlyProjections: sp.monthlyProjections,
+        effectiveRate: sp.effectiveRate,
       };
     });
   }, [stableProjections, realtimeTick, latestEntry]);

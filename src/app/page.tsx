@@ -29,6 +29,9 @@ import {
   calculateDollarMultiplier,
   calculateRunwayAndCoastInfo,
   calculateProjectedRetirementIncome,
+  getEntryAllocation,
+  DEFAULT_BUCKET_RATES,
+  NetWorthEntry,
 } from '../lib/calculations'
 import { TrackedValue, SimpleTrackedValue } from './components/TrackedValue'
 import type { TrackedValue as TrackedValueType } from '../lib/calculationTrace'
@@ -95,7 +98,9 @@ function AuthenticatedApp() {
   // UI state
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [projectionsView, setProjectionsView] = useState<'table' | 'chart'>('table')
-  const [newAmount, setNewAmount] = useState<string>('')
+  const [entryBreakdown, setEntryBreakdown] = useState({
+    cash: '', retirement: '', hsa: '', brokerage: '', debts: '',
+  });
 
   // Get the primary scenario (first selected) for dashboard display
   const primaryProjection = scenariosHook.scenarioProjections[0] || null;
@@ -107,15 +112,30 @@ function AuthenticatedApp() {
     }
   }, [scenariosHook.isLoading, scenariosHook.hasScenarios, scenariosHook]);
 
+  const entryTotal = useMemo(() => {
+    const cash = parseFloat(entryBreakdown.cash.replace(/,/g, '')) || 0;
+    const retirement = parseFloat(entryBreakdown.retirement.replace(/,/g, '')) || 0;
+    const hsa = parseFloat(entryBreakdown.hsa.replace(/,/g, '')) || 0;
+    const brokerage = parseFloat(entryBreakdown.brokerage.replace(/,/g, '')) || 0;
+    const debts = parseFloat(entryBreakdown.debts.replace(/,/g, '')) || 0;
+    return cash + retirement + hsa + brokerage - debts;
+  }, [entryBreakdown]);
+
   const handleAddEntry = async () => {
-    const amount = parseFloat(newAmount.replace(/,/g, ''))
-    if (isNaN(amount) || amount <= 0) return
+    const cash = parseFloat(entryBreakdown.cash.replace(/,/g, '')) || 0;
+    const retirement = parseFloat(entryBreakdown.retirement.replace(/,/g, '')) || 0;
+    const hsa = parseFloat(entryBreakdown.hsa.replace(/,/g, '')) || 0;
+    const brokerage = parseFloat(entryBreakdown.brokerage.replace(/,/g, '')) || 0;
+    const debts = parseFloat(entryBreakdown.debts.replace(/,/g, '')) || 0;
+    const amount = cash + retirement + hsa + brokerage - debts;
+    if (amount <= 0) return;
 
     await addEntry({
       amount,
       timestamp: Date.now(),
-    })
-    setNewAmount('')
+      cash, retirement, hsa, brokerage, debts,
+    });
+    setEntryBreakdown({ cash: '', retirement: '', hsa: '', brokerage: '', debts: '' });
   }
 
   const handleDeleteEntry = async (id: Id<"netWorthEntries">) => {
@@ -223,8 +243,9 @@ function AuthenticatedApp() {
       {activeTab === 'entries' && (
         <EntriesTab
           entries={scenariosHook.entries}
-          newAmount={newAmount}
-          setNewAmount={setNewAmount}
+          entryBreakdown={entryBreakdown}
+          setEntryBreakdown={setEntryBreakdown}
+          entryTotal={entryTotal}
           formatNetWorthInput={formatNetWorthInput}
           handleAddEntry={handleAddEntry}
           handleDeleteEntry={handleDeleteEntry}
@@ -351,6 +372,43 @@ function DashboardTab({
             Last updated {getTimeSinceEntry(latestEntry.timestamp)} at {primaryProjection.scenario.currentRate}% annual return
             {includeSavings && ` + ${formatCurrency(primaryProjection.scenario.yearlyContribution, 0)}/yr savings`}
           </p>
+
+          {/* Portfolio Composition Bar */}
+          {latestEntry && (latestEntry.cash !== undefined || latestEntry.retirement !== undefined ||
+            latestEntry.hsa !== undefined || latestEntry.brokerage !== undefined || latestEntry.debts !== undefined) && (() => {
+            const alloc = getEntryAllocation(latestEntry);
+            const totalAssets = alloc.cash + alloc.retirement + alloc.hsa + alloc.brokerage;
+            if (totalAssets <= 0) return null;
+            const segments = [
+              { label: 'Cash', value: alloc.cash, color: '#60a5fa' },
+              { label: 'Ret', value: alloc.retirement, color: '#34d399' },
+              { label: 'HSA', value: alloc.hsa, color: '#a78bfa' },
+              { label: 'Brok', value: alloc.brokerage, color: '#fbbf24' },
+            ].filter(s => s.value > 0);
+            const debtPct = totalAssets > 0 ? (alloc.debts / totalAssets) * 100 : 0;
+            return (
+              <div className="mt-4">
+                <p className="text-xs text-slate-500 mb-1.5 text-center">Portfolio Composition</p>
+                <div className="flex h-5 rounded-full overflow-hidden bg-slate-700">
+                  {segments.map(s => (
+                    <div
+                      key={s.label}
+                      style={{ width: `${(s.value / totalAssets) * 100}%`, backgroundColor: s.color }}
+                      className="flex items-center justify-center text-[10px] font-medium text-slate-900 overflow-hidden"
+                      title={`${s.label}: ${formatCurrency(s.value, 0)} (${((s.value / totalAssets) * 100).toFixed(0)}%)`}
+                    >
+                      {(s.value / totalAssets) >= 0.08 && `${s.label} ${((s.value / totalAssets) * 100).toFixed(0)}%`}
+                    </div>
+                  ))}
+                </div>
+                {alloc.debts > 0 && (
+                  <p className="text-xs text-red-400 text-center mt-1">
+                    Debt: {formatCurrency(alloc.debts, 0)} ({debtPct.toFixed(0)}% of assets)
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Toggle + Growth Rates */}
           <div className="border-t border-slate-700 mt-6 pt-6">
@@ -499,12 +557,12 @@ function DashboardTab({
 
       {/* Coast FI Section */}
       {latestEntry && primaryProjection && (
-        <CoastFiSection primaryProjection={primaryProjection} />
+        <CoastFiSection primaryProjection={primaryProjection} latestEntry={latestEntry} />
       )}
 
       {/* FI Milestones Section */}
       {latestEntry && primaryProjection && (
-        <FiMilestonesCard primaryProjection={primaryProjection} />
+        <FiMilestonesCard primaryProjection={primaryProjection} latestEntry={latestEntry} />
       )}
     </div>
   )
@@ -514,7 +572,7 @@ function DashboardTab({
 // COAST FI SECTION — "What If You Stopped Saving?"
 // ============================================================================
 
-function CoastFiSection({ primaryProjection }: { primaryProjection: ScenarioProjection }) {
+function CoastFiSection({ primaryProjection, latestEntry }: { primaryProjection: ScenarioProjection; latestEntry: NetWorthEntry }) {
   const { currentNetWorth, projections, scenario } = primaryProjection;
   const currentYear = new Date().getFullYear();
   const currentMonthlySpend = projections[0]?.monthlySpend ?? 0;
@@ -525,31 +583,33 @@ function CoastFiSection({ primaryProjection }: { primaryProjection: ScenarioProj
 
   const [showComparison, setShowComparison] = useState(true);
 
+  const effectiveRate = primaryProjection.effectiveRate;
+
   const trackedCoast = useMemo(() => {
     return createTrackedCoastInfo(
       currentNetWorth.total,
       currentMonthlySpend,
       currentAge,
       retirementAge,
-      scenario.currentRate,
+      effectiveRate,
       scenario.inflationRate,
       scenario.swr
     );
-  }, [currentNetWorth.total, currentMonthlySpend, currentAge, scenario]);
+  }, [currentNetWorth.total, currentMonthlySpend, currentAge, effectiveRate, scenario]);
 
   const trackedRetirementIncome = useMemo(() => {
     return createTrackedRetirementIncomeInfo(
       currentNetWorth.total,
       currentAge,
       retirementAge,
-      scenario.currentRate,
+      effectiveRate,
       scenario.inflationRate,
       scenario.swr
     );
-  }, [currentNetWorth.total, currentAge, retirementAge, scenario.currentRate, scenario.inflationRate, scenario.swr]);
+  }, [currentNetWorth.total, currentAge, retirementAge, effectiveRate, scenario.inflationRate, scenario.swr]);
 
   const yearsToRetirement = currentAge !== null ? Math.max(0, retirementAge - currentAge) : 30;
-  const returnRate = scenario.currentRate / 100;
+  const returnRate = effectiveRate / 100;
   const inflationRate = scenario.inflationRate / 100;
   const coastFiPercent = trackedCoast.coastFiPercent.value;
   const futureNW = trackedCoast.futureNetWorthIfCoast.value;
@@ -833,31 +893,34 @@ function CoastFiSection({ primaryProjection }: { primaryProjection: ScenarioProj
 
 interface FiMilestonesCardProps {
   primaryProjection: ScenarioProjection;
+  latestEntry: NetWorthEntry;
 }
 
-function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
+function FiMilestonesCard({ primaryProjection, latestEntry }: FiMilestonesCardProps) {
   const { fiMilestones, currentFiProgress, currentNetWorth, projections, scenario } = primaryProjection;
   const currentYear = new Date().getFullYear();
   const currentFiTarget = projections[0]?.fiTarget ?? 0;
   const currentMonthlySpend = projections[0]?.monthlySpend ?? 0;
-  
+
   // Get birth year from projections if available
   const firstRow = projections[0];
   const birthYear = firstRow?.age ? currentYear - firstRow.age : null;
   const currentAge = birthYear ? currentYear - birthYear : null;
   const retirementAge = 65;
-  
+
+  const effectiveRate = primaryProjection.effectiveRate;
+
   // Calculate runway and coast info for context display
   const runwayAndCoastInfo = useMemo(() => {
     return calculateRunwayAndCoastInfo(
       currentNetWorth.total,
       currentMonthlySpend,
       birthYear,
-      scenario.currentRate,
+      effectiveRate,
       scenario.inflationRate,
       scenario.swr
     );
-  }, [currentNetWorth.total, currentMonthlySpend, birthYear, scenario]);
+  }, [currentNetWorth.total, currentMonthlySpend, birthYear, effectiveRate, scenario]);
   
   // Create tracked runway values
   const trackedRunway = useMemo(() => {
@@ -995,9 +1058,9 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
         <p className="text-xs text-slate-500 mb-3">How long you could survive without income</p>
         <div className="space-y-2">
           {runwayMilestones.map(milestone => (
-            <TrackedMilestoneRow 
-              key={milestone.id} 
-              milestone={milestone} 
+            <TrackedMilestoneRow
+              key={milestone.id}
+              milestone={milestone}
               currentYear={currentYear}
               currentNetWorth={currentNetWorth.total}
               currentMonthlySpend={currentMonthlySpend}
@@ -1005,6 +1068,7 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
               currentFiProgress={currentFiProgress}
               currentAge={currentAge}
               retirementAge={retirementAge}
+              effectiveRate={effectiveRate}
               scenario={scenario}
             />
           ))}
@@ -1018,9 +1082,9 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
         </h3>
         <div className="space-y-2">
           {percentageMilestones.map(milestone => (
-            <TrackedMilestoneRow 
-              key={milestone.id} 
-              milestone={milestone} 
+            <TrackedMilestoneRow
+              key={milestone.id}
+              milestone={milestone}
               currentYear={currentYear}
               currentNetWorth={currentNetWorth.total}
               currentMonthlySpend={currentMonthlySpend}
@@ -1028,6 +1092,7 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
               currentFiProgress={currentFiProgress}
               currentAge={currentAge}
               retirementAge={retirementAge}
+              effectiveRate={effectiveRate}
               scenario={scenario}
             />
           ))}
@@ -1041,9 +1106,9 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
         </h3>
         <div className="space-y-2">
           {lifestyleMilestones.map(milestone => (
-            <TrackedMilestoneRow 
-              key={milestone.id} 
-              milestone={milestone} 
+            <TrackedMilestoneRow
+              key={milestone.id}
+              milestone={milestone}
               currentYear={currentYear}
               currentNetWorth={currentNetWorth.total}
               currentMonthlySpend={currentMonthlySpend}
@@ -1051,6 +1116,7 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
               currentFiProgress={currentFiProgress}
               currentAge={currentAge}
               retirementAge={retirementAge}
+              effectiveRate={effectiveRate}
               scenario={scenario}
             />
           ))}
@@ -1064,9 +1130,9 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
         </h3>
         <div className="space-y-2">
           {specialMilestones.map(milestone => (
-            <TrackedMilestoneRow 
-              key={milestone.id} 
-              milestone={milestone} 
+            <TrackedMilestoneRow
+              key={milestone.id}
+              milestone={milestone}
               currentYear={currentYear}
               currentNetWorth={currentNetWorth.total}
               currentMonthlySpend={currentMonthlySpend}
@@ -1074,6 +1140,7 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
               currentFiProgress={currentFiProgress}
               currentAge={currentAge}
               retirementAge={retirementAge}
+              effectiveRate={effectiveRate}
               scenario={scenario}
             />
           ))}
@@ -1095,6 +1162,7 @@ interface TrackedMilestoneRowProps extends MilestoneRowProps {
   currentFiProgress: number;
   currentAge: number | null;
   retirementAge: number;
+  effectiveRate: number;
   scenario: {
     currentRate: number;
     inflationRate: number;
@@ -1102,8 +1170,8 @@ interface TrackedMilestoneRowProps extends MilestoneRowProps {
   };
 }
 
-function TrackedMilestoneRow({ 
-  milestone, 
+function TrackedMilestoneRow({
+  milestone,
   currentYear,
   currentNetWorth,
   currentMonthlySpend,
@@ -1111,6 +1179,7 @@ function TrackedMilestoneRow({
   currentFiProgress,
   currentAge,
   retirementAge,
+  effectiveRate,
   scenario,
 }: TrackedMilestoneRowProps) {
   const [showDescription, setShowDescription] = React.useState(false);
@@ -1148,7 +1217,7 @@ function TrackedMilestoneRow({
         currentMonthlySpend,
         currentAge,
         retirementAge,
-        scenario.currentRate,
+        effectiveRate,
         scenario.inflationRate,
         scenario.swr
       );
@@ -1161,7 +1230,7 @@ function TrackedMilestoneRow({
         coastInfo.coastFiPercent.value,
         currentAge,
         retirementAge,
-        scenario.currentRate,
+        effectiveRate,
         scenario.inflationRate,
         scenario.swr,
         milestone.netWorthAtMilestone,
@@ -1188,7 +1257,7 @@ function TrackedMilestoneRow({
         currentNetWorth,
         currentAge,
         retirementAge,
-        scenario.currentRate,
+        effectiveRate,
         scenario.inflationRate,
         scenario.swr,
         milestone.netWorthAtMilestone,
@@ -1198,7 +1267,7 @@ function TrackedMilestoneRow({
     } else if (milestone.id === 'crossover') {
       // For crossover, we need interest and contributions
       // We'll use simplified values here
-      const currentInterest = currentNetWorth * (scenario.currentRate / 100);
+      const currentInterest = currentNetWorth * (effectiveRate / 100);
       const currentContributions = 0; // Would need actual contribution data
       return createTrackedCrossoverMilestone(
         currentInterest,
@@ -1210,7 +1279,7 @@ function TrackedMilestoneRow({
     }
     // Default: return null for unsupported types
     return null;
-  }, [milestone, currentNetWorth, currentMonthlySpend, currentFiTarget, currentFiProgress, currentAge, retirementAge, scenario, currentYear]);
+  }, [milestone, currentNetWorth, currentMonthlySpend, currentFiTarget, currentFiProgress, currentAge, retirementAge, effectiveRate, scenario, currentYear]);
   
   return (
     <div 
@@ -1280,7 +1349,7 @@ function TrackedMilestoneRow({
             const yearsToRetirement = currentAge !== null
               ? Math.max(0, retirementAge - currentAge)
               : 30;
-            const returnRate = scenario.currentRate / 100;
+            const returnRate = effectiveRate / 100;
             const inflation = scenario.inflationRate / 100;
             const growthMultiplier = Math.pow(1 + returnRate, yearsToRetirement);
             const inflationMultiplier = Math.pow(1 + inflation, yearsToRetirement);
@@ -1303,13 +1372,13 @@ function TrackedMilestoneRow({
                     { name: 'Current Net Worth', value: currentNetWorth, unit: '$' },
                     { name: 'Current Monthly Spend', value: currentMonthlySpend, unit: '$' },
                     { name: 'Years to Retirement', value: yearsToRetirement, unit: 'years' },
-                    { name: 'Annual Return Rate', value: `${scenario.currentRate}%` },
+                    { name: 'Weighted Return Rate', value: `${effectiveRate.toFixed(1)}%` },
                     { name: 'Inflation Rate', value: `${scenario.inflationRate}%` },
                     { name: 'SWR', value: `${scenario.swr}%` },
                   ]}
                   steps={[
                     {
-                      description: `Compound net worth at ${scenario.currentRate}% for ${yearsToRetirement} years`,
+                      description: `Compound net worth at ${effectiveRate.toFixed(1)}% for ${yearsToRetirement} years`,
                       formula: `${formatCurrency(currentNetWorth, 0)} × (1 + ${returnRate.toFixed(4)})^${yearsToRetirement}`,
                       result: futureNW,
                       unit: '$',
@@ -1460,20 +1529,38 @@ function MilestoneRow({ milestone, currentYear }: MilestoneRowProps) {
 // ENTRIES TAB
 // ============================================================================
 
+interface EntryBreakdown {
+  cash: string;
+  retirement: string;
+  hsa: string;
+  brokerage: string;
+  debts: string;
+}
+
 interface EntriesTabProps {
   entries: ReturnType<typeof useScenarios>['entries'];
-  newAmount: string;
-  setNewAmount: (value: string) => void;
+  entryBreakdown: EntryBreakdown;
+  setEntryBreakdown: (value: EntryBreakdown) => void;
+  entryTotal: number;
   formatNetWorthInput: (value: string) => string;
   handleAddEntry: () => void;
   handleDeleteEntry: (id: Id<"netWorthEntries">) => void;
   setActiveTab: (tab: Tab) => void;
 }
 
+const BUCKET_LABELS: { key: keyof EntryBreakdown; label: string }[] = [
+  { key: 'cash', label: 'Cash' },
+  { key: 'retirement', label: 'Retirement (401k/IRA)' },
+  { key: 'hsa', label: 'HSA' },
+  { key: 'brokerage', label: 'Brokerage' },
+  { key: 'debts', label: 'Debts' },
+];
+
 function EntriesTab({
   entries,
-  newAmount,
-  setNewAmount,
+  entryBreakdown,
+  setEntryBreakdown,
+  entryTotal,
   formatNetWorthInput,
   handleAddEntry,
   handleDeleteEntry,
@@ -1492,29 +1579,40 @@ function EntriesTab({
         <h2 className="text-lg font-semibold text-slate-300 mb-4">
           {entries.length === 0 ? 'Add Your Net Worth' : 'Add New Entry'}
         </h2>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Current Net Worth
-            </label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
-                $
+        <div className="space-y-3">
+          {BUCKET_LABELS.map(({ key, label }) => (
+            <div key={key}>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                {label}
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  {key === 'debts' ? '-$' : '$'}
+                </span>
+                <input
+                  type="text"
+                  value={entryBreakdown[key]}
+                  onChange={(e) => setEntryBreakdown({ ...entryBreakdown, [key]: formatNetWorthInput(e.target.value) })}
+                  placeholder="0"
+                  className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 pl-10 pr-4 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddEntry()}
+                />
+              </div>
+            </div>
+          ))}
+
+          <div className="border-t border-slate-600 pt-3 mt-3">
+            <div className="flex justify-between items-center text-lg">
+              <span className="text-slate-300 font-medium">Total Net Worth</span>
+              <span className={`font-mono font-bold ${entryTotal >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatCurrency(entryTotal)}
               </span>
-              <input
-                type="text"
-                value={newAmount}
-                onChange={(e) => setNewAmount(formatNetWorthInput(e.target.value))}
-                placeholder="100,000"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-8 pr-4 text-xl font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                onKeyDown={(e) => e.key === 'Enter' && handleAddEntry()}
-              />
             </div>
           </div>
 
           <button
             onClick={handleAddEntry}
-            disabled={!newAmount || parseFloat(newAmount) <= 0}
+            disabled={entryTotal <= 0}
             className="w-full py-4 rounded-lg font-semibold text-lg transition-all bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {entries.length === 0 ? 'Start Tracking' : 'Add Entry'}
@@ -1529,58 +1627,75 @@ function EntriesTab({
             Entry History
           </h2>
           <div className="space-y-3">
-            {entries.map((entry, index) => (
-              <div
-                key={entry._id}
-                className={`flex items-center justify-between p-4 rounded-lg ${
-                  index === 0
-                    ? 'bg-emerald-900/30 border border-emerald-500/30'
-                    : 'bg-slate-900/50'
-                }`}
-              >
-                <div>
-                  <SimpleTrackedValue
-                    value={entry.amount}
-                    name="Net Worth Entry"
-                    description={`Net worth recorded on ${formatDate(entry.timestamp)}`}
-                    formula="Recorded Value"
-                    inputs={[
-                      { name: 'Date', value: formatDate(entry.timestamp) },
-                      { name: 'Entry #', value: entries.length - index },
-                    ]}
-                    className="font-mono text-lg text-white"
-                  />
-                  <p className="text-slate-400 text-sm">
-                    {formatDate(entry.timestamp)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {index === 0 && (
-                    <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">
-                      Current
-                    </span>
-                  )}
-                  <button
-                    onClick={() => handleDeleteEntry(entry._id as Id<"netWorthEntries">)}
-                    className="text-slate-500 hover:text-red-400 transition-colors p-1"
-                    title="Delete entry"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                        clipRule="evenodd"
+            {entries.map((entry, index) => {
+              const hasBreakdown = entry.cash !== undefined || entry.retirement !== undefined ||
+                entry.hsa !== undefined || entry.brokerage !== undefined || entry.debts !== undefined;
+              const alloc = hasBreakdown ? getEntryAllocation(entry) : null;
+
+              return (
+                <div
+                  key={entry._id}
+                  className={`p-4 rounded-lg ${
+                    index === 0
+                      ? 'bg-emerald-900/30 border border-emerald-500/30'
+                      : 'bg-slate-900/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <SimpleTrackedValue
+                        value={entry.amount}
+                        name="Net Worth Entry"
+                        description={`Net worth recorded on ${formatDate(entry.timestamp)}`}
+                        formula="Recorded Value"
+                        inputs={[
+                          { name: 'Date', value: formatDate(entry.timestamp) },
+                          { name: 'Entry #', value: entries.length - index },
+                        ]}
+                        className="font-mono text-lg text-white"
                       />
-                    </svg>
-                  </button>
+                      <p className="text-slate-400 text-sm">
+                        {formatDate(entry.timestamp)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {index === 0 && (
+                        <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">
+                          Current
+                        </span>
+                      )}
+                      <button
+                        onClick={() => handleDeleteEntry(entry._id as Id<"netWorthEntries">)}
+                        className="text-slate-500 hover:text-red-400 transition-colors p-1"
+                        title="Delete entry"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-5 w-5"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  {alloc && (
+                    <div className="mt-2 text-xs text-slate-400 flex flex-wrap gap-x-3 gap-y-1">
+                      {alloc.cash > 0 && <span>Cash {formatCurrency(alloc.cash, 0)}</span>}
+                      {alloc.retirement > 0 && <span>Ret {formatCurrency(alloc.retirement, 0)}</span>}
+                      {alloc.hsa > 0 && <span>HSA {formatCurrency(alloc.hsa, 0)}</span>}
+                      {alloc.brokerage > 0 && <span>Brok {formatCurrency(alloc.brokerage, 0)}</span>}
+                      {alloc.debts > 0 && <span className="text-red-400">Debt -{formatCurrency(alloc.debts, 0)}</span>}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -1798,7 +1913,16 @@ function ScenarioEditor({
     currentRate: scenario.currentRate?.toString() || '7',
     swr: scenario.swr?.toString() || '4',
     inflationRate: scenario.inflationRate?.toString() || '3',
+    cashRate: scenario.cashRate?.toString() || '',
+    retirementRate: scenario.retirementRate?.toString() || '',
+    hsaRate: scenario.hsaRate?.toString() || '',
+    brokerageRate: scenario.brokerageRate?.toString() || '',
+    debtRate: scenario.debtRate?.toString() || '',
   });
+
+  const [showBucketRates, setShowBucketRates] = useState(
+    !!(scenario.cashRate || scenario.retirementRate || scenario.hsaRate || scenario.brokerageRate || scenario.debtRate)
+  );
 
   const [saving, setSaving] = useState(false);
 
@@ -1860,6 +1984,20 @@ function ScenarioEditor({
         // No income data - savings must be specified manually in a different way
         // For now, default to 0
         updates.yearlyContribution = 0;
+      }
+
+      // Per-bucket growth rate overrides
+      if (showBucketRates) {
+        const cashRate = parseFloat(form.cashRate);
+        const retirementRate = parseFloat(form.retirementRate);
+        const hsaRate = parseFloat(form.hsaRate);
+        const brokerageRate = parseFloat(form.brokerageRate);
+        const debtRate = parseFloat(form.debtRate);
+        if (!isNaN(cashRate)) updates.cashRate = cashRate;
+        if (!isNaN(retirementRate)) updates.retirementRate = retirementRate;
+        if (!isNaN(hsaRate)) updates.hsaRate = hsaRate;
+        if (!isNaN(brokerageRate)) updates.brokerageRate = brokerageRate;
+        if (!isNaN(debtRate)) updates.debtRate = debtRate;
       }
 
       if (isNewScenario) {
@@ -1975,6 +2113,51 @@ function ScenarioEditor({
                   className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                 />
               </div>
+            </div>
+
+            {/* Per-bucket growth rates */}
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowBucketRates(!showBucketRates)}
+                className="text-sm text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+              >
+                <svg className={`w-4 h-4 transition-transform ${showBucketRates ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                Growth Rates by Asset Type
+                {!showBucketRates && <span className="text-slate-500 ml-1">(using defaults)</span>}
+              </button>
+              {showBucketRates && (
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  {([
+                    { key: 'cashRate' as const, label: 'Cash', defaultVal: DEFAULT_BUCKET_RATES.cash },
+                    { key: 'retirementRate' as const, label: 'Retirement', defaultVal: null },
+                    { key: 'hsaRate' as const, label: 'HSA', defaultVal: null },
+                    { key: 'brokerageRate' as const, label: 'Brokerage', defaultVal: null },
+                    { key: 'debtRate' as const, label: 'Debt Interest', defaultVal: DEFAULT_BUCKET_RATES.debts },
+                  ]).map(({ key, label, defaultVal }) => {
+                    const effectiveDefault = defaultVal ?? (parseFloat(form.currentRate) || 7);
+                    const isDefault = !form[key] || form[key] === effectiveDefault.toString();
+                    return (
+                      <div key={key}>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">
+                          {label} (%)
+                          {isDefault && <span className="text-slate-500 ml-1 text-xs">(default)</span>}
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={form[key]}
+                          placeholder={effectiveDefault.toString()}
+                          onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                          className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </section>
 
@@ -2485,6 +2668,7 @@ function ProjectionsTab({
         <ProjectionsTable
           scenarioProjections={scenarioProjections}
           birthDate={profile.birthDate}
+          latestEntry={latestEntry}
         />
       ) : (
         <ProjectionsChart
@@ -2501,9 +2685,11 @@ function ProjectionsTab({
 function ProjectionsTable({
   scenarioProjections,
   birthDate,
+  latestEntry,
 }: {
   scenarioProjections: ScenarioProjection[];
   birthDate: string;
+  latestEntry: ReturnType<typeof useScenarios>['latestEntry'];
 }) {
   const currentYear = new Date().getFullYear();
   const birthYear = birthDate ? new Date(birthDate).getFullYear() : null;
@@ -2815,6 +3001,9 @@ function ProjectionsTable({
                     const isFirstScenario = row.isNow || scenarioIndex === 0;
                     const isLastScenario = row.isNow || scenarioIndex === scenarioProjections.length - 1;
 
+                    // Use weighted rate from projection for coast column
+                    const coastRateForScenario = sp.effectiveRate;
+
                     // Get net worth and FI status
                     let netWorthValue = 0;
                     let isFiYear = false;
@@ -3012,9 +3201,9 @@ function ProjectionsTable({
                               value={netWorthValue}
                               name={`Net Worth (${displayYearValue})`}
                               description={`Projected net worth for ${sp.scenario.name} in ${displayYearValue}`}
-                              formula="Previous NW × (1 + Rate) + Contributions - Spending"
+                              formula="Previous NW + Weighted Interest + Savings"
                               inputs={[
-                                { name: 'Return Rate', value: `${sp.scenario.currentRate}%` },
+                                { name: 'Weighted Return Rate', value: `${coastRateForScenario.toFixed(1)}%` },
                                 { name: 'Scenario', value: sp.scenario.name },
                               ]}
                               className="font-mono"
@@ -3111,7 +3300,8 @@ function ProjectionsTable({
                           const yearsToTarget = rowAge !== null
                             ? Math.max(0, coastTargetAge - rowAge)
                             : Math.max(0, coastTargetAge - 25 - (row.yearsFromEntry || 0));
-                          const coastRate = sp.scenario.currentRate / 100;
+
+                          const coastRate = coastRateForScenario / 100;
                           const coastMultiplier = yearsToTarget > 0 ? Math.pow(1 + coastRate, yearsToTarget) : 1;
 
                           const nwForCoast = TrackedNumber.from(netWorthValue, 'Net Worth', { unit: '$', category: 'projection' });
@@ -3120,20 +3310,20 @@ function ProjectionsTable({
                             description: `Years until age ${coastTargetAge}`,
                             category: 'projection',
                           });
-                          const coastRateTN = TrackedNumber.setting(sp.scenario.currentRate, 'Return Rate', 'currentRate', { unit: '%' });
+                          const coastRateTN = TrackedNumber.setting(coastRateForScenario, 'Weighted Return Rate', 'currentRate', { unit: '%' });
                           const coastRateDecTN = coastRateTN.divide(TrackedNumber.constant(100, '100'), { name: 'Rate (decimal)' });
                           const coastMultTN = TrackedNumber.constant(1, '1')
                             .add(coastRateDecTN, { name: '1 + Rate' })
                             .pow(yearsToTargetTN, {
                               name: 'Growth Multiplier',
-                              description: `${yearsToTarget.toFixed(1)} years of compounding at ${sp.scenario.currentRate}%`,
+                              description: `${yearsToTarget.toFixed(1)} years of compounding at ${coastRateForScenario.toFixed(1)}%`,
                             });
                           const coastTN = nwForCoast.multiply(coastMultTN, {
                             name: 'Coast Number',
                             unit: '$',
                             category: 'projection',
                             description: `Net worth at age ${coastTargetAge} if you stop contributing`,
-                            formula: 'Net Worth × (1 + Rate)^Years to Target',
+                            formula: `Net Worth × (1 + ${coastRateForScenario.toFixed(1)}%)^Years to Target`,
                           });
 
                           // Derive SWR and inflation-adjusted values for the tooltip steps

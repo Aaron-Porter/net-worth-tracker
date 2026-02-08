@@ -29,6 +29,78 @@ export interface UserSettings {
   spendingGrowthRate: number; // % of net worth allowed as additional spending
   incomeGrowthRate?: number;  // Annual income growth rate (e.g., 3 for 3%) - optional
   scenarioStartDate?: number; // Timestamp when scenario started (for continuous inflation tracking)
+  // Per-bucket growth rate overrides (percentage, e.g. 4 for 4%)
+  cashRate?: number;
+  retirementRate?: number;
+  hsaRate?: number;
+  brokerageRate?: number;
+  debtRate?: number;
+  // Contribution allocation
+  preTax401k?: number;
+  preTaxIRA?: number;
+  preTaxHSA?: number;
+}
+
+export interface AssetAllocation {
+  cash: number;
+  retirement: number;
+  hsa: number;
+  brokerage: number;
+  debts: number;
+}
+
+export interface PerBucketRates {
+  cash: number;       // decimal, e.g. 0.04
+  retirement: number;
+  hsa: number;
+  brokerage: number;
+  debts: number;      // debt interest rate (grows against you)
+}
+
+export const DEFAULT_BUCKET_RATES = {
+  cash: 4,
+  debts: 7,
+  // retirement, hsa, brokerage default to scenario currentRate
+};
+
+/** Extract allocation from entry; old entries without breakdown → 100% brokerage */
+export function getEntryAllocation(entry: NetWorthEntry): AssetAllocation {
+  if (entry.cash !== undefined || entry.retirement !== undefined ||
+      entry.hsa !== undefined || entry.brokerage !== undefined || entry.debts !== undefined) {
+    return {
+      cash: entry.cash ?? 0,
+      retirement: entry.retirement ?? 0,
+      hsa: entry.hsa ?? 0,
+      brokerage: entry.brokerage ?? 0,
+      debts: entry.debts ?? 0,
+    };
+  }
+  return { cash: 0, retirement: 0, hsa: 0, brokerage: entry.amount, debts: 0 };
+}
+
+/** Get decimal rates from settings, falling back to currentRate for investment buckets */
+export function getPerBucketRates(settings: UserSettings): PerBucketRates {
+  const r = settings.currentRate;
+  return {
+    cash: (settings.cashRate ?? DEFAULT_BUCKET_RATES.cash) / 100,
+    retirement: (settings.retirementRate ?? r) / 100,
+    hsa: (settings.hsaRate ?? r) / 100,
+    brokerage: (settings.brokerageRate ?? r) / 100,
+    debts: (settings.debtRate ?? DEFAULT_BUCKET_RATES.debts) / 100,
+  };
+}
+
+/** Compute the effective blended annual return rate (as percentage, e.g. 6.5) from allocation + per-bucket rates */
+export function getWeightedAverageRate(alloc: AssetAllocation, rates: PerBucketRates): number {
+  const totalNW = alloc.cash + alloc.retirement + alloc.hsa + alloc.brokerage - alloc.debts;
+  if (totalNW <= 0) return 0;
+  const weightedReturn =
+    alloc.cash * rates.cash +
+    alloc.retirement * rates.retirement +
+    alloc.hsa * rates.hsa +
+    alloc.brokerage * rates.brokerage -
+    alloc.debts * rates.debts;
+  return (weightedReturn / totalNW) * 100;
 }
 
 export interface NetWorthEntry {
@@ -36,6 +108,11 @@ export interface NetWorthEntry {
   userId: string;
   amount: number;
   timestamp: number;
+  cash?: number;
+  retirement?: number;
+  hsa?: number;
+  brokerage?: number;
+  debts?: number;
 }
 
 export interface ProjectionRow {
@@ -1234,21 +1311,17 @@ export function calculateRealTimeNetWorth(
   const now = Date.now();
   const elapsed = now - latestEntry.timestamp;
   const yearsElapsed = elapsed / MS_PER_YEAR;
+
   const yearlyRate = settings.currentRate / 100;
-  
-  // Simple interest approximation for real-time display
-  // (Using compound would cause jumpy updates)
   const msRate = yearlyRate / MS_PER_YEAR;
   const appreciation = latestEntry.amount * msRate * elapsed;
-  
+
   let contributions = 0;
   if (includeContributions && settings.yearlyContribution > 0) {
-    // Continuous contribution approximation
     contributions = settings.yearlyContribution * yearsElapsed;
-    // Add average growth on contributions (half the time period)
     contributions += contributions * msRate * (elapsed / 2);
   }
-  
+
   return {
     total: latestEntry.amount + appreciation + contributions,
     baseAmount: latestEntry.amount,
@@ -1268,7 +1341,7 @@ export function calculateGrowthRates(
   const yearlyAppreciation = currentNetWorth * (settings.currentRate / 100);
   const yearlyContributions = includeContributions ? settings.yearlyContribution : 0;
   const yearlyTotal = yearlyAppreciation + yearlyContributions;
-  
+
   return {
     perSecond: yearlyTotal / (365.25 * 24 * 60 * 60),
     perMinute: yearlyTotal / (365.25 * 24 * 60),
@@ -1292,14 +1365,14 @@ export function findCoastFiYear(
   useSpendingLevels: boolean = false
 ): number | null {
   const { monthlySpend, swr, currentRate, inflationRate } = settings;
-  
+
   // For spending levels, we need base budget; for fixed spending, we need monthlySpend
-  const hasValidSpending = useSpendingLevels 
-    ? settings.baseMonthlyBudget > 0 
+  const hasValidSpending = useSpendingLevels
+    ? settings.baseMonthlyBudget > 0
     : monthlySpend > 0;
-  
+
   if (!hasValidSpending || swr <= 0 || currentRate <= 0) return null;
-  
+
   const r = currentRate / 100;
   
   for (let y = 0; y <= 100; y++) {
@@ -2034,12 +2107,12 @@ export function generateProjections(
   let previousNetWorth = currentNetWorth;
   let cumulativeInterest = currentAppreciation;
   let cumulativeContributed = 0;
-  
+
   // Future projection rows - now calculated iteratively with dynamic savings
   for (let i = 0; i < PROJECTION_YEARS; i++) {
     const year = currentYear + i;
     const age = birthYear ? year - birthYear : null;
-    
+
     // Calculate spending for this year based on previous year's ending net worth
     const yearMonthlySpend = getSpendingForYear(i, previousNetWorth);
     const yearAnnualSpending = yearMonthlySpend * 12;
@@ -2063,7 +2136,7 @@ export function generateProjections(
       yearAnnualSavings = yearlyContributionGrown - spendingIncrease;
     }
 
-    // Calculate this year's interest on previous net worth
+    // Calculate this year's interest
     const yearInterest = previousNetWorth * r;
 
     // New net worth = previous + interest + savings for this year
@@ -2275,22 +2348,18 @@ export function generateMonthlyProjections(
     const startingNW = netWorth;
 
     // Calculate this month's spending based on current net worth
-    // This is the key difference from yearly projections - spending updates each month
     const monthlySpending = calculateLevelBasedSpending(netWorth, settings, yearsFromStart);
 
     // Calculate monthly savings
     let monthlySavings: number;
     if (monthlyNetIncome !== undefined) {
-      // If we have net income info, calculate savings as income - spending
       monthlySavings = monthlyNetIncome - monthlySpending;
     } else {
-      // Savings = base contribution minus the spending increase above baseline
-      // Mirrors yearly logic: as spending grows, savings shrinks
       const spendingIncrease = monthlySpending - baseMonthlySpending;
       monthlySavings = contribution - spendingIncrease;
     }
 
-    // Calculate interest on current balance
+    // Calculate interest
     const monthlyInterest = netWorth * monthlyRate;
     cumulativeInterest += monthlyInterest;
 
@@ -2298,7 +2367,6 @@ export function generateMonthlyProjections(
     cumulativeContributions += contribution;
 
     // Calculate end-of-month net worth
-    // Net worth grows by interest, plus we add savings (which could be negative if spending > income)
     netWorth = netWorth + monthlyInterest + monthlySavings;
 
     // SWR calculations
