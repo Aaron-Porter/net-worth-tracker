@@ -257,40 +257,35 @@ export function useScenarios(): UseScenariosReturn {
   
   const latestEntry = entries[0] || null;
   
-  // Generate projections for all selected scenarios
-  const scenarioProjections = useMemo((): ScenarioProjection[] => {
+  // Stable projections — only recompute when entry data or scenario settings change,
+  // NOT on every real-time tick. Uses the entry's raw amount as starting NW so projections
+  // don't double-count appreciation that the real-time counter already shows.
+  const stableProjections = useMemo(() => {
     if (!latestEntry || selectedScenarios.length === 0) return [];
-    
+
     return selectedScenarios.map(scenario => {
-      // Create settings object from scenario
-      // monthlySpend is set to 0 as we use level-based spending from baseMonthlyBudget + spendingGrowthRate
       const scenarioSettings: UserSettings = {
         currentRate: scenario.currentRate,
         swr: scenario.swr,
         yearlyContribution: scenario.yearlyContribution,
         birthDate: localProfile.birthDate,
-        monthlySpend: 0, // Not used - spending comes from levels system
+        monthlySpend: 0,
         inflationRate: scenario.inflationRate,
         baseMonthlyBudget: scenario.baseMonthlyBudget,
         spendingGrowthRate: scenario.spendingGrowthRate,
         incomeGrowthRate: scenario.incomeGrowthRate,
-        scenarioStartDate: scenario.startDate ?? scenario.createdAt, // For continuous inflation tracking
+        scenarioStartDate: scenario.startDate ?? scenario.createdAt,
       };
-      
-      // Calculate real-time net worth
-      const currentNetWorth = calculateRealTimeNetWorth(latestEntry, scenarioSettings, false);
-      
-      // Calculate growth rates
-      const growthRates = calculateGrowthRates(currentNetWorth.total, scenarioSettings, false);
 
-      // Generate dynamic projections first if income data is available
-      // These will be used to provide tax-aware savings calculations
+      // Use entry amount as the stable starting point for projections
+      const entryNetWorth = latestEntry.amount;
+
       const hasDynamicIncome = !!(scenario.grossIncome && scenario.grossIncome > 0);
       let dynamicProjections: YearlyProjectedFinancials[] | null = null;
 
       if (hasDynamicIncome && scenario.grossIncome) {
         dynamicProjections = generateDynamicProjections(
-          currentNetWorth.total,
+          entryNetWorth,
           {
             grossIncome: scenario.grossIncome,
             incomeGrowthRate: scenario.incomeGrowthRate || 0,
@@ -309,68 +304,83 @@ export function useScenarios(): UseScenariosReturn {
             inflationRate: scenario.inflationRate,
           },
           scenario.currentRate,
-          30 // 30 years of projections
+          30
         );
       }
 
-      // Generate projections for this scenario
-      // Pass dynamic projections to use tax-aware savings when available
       const projections = generateProjections(
         latestEntry,
-        currentNetWorth.total,
-        currentNetWorth.appreciation,
+        entryNetWorth,
+        0, // No appreciation baked in — projections model full-year growth from entry amount
         scenarioSettings,
-        false, // applyInflation - not needed, inflation is built into level-based spending
-        true,  // useSpendingLevels - always use level-based spending
-        dynamicProjections // Use tax-aware savings from dynamic projections when available
+        false,
+        true,
+        dynamicProjections
       );
 
-      // Calculate level info
-      const levelInfo = calculateLevelInfo(currentNetWorth.total, scenarioSettings, entries);
+      const levelInfo = calculateLevelInfo(entryNetWorth, scenarioSettings, entries);
 
-      // Find milestones
       const fiRow = projections.find(p => p.isFiYear);
       const crossoverRow = projections.find(p => p.isCrossover);
-      const firstRow = projections[0]; // First projection row (current year)
+      const firstRow = projections[0];
 
-      // Calculate birth year for age calculations
-      const birthYear = localProfile.birthDate 
-        ? new Date(localProfile.birthDate).getFullYear() 
+      const birthYear = localProfile.birthDate
+        ? new Date(localProfile.birthDate).getFullYear()
         : null;
 
-      // Calculate FI milestones along the journey
-      const fiMilestones = calculateFiMilestones(projections, scenarioSettings, birthYear, currentNetWorth.total);
+      const fiMilestones = calculateFiMilestones(projections, scenarioSettings, birthYear, entryNetWorth);
 
-      // Generate monthly projections for more granular spending tracking
-      // Spending updates each month based on net worth (not just yearly)
       const monthlyProjections = generateMonthlyProjections(
-        currentNetWorth.total,
+        entryNetWorth,
         scenarioSettings,
-        120 // 10 years of monthly data
+        120
       );
 
       return {
         scenario,
         projections,
         levelInfo,
-        growthRates,
-        currentNetWorth,
         fiYear: typeof fiRow?.year === 'number' ? fiRow.year : null,
         fiAge: fiRow?.age ?? null,
         crossoverYear: typeof crossoverRow?.year === 'number' ? crossoverRow.year : null,
-        currentFiProgress: (() => {
-          const currentSpendForFi = calculateLevelBasedSpending(currentNetWorth.total, scenarioSettings, 0);
-          const currentFiTarget = calculateFiTarget(currentSpendForFi, scenarioSettings.swr);
-          return currentFiTarget > 0 ? (currentNetWorth.total / currentFiTarget) * 100 : 0;
-        })(),
         currentMonthlySwr: firstRow?.monthlySwr ?? 0,
         dynamicProjections,
         hasDynamicIncome,
         fiMilestones,
         monthlyProjections,
+        scenarioSettings,
       };
     });
-  }, [latestEntry, selectedScenarios, localProfile, entries, realtimeTick]);
+  }, [latestEntry, selectedScenarios, localProfile, entries]);
+
+  // Real-time layer — overlays currentNetWorth + growthRates + currentFiProgress
+  // on top of stable projections, ticking every 50ms for the dashboard counter.
+  const scenarioProjections = useMemo((): ScenarioProjection[] => {
+    return stableProjections.map(sp => {
+      const currentNetWorth = calculateRealTimeNetWorth(latestEntry!, sp.scenarioSettings, false);
+      const growthRates = calculateGrowthRates(currentNetWorth.total, sp.scenarioSettings, false);
+      const currentSpendForFi = calculateLevelBasedSpending(currentNetWorth.total, sp.scenarioSettings, 0);
+      const currentFiTarget = calculateFiTarget(currentSpendForFi, sp.scenarioSettings.swr);
+      const currentFiProgress = currentFiTarget > 0 ? (currentNetWorth.total / currentFiTarget) * 100 : 0;
+
+      return {
+        scenario: sp.scenario,
+        projections: sp.projections,
+        levelInfo: sp.levelInfo,
+        growthRates,
+        currentNetWorth,
+        fiYear: sp.fiYear,
+        fiAge: sp.fiAge,
+        crossoverYear: sp.crossoverYear,
+        currentFiProgress,
+        currentMonthlySwr: sp.currentMonthlySwr,
+        dynamicProjections: sp.dynamicProjections,
+        hasDynamicIncome: sp.hasDynamicIncome,
+        fiMilestones: sp.fiMilestones,
+        monthlyProjections: sp.monthlyProjections,
+      };
+    });
+  }, [stableProjections, realtimeTick, latestEntry]);
   
   const createScenario = useCallback(async (data: CreateScenarioData) => {
     return await createMutation(data);

@@ -311,7 +311,7 @@ function CalculationTooltip({ trace, targetRect, onClose }: TooltipProps) {
                     )}
                     {step.intermediateResult !== undefined && (
                       <div className="text-emerald-400 font-mono mt-0.5">
-                        = {formatNumber(step.intermediateResult, trace.unit)}
+                        = {formatNumber(step.intermediateResult, step.unit || trace.unit)}
                       </div>
                     )}
                   </div>

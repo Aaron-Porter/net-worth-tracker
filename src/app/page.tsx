@@ -31,6 +31,8 @@ import {
   calculateProjectedRetirementIncome,
 } from '../lib/calculations'
 import { TrackedValue, SimpleTrackedValue } from './components/TrackedValue'
+import type { TrackedValue as TrackedValueType } from '../lib/calculationTrace'
+import { TrackedNumber } from '../lib/TrackedNumber'
 import { 
   generateTrackedDashboardValues, 
   createTrackedAmount, 
@@ -2507,13 +2509,15 @@ function ProjectionsTable({
   const birthYear = birthDate ? new Date(birthDate).getFullYear() : null;
   const [showYearlyDetail, setShowYearlyDetail] = useState(true);
   const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('yearly');
+  const [coastTargetAge, setCoastTargetAge] = useState(65);
 
   const primaryProjection = scenarioProjections[0];
 
   // Type for display rows that can be either yearly or monthly
   interface DisplayRow {
+    isNow?: boolean;      // Real-time "current" row
     year: number;
-    displayYear?: string; // Only for monthly view
+    displayYear?: string; // Only for monthly view (or 'Now' for current row)
     monthIndex?: number;  // Only for monthly view (0-11)
     age: number | null;
     yearsFromEntry: number;
@@ -2539,6 +2543,37 @@ function ProjectionsTable({
     netIncome?: number;
     preTaxContributions?: number;
   }
+
+  // Fractional current age for precise coast number calculation on the "Now" row
+  const fractionalCurrentAge = birthDate
+    ? (Date.now() - new Date(birthDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+    : null;
+
+  // "Now" row — real-time snapshot prepended to every view
+  const nowRow: DisplayRow = {
+    isNow: true,
+    year: currentYear,
+    displayYear: 'Now',
+    age: fractionalCurrentAge,
+    yearsFromEntry: 0,
+    netWorth: 0, // Overridden in render loop with sp.currentNetWorth.total
+    interest: 0,
+    contributed: 0,
+    annualSwr: 0,
+    monthlySwr: 0,
+    weeklySwr: 0,
+    dailySwr: 0,
+    monthlySpend: 0,
+    annualSpending: 0,
+    annualSavings: 0,
+    fiTarget: 0,
+    fiProgress: 0,
+    coastFiYear: null,
+    coastFiAge: null,
+    isFiYear: false,
+    isCrossover: false,
+    swrCoversSpend: false,
+  };
 
   // Transform projections based on view mode
   const displayRows = useMemo((): DisplayRow[] => {
@@ -2679,6 +2714,18 @@ function ProjectionsTable({
                 Yearly
               </button>
             </div>
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <span>Coast to</span>
+              <input
+                type="range"
+                min={40}
+                max={90}
+                value={coastTargetAge}
+                onChange={(e) => setCoastTargetAge(Number(e.target.value))}
+                className="w-20 h-1 accent-cyan-500"
+              />
+              <span className="text-cyan-400 font-medium w-6">{coastTargetAge}</span>
+            </div>
           </div>
           <button
             onClick={() => setShowYearlyDetail(!showYearlyDetail)}
@@ -2722,6 +2769,9 @@ function ProjectionsTable({
                   <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
                     FI %
                   </th>
+                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                    Coast
+                  </th>
                   <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
                     Milestones
                   </th>
@@ -2741,12 +2791,12 @@ function ProjectionsTable({
                 </tr>
               </thead>
               <tbody>
-                {displayRows.map((row, rowIndex) => {
+                {[nowRow, ...displayRows].map((row, rowIndex) => {
                   const displayYearValue = row.displayYear || row.year;
                   const lookupYear = row.year;
 
                   // Check if any scenario hits FI this year
-                  const scenarioFiStatus = scenarioProjections.map(sp => {
+                  const scenarioFiStatus = row.isNow ? [] : scenarioProjections.map(sp => {
                     const scenarioRow = sp.projections.find(p => p.year === lookupYear);
                     return {
                       scenario: sp,
@@ -2757,18 +2807,22 @@ function ProjectionsTable({
                   const anyFiYear = scenarioFiStatus.some(s => s.isFiYear);
 
                   // Generate unique key
-                  const rowKey = `${lookupYear}-${row.monthIndex || 0}`;
+                  const rowKey = row.isNow ? 'now' : `${lookupYear}-${row.monthIndex || 0}`;
 
-                  // Return sub-rows for each scenario
-                  return scenarioProjections.map((sp, scenarioIndex) => {
-                    const isFirstScenario = scenarioIndex === 0;
-                    const isLastScenario = scenarioIndex === scenarioProjections.length - 1;
+                  // Return sub-rows for each scenario (Now row: single row using primary scenario)
+                  const scenariosForRow = row.isNow ? [scenarioProjections[0]] : scenarioProjections;
+                  return scenariosForRow.map((sp, scenarioIndex) => {
+                    const isFirstScenario = row.isNow || scenarioIndex === 0;
+                    const isLastScenario = row.isNow || scenarioIndex === scenarioProjections.length - 1;
 
                     // Get net worth and FI status
                     let netWorthValue = 0;
                     let isFiYear = false;
 
-                    if (viewMode === 'monthly' && sp.monthlyProjections?.length) {
+                    if (row.isNow) {
+                      // "Now" row — use real-time net worth
+                      netWorthValue = sp.currentNetWorth.total;
+                    } else if (viewMode === 'monthly' && sp.monthlyProjections?.length) {
                       // Find the matching month in this scenario's monthly projections
                       const monthData = sp.monthlyProjections.find(
                         m => m.year === lookupYear && m.month === ((row.monthIndex || 0) + 1)
@@ -2812,12 +2866,34 @@ function ProjectionsTable({
                     let fiProgress = 0;
                     let fiTarget = 0;
 
-                    if (viewMode === 'monthly' && sp.monthlyProjections?.length) {
+                    // Track which data source has pre-built traces
+                    type TrackedFields = { trackedSpending?: TrackedValueType; trackedSavings?: TrackedValueType; trackedNetWorth?: TrackedValueType; trackedMonthlySwr?: TrackedValueType; trackedFiTarget?: TrackedValueType; trackedFiProgress?: TrackedValueType; trackedIncome?: TrackedValueType; trackedTax?: TrackedValueType; trackedNetIncome?: TrackedValueType };
+                    let trackedSource: TrackedFields | undefined;
+
+                    if (row.isNow) {
+                      // "Now" row — derive values from real-time NW, use first projection row traces
+                      const nowSwr = calculateSwrAmounts(netWorthValue, sp.scenario.swr);
+                      const nowMonthlySpend = scenarioRow?.monthlySpend ?? 0;
+                      spendingDisplayValue = viewMode === 'monthly' ? nowMonthlySpend : nowMonthlySpend * 12;
+                      savingsDisplayValue = viewMode === 'monthly' ? (scenarioRow?.annualSavings || 0) / 12 : (scenarioRow?.annualSavings || 0);
+                      monthlySwr = nowSwr.monthly;
+                      swrDisplayValue = viewMode === 'monthly' ? nowSwr.monthly : nowSwr.annual;
+                      swrCoversSpend = nowMonthlySpend > 0 && nowSwr.monthly >= nowMonthlySpend;
+                      fiTarget = calculateFiTarget(nowMonthlySpend, sp.scenario.swr);
+                      fiProgress = fiTarget > 0 ? (netWorthValue / fiTarget) * 100 : 0;
+                      // Use first projection row traces for spending/savings/SWR, but exclude
+                      // NW and FI progress traces since those are computed from real-time NW
+                      trackedSource = scenarioRow ? {
+                        ...scenarioRow,
+                        trackedNetWorth: undefined,
+                        trackedFiProgress: undefined,
+                      } : undefined;
+                    } else if (viewMode === 'monthly' && sp.monthlyProjections?.length) {
                       // Find the matching month in this scenario's monthly projections
                       const monthData = sp.monthlyProjections.find(
                         m => m.year === lookupYear && m.month === ((row.monthIndex || 0) + 1)
                       );
-                      
+
                       if (monthData) {
                         // Use actual monthly spending (calculated based on that month's net worth)
                         spendingDisplayValue = monthData.monthlySpending;
@@ -2827,6 +2903,7 @@ function ProjectionsTable({
                         swrCoversSpend = monthData.swrCoversSpend;
                         fiTarget = monthData.fiTarget;
                         fiProgress = monthData.fiProgress;
+                        trackedSource = monthData;
                       } else {
                         // Fallback to yearly data divided by 12
                         spendingDisplayValue = (scenarioRow?.annualSpending || 0) / 12;
@@ -2846,6 +2923,7 @@ function ProjectionsTable({
                       swrCoversSpend = scenarioRow?.swrCoversSpend || false;
                       fiTarget = scenarioRow?.fiTarget || 0;
                       fiProgress = scenarioRow?.fiProgress || 0;
+                      trackedSource = scenarioRow;
                     }
 
                     const savings = savingsDisplayValue;
@@ -2863,16 +2941,42 @@ function ProjectionsTable({
                     const hasNetIncome = sp.hasDynamicIncome && netIncome > 0;
                     const netIncomeDisplayValue = viewMode === 'monthly' ? netIncome / 12 : netIncome;
 
+                    // Build monthly income/tax/net income traces by dividing annual traces by 12
+                    const monthsDivisor = TrackedNumber.constant(12, 'Months per year');
+                    const trackedIncomeForDisplay = scenarioRow?.trackedIncome
+                      ? (viewMode === 'monthly'
+                        ? TrackedNumber.fromTrackedValue(scenarioRow.trackedIncome)
+                            .divide(monthsDivisor, { name: 'Monthly Income', unit: '$', category: 'projection', description: 'Annual gross income divided by 12', formula: 'Annual Income ÷ 12' })
+                            .toTrackedValue()
+                        : scenarioRow.trackedIncome)
+                      : undefined;
+                    const trackedTaxForDisplay = scenarioRow?.trackedTax
+                      ? (viewMode === 'monthly'
+                        ? TrackedNumber.fromTrackedValue(scenarioRow.trackedTax)
+                            .divide(monthsDivisor, { name: 'Monthly Taxes', unit: '$', category: 'tax', description: 'Annual taxes divided by 12', formula: 'Annual Taxes ÷ 12' })
+                            .toTrackedValue()
+                        : scenarioRow.trackedTax)
+                      : undefined;
+                    const trackedNetIncomeForDisplay = scenarioRow?.trackedNetIncome
+                      ? (viewMode === 'monthly'
+                        ? TrackedNumber.fromTrackedValue(scenarioRow.trackedNetIncome)
+                            .divide(monthsDivisor, { name: 'Monthly Net Income', unit: '$', category: 'projection', description: 'Annual net income divided by 12', formula: 'Annual Net Income ÷ 12' })
+                            .toTrackedValue()
+                        : scenarioRow.trackedNetIncome)
+                      : undefined;
+
                     return (
                       <tr
                         key={`${rowKey}-${sp.scenario._id}`}
                         className={`hover:bg-slate-700/30 ${
-                          isLastScenario ? 'border-b border-slate-700/50' : 'border-b border-slate-700/20'
+                          row.isNow
+                            ? (isLastScenario ? 'border-b-2 border-cyan-500/30' : 'border-b border-slate-700/20')
+                            : (isLastScenario ? 'border-b border-slate-700/50' : 'border-b border-slate-700/20')
                         } ${
-                          anyFiYear && isFirstScenario ? 'bg-emerald-900/20' : ''
+                          row.isNow ? 'bg-cyan-900/10' : (anyFiYear && isFirstScenario ? 'bg-emerald-900/20' : '')
                         }`}
                         style={{
-                          backgroundColor: isFirstScenario && anyFiYear ? undefined : `${sp.scenario.color}08`,
+                          backgroundColor: row.isNow ? undefined : (isFirstScenario && anyFiYear ? undefined : `${sp.scenario.color}08`),
                           borderLeftWidth: '3px',
                           borderLeftColor: sp.scenario.color,
                         }}
@@ -2880,8 +2984,8 @@ function ProjectionsTable({
                         {/* Year/Month - only show in first scenario row */}
                         {isFirstScenario && (
                           <td
-                            className="py-2 px-3 font-medium text-slate-300 align-top"
-                            rowSpan={scenarioProjections.length}
+                            className={`py-2 px-3 font-medium align-top ${row.isNow ? 'text-cyan-400' : 'text-slate-300'}`}
+                            rowSpan={row.isNow ? 1 : scenarioProjections.length}
                           >
                             {displayYearValue}
                           </td>
@@ -2889,101 +2993,230 @@ function ProjectionsTable({
                         {/* Age - only show in first scenario row */}
                         {isFirstScenario && birthDate && (
                           <td
-                            className="py-2 px-3 text-slate-400 align-top"
-                            rowSpan={scenarioProjections.length}
+                            className={`py-2 px-3 align-top ${row.isNow ? 'text-cyan-400/70' : 'text-slate-400'}`}
+                            rowSpan={row.isNow ? 1 : scenarioProjections.length}
                           >
                             {row.age !== null && typeof row.age === 'number' ? Math.floor(row.age) : row.age}
                           </td>
                         )}
                         {/* Scenario name with color */}
-                        <td className="py-2 px-3 text-sm font-medium" style={{ color: sp.scenario.color }}>
-                          {sp.scenario.name}
+                        <td className={`py-2 px-3 text-sm font-medium ${row.isNow ? 'text-cyan-400/60' : ''}`} style={row.isNow ? undefined : { color: sp.scenario.color }}>
+                          {row.isNow ? 'Current' : sp.scenario.name}
                         </td>
                         {/* Net Worth */}
                         <td className="py-2 px-3 text-right font-mono" style={{ color: sp.scenario.color }}>
-                          <SimpleTrackedValue
-                            value={netWorthValue}
-                            name={`Net Worth (${displayYearValue})`}
-                            description={`Projected net worth for ${sp.scenario.name} in ${displayYearValue}`}
-                            formula="Previous NW × (1 + Rate) + Contributions - Spending"
-                            inputs={[
-                              { name: 'Return Rate', value: `${sp.scenario.currentRate}%` },
-                              { name: 'Scenario', value: sp.scenario.name },
-                            ]}
-                            className="font-mono"
-                          />
+                          {trackedSource?.trackedNetWorth ? (
+                            <TrackedValue value={trackedSource.trackedNetWorth} className="font-mono" />
+                          ) : (
+                            <SimpleTrackedValue
+                              value={netWorthValue}
+                              name={`Net Worth (${displayYearValue})`}
+                              description={`Projected net worth for ${sp.scenario.name} in ${displayYearValue}`}
+                              formula="Previous NW × (1 + Rate) + Contributions - Spending"
+                              inputs={[
+                                { name: 'Return Rate', value: `${sp.scenario.currentRate}%` },
+                                { name: 'Scenario', value: sp.scenario.name },
+                              ]}
+                              className="font-mono"
+                            />
+                          )}
                           {isFiYear && <span className="ml-1 text-xs text-emerald-400">FI</span>}
                         </td>
                         {/* Spending */}
                         <td className="py-2 px-3 text-right font-mono text-rose-400/80">
-                          <SimpleTrackedValue
-                            value={spendingDisplayValue}
-                            name={`Spending (${displayYearValue})`}
-                            description={`Level-based spending budget for ${displayYearValue}`}
-                            formula={`Base Budget (inflation-adj) + Net Worth × ${sp.scenario.spendingGrowthRate}%`}
-                            inputs={[
-                              { name: 'Period', value: viewMode === 'monthly' ? 'Monthly' : 'Annual' },
-                              { name: 'Base Budget', value: sp.scenario.baseMonthlyBudget, unit: '$' },
-                            ]}
-                            className="font-mono text-rose-400/80"
-                          />
+                          {trackedSource?.trackedSpending ? (
+                            <TrackedValue value={trackedSource.trackedSpending} className="font-mono text-rose-400/80" />
+                          ) : (
+                            <SimpleTrackedValue
+                              value={spendingDisplayValue}
+                              name={`Spending (${displayYearValue})`}
+                              description={`Level-based spending budget for ${displayYearValue}`}
+                              formula={`Base Budget (inflation-adj) + Net Worth × ${sp.scenario.spendingGrowthRate}%`}
+                              inputs={[
+                                { name: 'Period', value: viewMode === 'monthly' ? 'Monthly' : 'Annual' },
+                                { name: 'Base Budget', value: sp.scenario.baseMonthlyBudget, unit: '$' },
+                              ]}
+                              className="font-mono text-rose-400/80"
+                            />
+                          )}
                         </td>
                         {/* Savings */}
                         <td className={`py-2 px-3 text-right font-mono ${
                           savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'
                         }`}>
-                          <SimpleTrackedValue
-                            value={savingsDisplayValue}
-                            name={`Savings (${displayYearValue})`}
-                            description={`Net savings after spending for ${displayYearValue}`}
-                            formula="Income - Taxes - Spending"
-                            inputs={[
-                              { name: 'Period', value: viewMode === 'monthly' ? 'Monthly' : 'Annual' },
-                            ]}
-                            className={`font-mono ${savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'}`}
-                          />
+                          {trackedSource?.trackedSavings ? (
+                            <TrackedValue value={trackedSource.trackedSavings} className={`font-mono ${savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'}`} />
+                          ) : (
+                            <SimpleTrackedValue
+                              value={savingsDisplayValue}
+                              name={`Savings (${displayYearValue})`}
+                              description={`Net savings after spending for ${displayYearValue}`}
+                              formula="Income - Taxes - Spending"
+                              inputs={[
+                                { name: 'Period', value: viewMode === 'monthly' ? 'Monthly' : 'Annual' },
+                              ]}
+                              className={`font-mono ${savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'}`}
+                            />
+                          )}
                         </td>
                         {/* SWR */}
                         <td className={`py-2 px-3 text-right font-mono ${
                           swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'
                         }`}>
-                          <SimpleTrackedValue
-                            value={swrDisplayValue}
-                            name={`SWR (${displayYearValue})`}
-                            description={`Safe withdrawal amount for ${displayYearValue} at ${sp.scenario.swr}% SWR`}
-                            formula={`Net Worth × ${sp.scenario.swr}%${viewMode === 'monthly' ? ' ÷ 12' : ''}`}
-                            inputs={[
-                              { name: 'Net Worth', value: netWorthValue, unit: '$' },
-                              { name: 'SWR', value: `${sp.scenario.swr}%` },
-                            ]}
-                            className={`font-mono ${swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'}`}
-                          />
+                          {trackedSource?.trackedMonthlySwr ? (
+                            <TrackedValue value={trackedSource.trackedMonthlySwr} className={`font-mono ${swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'}`} />
+                          ) : (
+                            <SimpleTrackedValue
+                              value={swrDisplayValue}
+                              name={`SWR (${displayYearValue})`}
+                              description={`Safe withdrawal amount for ${displayYearValue} at ${sp.scenario.swr}% SWR`}
+                              formula={`Net Worth × ${sp.scenario.swr}%${viewMode === 'monthly' ? ' ÷ 12' : ''}`}
+                              inputs={[
+                                { name: 'Net Worth', value: netWorthValue, unit: '$' },
+                                { name: 'SWR', value: `${sp.scenario.swr}%` },
+                              ]}
+                              className={`font-mono ${swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'}`}
+                            />
+                          )}
                         </td>
                         {/* FI Progress */}
                         <td className={`py-2 px-3 text-right font-mono ${
                           fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'
                         }`}>
-                          <SimpleTrackedValue
-                            value={fiProgress}
-                            name={`FI Progress (${displayYearValue})`}
-                            description={`Progress towards financial independence for ${displayYearValue}`}
-                            formula={`(Net Worth ÷ FI Target) × 100`}
-                            inputs={[
-                              { name: 'Net Worth', value: netWorthValue, unit: '$' },
-                              { name: 'FI Target', value: fiTarget, unit: '$' },
-                            ]}
-                            unit="%"
-                            className={`font-mono ${fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}
-                          />
+                          {trackedSource?.trackedFiProgress ? (
+                            <TrackedValue
+                              value={trackedSource.trackedFiProgress}
+                              formatter={(v: number) => `${v.toFixed(2)}%`}
+                              showCurrency={false}
+                              className={`font-mono ${fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}
+                            />
+                          ) : (
+                            <SimpleTrackedValue
+                              value={fiProgress}
+                              name={`FI Progress (${displayYearValue})`}
+                              description={`Progress towards financial independence for ${displayYearValue}`}
+                              formula={`(Net Worth ÷ FI Target) × 100`}
+                              inputs={[
+                                { name: 'Net Worth', value: netWorthValue, unit: '$' },
+                                { name: 'FI Target', value: fiTarget, unit: '$' },
+                              ]}
+                              unit="%"
+                              className={`font-mono ${fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'}`}
+                            />
+                          )}
                         </td>
-                        {/* Milestones reached this year */}
+                        {/* Coast Number */}
+                        {(() => {
+                          const rowAge = row.age !== null && typeof row.age === 'number' ? row.age : null;
+                          const yearsToTarget = rowAge !== null
+                            ? Math.max(0, coastTargetAge - rowAge)
+                            : Math.max(0, coastTargetAge - 25 - (row.yearsFromEntry || 0));
+                          const coastRate = sp.scenario.currentRate / 100;
+                          const coastMultiplier = yearsToTarget > 0 ? Math.pow(1 + coastRate, yearsToTarget) : 1;
+
+                          const nwForCoast = TrackedNumber.from(netWorthValue, 'Net Worth', { unit: '$', category: 'projection' });
+                          const yearsToTargetTN = TrackedNumber.from(yearsToTarget, 'Years to Target', {
+                            unit: 'years',
+                            description: `Years until age ${coastTargetAge}`,
+                            category: 'projection',
+                          });
+                          const coastRateTN = TrackedNumber.setting(sp.scenario.currentRate, 'Return Rate', 'currentRate', { unit: '%' });
+                          const coastRateDecTN = coastRateTN.divide(TrackedNumber.constant(100, '100'), { name: 'Rate (decimal)' });
+                          const coastMultTN = TrackedNumber.constant(1, '1')
+                            .add(coastRateDecTN, { name: '1 + Rate' })
+                            .pow(yearsToTargetTN, {
+                              name: 'Growth Multiplier',
+                              description: `${yearsToTarget.toFixed(1)} years of compounding at ${sp.scenario.currentRate}%`,
+                            });
+                          const coastTN = nwForCoast.multiply(coastMultTN, {
+                            name: 'Coast Number',
+                            unit: '$',
+                            category: 'projection',
+                            description: `Net worth at age ${coastTargetAge} if you stop contributing`,
+                            formula: 'Net Worth × (1 + Rate)^Years to Target',
+                          });
+
+                          // Derive SWR and inflation-adjusted values for the tooltip steps
+                          const coastVal = coastTN.value;
+                          const swrPct = sp.scenario.swr;
+                          const inflPct = sp.scenario.inflationRate;
+                          const swrAnnual = coastVal * (swrPct / 100);
+                          const swrMonthly = swrAnnual / 12;
+                          const inflMultiplier = yearsToTarget > 0 ? Math.pow(1 + inflPct / 100, yearsToTarget) : 1;
+                          const coastReal = coastVal / inflMultiplier;
+                          const swrAnnualReal = swrAnnual / inflMultiplier;
+                          const swrMonthlyReal = swrMonthly / inflMultiplier;
+
+                          const coastTrace = coastTN.toTrackedValue();
+                          const coastWithSteps: TrackedValueType = {
+                            ...coastTrace,
+                            trace: {
+                              ...coastTrace.trace,
+                              steps: [
+                                {
+                                  description: `SWR at ${swrPct}% (annual)`,
+                                  formula: `${formatCurrency(coastVal, 0)} × ${swrPct}%`,
+                                  intermediateResult: swrAnnual,
+                                  unit: '$',
+                                  inputs: [],
+                                },
+                                {
+                                  description: `SWR at ${swrPct}% (monthly)`,
+                                  formula: `${formatCurrency(swrAnnual, 0)} ÷ 12`,
+                                  intermediateResult: swrMonthly,
+                                  unit: '$',
+                                  inputs: [],
+                                },
+                                {
+                                  description: `Inflation-adjusted value (${inflPct}% over ${yearsToTarget.toFixed(1)} yrs)`,
+                                  formula: `${formatCurrency(coastVal, 0)} ÷ (1 + ${inflPct}%)^${yearsToTarget.toFixed(1)}`,
+                                  intermediateResult: coastReal,
+                                  unit: '$',
+                                  inputs: [],
+                                },
+                                {
+                                  description: `Real SWR (annual, today's dollars)`,
+                                  formula: `${formatCurrency(swrAnnual, 0)} ÷ ${inflMultiplier.toFixed(2)}`,
+                                  intermediateResult: swrAnnualReal,
+                                  unit: '$',
+                                  inputs: [],
+                                },
+                                {
+                                  description: `Real SWR (monthly, today's dollars)`,
+                                  formula: `${formatCurrency(swrMonthly, 0)} ÷ ${inflMultiplier.toFixed(2)}`,
+                                  intermediateResult: swrMonthlyReal,
+                                  unit: '$',
+                                  inputs: [],
+                                },
+                              ],
+                            },
+                          };
+
+                          return (
+                            <td className="py-2 px-3 text-right font-mono text-cyan-400/80">
+                              <TrackedValue
+                                value={coastWithSteps}
+                                className="font-mono text-cyan-400/80"
+                              />
+                            </td>
+                          );
+                        })()}
+                        {/* Milestones */}
                         <td className="py-2 px-3 text-left">
-                          {/* In monthly view, only show milestones in January to avoid repetition */}
-                          {(viewMode === 'yearly' || row.monthIndex === 0) && (
+                          {row.isNow ? (
+                            // "Now" row: show milestones already achieved
                             <MilestoneBadges
-                              milestones={sp.fiMilestones.milestones.filter(m => m.year === lookupYear && m.year !== null)}
+                              milestones={sp.fiMilestones.milestones.filter(m => m.isAchieved)}
                               maxVisible={3}
                             />
+                          ) : (
+                            // Projection rows: show milestones for this year, excluding already-achieved ones
+                            (viewMode === 'yearly' || row.monthIndex === 0) && (
+                              <MilestoneBadges
+                                milestones={sp.fiMilestones.milestones.filter(m => m.year === lookupYear && m.year !== null && !m.isAchieved)}
+                                maxVisible={3}
+                              />
+                            )
                           )}
                         </td>
                         {/* Income columns (only if any scenario has income data) */}
@@ -2993,39 +3226,67 @@ function ProjectionsTable({
                               hasIncome ? 'text-sky-400/80' : 'text-slate-500'
                             }`}>
                               {hasIncome ? (
-                                <SimpleTrackedValue
-                                  value={incomeDisplayValue}
-                                  name={`Income (${displayYearValue})`}
-                                  description={`Gross income for ${displayYearValue}`}
-                                  formula={`Base Income × (1 + ${sp.scenario.incomeGrowthRate || 0}%)^years`}
-                                  className="font-mono text-sky-400/80"
-                                />
+                                trackedIncomeForDisplay ? (
+                                  <TrackedValue value={trackedIncomeForDisplay} className="font-mono text-sky-400/80" />
+                                ) : (
+                                  <SimpleTrackedValue
+                                    value={incomeDisplayValue}
+                                    name={`Income (${displayYearValue})`}
+                                    description={`Gross income for ${displayYearValue}`}
+                                    formula={`Base Income × (1 + ${sp.scenario.incomeGrowthRate || 0}%)^years`}
+                                    inputs={[
+                                      { name: 'Base Income', value: sp.scenario.grossIncome || 0, unit: '$' },
+                                      { name: 'Growth Rate', value: `${sp.scenario.incomeGrowthRate || 0}%` },
+                                      { name: 'Period', value: viewMode === 'monthly' ? 'Monthly (÷12)' : 'Annual' },
+                                    ]}
+                                    className="font-mono text-sky-400/80"
+                                  />
+                                )
                               ) : '-'}
                             </td>
                             <td className={`py-2 px-3 text-right font-mono ${
                               hasTax ? 'text-red-400/80' : 'text-slate-500'
                             }`}>
                               {hasTax ? (
-                                <SimpleTrackedValue
-                                  value={taxDisplayValue}
-                                  name={`Taxes (${displayYearValue})`}
-                                  description={`Total taxes (Federal + State + FICA) for ${displayYearValue}`}
-                                  formula="Federal Tax + State Tax + FICA"
-                                  className="font-mono text-red-400/80"
-                                />
+                                trackedTaxForDisplay ? (
+                                  <TrackedValue value={trackedTaxForDisplay} className="font-mono text-red-400/80" />
+                                ) : (
+                                  <SimpleTrackedValue
+                                    value={taxDisplayValue}
+                                    name={`Taxes (${displayYearValue})`}
+                                    description={`Total taxes (Federal + State + FICA) for ${displayYearValue}`}
+                                    formula="Federal Tax + State Tax + FICA"
+                                    inputs={[
+                                      { name: 'Gross Income', value: scenarioRow?.grossIncome || 0, unit: '$' },
+                                      { name: 'Total Annual Tax', value: scenarioRow?.totalTax || 0, unit: '$' },
+                                      { name: 'Period', value: viewMode === 'monthly' ? 'Monthly (÷12)' : 'Annual' },
+                                    ]}
+                                    className="font-mono text-red-400/80"
+                                  />
+                                )
                               ) : '-'}
                             </td>
                             <td className={`py-2 px-3 text-right font-mono ${
                               hasNetIncome ? 'text-emerald-400/80' : 'text-slate-500'
                             }`}>
                               {hasNetIncome ? (
-                                <SimpleTrackedValue
-                                  value={netIncomeDisplayValue}
-                                  name={`Net Income (${displayYearValue})`}
-                                  description={`Take-home pay after taxes for ${displayYearValue}`}
-                                  formula="Gross Income - Pre-Tax Contributions - Total Taxes"
-                                  className="font-mono text-emerald-400/80"
-                                />
+                                trackedNetIncomeForDisplay ? (
+                                  <TrackedValue value={trackedNetIncomeForDisplay} className="font-mono text-emerald-400/80" />
+                                ) : (
+                                  <SimpleTrackedValue
+                                    value={netIncomeDisplayValue}
+                                    name={`Net Income (${displayYearValue})`}
+                                    description={`Take-home pay after taxes for ${displayYearValue}`}
+                                    formula="Gross Income - Pre-Tax Contributions - Total Taxes"
+                                    inputs={[
+                                      { name: 'Gross Income', value: scenarioRow?.grossIncome || 0, unit: '$' },
+                                      { name: 'Total Taxes', value: scenarioRow?.totalTax || 0, unit: '$' },
+                                      { name: 'Pre-Tax Contributions', value: scenarioRow?.preTaxContributions || 0, unit: '$' },
+                                      { name: 'Period', value: viewMode === 'monthly' ? 'Monthly (÷12)' : 'Annual' },
+                                    ]}
+                                    className="font-mono text-emerald-400/80"
+                                  />
+                                )
                               ) : '-'}
                             </td>
                           </>
@@ -3112,6 +3373,9 @@ function UnifiedChartTooltip({ active, payload, label, timeUnit }: any) {
   const spendingLabel = timeUnit === 'annual' ? 'Annual Spending' : 'Monthly Spending';
   const savingsLabel = timeUnit === 'annual' ? 'Annual Savings' : 'Monthly Savings';
 
+  // The underlying data point has all fields (including traced values)
+  const dataPoint = payload[0]?.payload || {};
+
   // Group payload by scenario
   const scenarioData: Record<string, any> = {};
   payload.forEach((item: any) => {
@@ -3123,6 +3387,14 @@ function UnifiedChartTooltip({ active, payload, label, timeUnit }: any) {
       };
     }
     scenarioData[scenarioName].data[metricType] = item.value;
+  });
+
+  // Attach traced values from the data point to each scenario
+  Object.keys(scenarioData).forEach(scenarioName => {
+    scenarioData[scenarioName].data.trackedFiProgress = dataPoint[`${scenarioName}_trackedFiProgress`];
+    scenarioData[scenarioName].data.trackedNetWorth = dataPoint[`${scenarioName}_trackedNetWorth`];
+    scenarioData[scenarioName].data.trackedSpending = dataPoint[`${scenarioName}_trackedSpending`];
+    scenarioData[scenarioName].data.trackedSavings = dataPoint[`${scenarioName}_trackedSavings`];
   });
 
   return (
@@ -3137,33 +3409,41 @@ function UnifiedChartTooltip({ active, payload, label, timeUnit }: any) {
             {data.data.fiProgress !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">FI Progress:</span>
-                <SimpleTrackedValue 
-                  value={data.data.fiProgress} 
-                  name={`Year ${data.data.year} FI Progress`} 
-                  description="Percentage of FI target achieved"
-                  formula="(Net Worth ÷ FI Target) × 100"
-                  formatAs="percent"
-                  decimals={1}
-                  className="text-emerald-400 font-mono"
-                />
+                {data.data.trackedFiProgress ? (
+                  <TrackedValue value={data.data.trackedFiProgress} formatter={(v: number) => `${v.toFixed(1)}%`} showCurrency={false} className="text-emerald-400 font-mono" />
+                ) : (
+                  <SimpleTrackedValue value={data.data.fiProgress} name={`Year ${label} FI Progress`} description="Percentage of FI target achieved" formula="(Net Worth ÷ FI Target) × 100" formatAs="percent" decimals={1} className="text-emerald-400 font-mono" />
+                )}
               </div>
             )}
             {data.data.netWorth !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">Net Worth:</span>
-                <SimpleTrackedValue value={data.data.netWorth} name={`Year ${data.data.year} Net Worth`} description="Projected net worth at this point" formula="Prior Year × (1 + Return) + Savings" className="text-sky-400 font-mono" />
+                {data.data.trackedNetWorth ? (
+                  <TrackedValue value={data.data.trackedNetWorth} className="text-sky-400 font-mono" />
+                ) : (
+                  <SimpleTrackedValue value={data.data.netWorth} name={`Year ${label} Net Worth`} description="Projected net worth at this point" formula="Prior Year × (1 + Return) + Savings" className="text-sky-400 font-mono" />
+                )}
               </div>
             )}
             {data.data.spending !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">{spendingLabel}:</span>
-                <SimpleTrackedValue value={data.data.spending} name={`Year ${data.data.year} ${spendingLabel}`} description="Projected spending at this point" formula="Base + (Net Worth × Rate)" className="text-amber-400 font-mono" />
+                {data.data.trackedSpending ? (
+                  <TrackedValue value={data.data.trackedSpending} className="text-amber-400 font-mono" />
+                ) : (
+                  <SimpleTrackedValue value={data.data.spending} name={`Year ${label} ${spendingLabel}`} description="Projected spending at this point" formula="Base + (Net Worth × Rate)" className="text-amber-400 font-mono" />
+                )}
               </div>
             )}
             {data.data.savings !== undefined && (
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">{savingsLabel}:</span>
-                <SimpleTrackedValue value={data.data.savings} name={`Year ${data.data.year} ${savingsLabel}`} description="Projected savings at this point" formula="Income - Taxes - Spending" className="text-violet-400 font-mono" />
+                {data.data.trackedSavings ? (
+                  <TrackedValue value={data.data.trackedSavings} className="text-violet-400 font-mono" />
+                ) : (
+                  <SimpleTrackedValue value={data.data.savings} name={`Year ${label} ${savingsLabel}`} description="Projected savings at this point" formula="Income - Taxes - Spending" className="text-violet-400 font-mono" />
+                )}
               </div>
             )}
           </div>
@@ -3259,6 +3539,11 @@ function ProjectionsChart({
           yearData[`${sp.scenario.name}_spending`] = proj.monthlySpend;
           yearData[`${sp.scenario.name}_savings`] = proj.annualSavings / 12; // Annual to monthly
         }
+        // Embed pre-built traces for chart tooltip drill-down
+        if (proj.trackedFiProgress) yearData[`${sp.scenario.name}_trackedFiProgress`] = proj.trackedFiProgress;
+        if (proj.trackedNetWorth) yearData[`${sp.scenario.name}_trackedNetWorth`] = proj.trackedNetWorth;
+        if (proj.trackedSpending) yearData[`${sp.scenario.name}_trackedSpending`] = proj.trackedSpending;
+        if (proj.trackedSavings) yearData[`${sp.scenario.name}_trackedSavings`] = proj.trackedSavings;
       });
     });
 

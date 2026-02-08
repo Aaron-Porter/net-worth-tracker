@@ -1,9 +1,18 @@
 /**
  * Centralized Financial Calculations Module
- * 
+ *
  * All financial calculations should be derived from this module to ensure
  * consistency across the application. Settings are the single source of truth.
  */
+
+import type { TrackedValue } from './calculationTrace';
+import { TrackedNumber } from './TrackedNumber';
+import {
+  calculateLevelBasedSpendingTN,
+  calculateFiTargetTN,
+  calculateSwrAmountsTN,
+  calculateFiProgressTN,
+} from './calculationTrace';
 
 // ============================================================================
 // TYPES
@@ -55,6 +64,16 @@ export interface ProjectionRow {
   totalTax?: number;          // Total taxes paid (federal + state + FICA)
   netIncome?: number;         // After-tax income (grossIncome - totalTax - preTaxContributions)
   preTaxContributions?: number; // Pre-tax retirement contributions
+  // Optional pre-built traces for tooltip drill-down
+  trackedSpending?: TrackedValue;
+  trackedSavings?: TrackedValue;
+  trackedNetWorth?: TrackedValue;
+  trackedMonthlySwr?: TrackedValue;
+  trackedFiTarget?: TrackedValue;
+  trackedFiProgress?: TrackedValue;
+  trackedIncome?: TrackedValue;
+  trackedTax?: TrackedValue;
+  trackedNetIncome?: TrackedValue;
 }
 
 /** Monthly projection row - for month-by-month detail where spending updates with net worth */
@@ -75,6 +94,13 @@ export interface MonthlyProjectionRow {
   fiTarget: number;           // FI target based on this month's spending
   fiProgress: number;         // Progress to FI
   swrCoversSpend: boolean;    // Whether SWR covers this month's spending
+  // Optional pre-built traces for tooltip drill-down
+  trackedSpending?: TrackedValue;
+  trackedSavings?: TrackedValue;
+  trackedNetWorth?: TrackedValue;
+  trackedMonthlySwr?: TrackedValue;
+  trackedFiTarget?: TrackedValue;
+  trackedFiProgress?: TrackedValue;
 }
 
 export interface GrowthRates {
@@ -2072,6 +2098,89 @@ export function generateProjections(
     // Extract tax info from dynamic projections if available
     const dynamicRow = dynamicProjections && dynamicProjections[i];
 
+    // Build TrackedNumber traces for yearly drill-down tooltips
+    const prevNwTN = TrackedNumber.from(previousNetWorth, 'Prior Net Worth', { unit: '$', category: 'projection' });
+    const rateTN = TrackedNumber.setting(currentRate, 'Annual Return Rate', 'currentRate', { unit: '%', category: 'projection' });
+    const rateDecimalTN = rateTN.divide(TrackedNumber.constant(100, '100'), { name: 'Return Rate (decimal)', description: 'Annual return as a decimal' });
+    const interestTN = prevNwTN.multiply(rateDecimalTN, { name: 'Annual Interest', unit: '$', category: 'projection', description: 'Investment return for the year' });
+
+    // Build spending trace using TrackedNumber arithmetic
+    const baseBudgetTN = TrackedNumber.setting(settings.baseMonthlyBudget, 'Base Monthly Budget', 'baseMonthlyBudget', { unit: '$', description: 'Your base spending floor', category: 'spending' });
+    const growthRateTN = TrackedNumber.setting(settings.spendingGrowthRate, 'Spending Growth Rate', 'spendingGrowthRate', { unit: '%', description: 'Additional spending as % of net worth', category: 'spending' });
+    const inflationTN = TrackedNumber.setting(inflationRate, 'Inflation Rate', 'inflationRate', { unit: '%', category: 'spending' });
+    const yearsTN = TrackedNumber.from(i, 'Years From Now', { unit: 'years', category: 'projection' });
+    const monthlySpendTN = calculateLevelBasedSpendingTN(prevNwTN, baseBudgetTN, growthRateTN, inflationTN, yearsTN);
+    const twelveTN = TrackedNumber.constant(12, 'Months per year');
+    const spendingTN = monthlySpendTN.multiply(twelveTN, { name: 'Annual Spending', unit: '$', category: 'spending', description: 'Monthly spending × 12', formula: 'Monthly Spending × 12' });
+
+    // Build savings trace with drill-down
+    let savingsTN: TrackedNumber;
+    let trackedIncome: TrackedValue | undefined;
+    let trackedTax: TrackedValue | undefined;
+    let trackedNetIncome: TrackedValue | undefined;
+
+    if (dynamicRow) {
+      // Build income/tax/savings traces from dynamic projections
+      // Income = Base Income × Growth Multiplier
+      const baseIncomeValue = i > 0 && incomeGrowthRate
+        ? dynamicRow.grossIncome / Math.pow(1 + incomeGrowthRate / 100, i)
+        : dynamicRow.grossIncome;
+      const baseIncomeTN = TrackedNumber.input(baseIncomeValue, 'Base Income', { unit: '$', description: 'Starting annual income', category: 'projection' });
+
+      let grossTN: TrackedNumber;
+      if (i > 0 && incomeGrowthRate) {
+        const incGrowthTN = TrackedNumber.setting(incomeGrowthRate, 'Income Growth Rate', 'incomeGrowthRate', { unit: '%' });
+        const incGrowthDecTN = incGrowthTN.divide(TrackedNumber.constant(100, '100'), { name: 'Growth Rate (decimal)' });
+        const growthFactorTN = TrackedNumber.constant(1, '1').add(incGrowthDecTN, { name: 'Growth Factor' });
+        const growthMultTN = growthFactorTN.pow(TrackedNumber.from(i, 'Years', { unit: 'years' }), { name: 'Growth Multiplier', description: `${i} years of ${incomeGrowthRate}% growth` });
+        grossTN = baseIncomeTN.multiply(growthMultTN, { name: 'Gross Income', unit: '$', category: 'projection', description: 'Annual gross income after growth', formula: 'Base Income × (1 + Growth Rate)^Years' });
+      } else {
+        grossTN = TrackedNumber.input(dynamicRow.grossIncome, 'Gross Income', { unit: '$', category: 'projection', description: 'Annual gross income' });
+      }
+
+      const preTaxTN = TrackedNumber.from(dynamicRow.preTaxContributions, 'Pre-Tax Contributions', { unit: '$', category: 'projection', description: '401(k), IRA, HSA contributions' });
+
+      const fedTaxTN = TrackedNumber.from(dynamicRow.federalTax, 'Federal Tax', { unit: '$', category: 'tax', description: 'Federal income tax from bracket calculation' });
+      const stateTaxTN = TrackedNumber.from(dynamicRow.stateTax, 'State Tax', { unit: '$', category: 'tax', description: 'State income tax' });
+      const ficaTaxTN = TrackedNumber.from(dynamicRow.ficaTax, 'FICA Tax', { unit: '$', category: 'tax', description: 'Social Security + Medicare taxes' });
+      const totalTaxTN = fedTaxTN.add(stateTaxTN, { name: 'Income Tax', unit: '$', category: 'tax', description: 'Federal + State income tax' })
+        .add(ficaTaxTN, { name: 'Total Tax', unit: '$', description: 'All taxes combined', formula: 'Federal Tax + State Tax + FICA', category: 'tax' });
+
+      const netIncomeTN = grossTN.subtract(preTaxTN, { name: 'After Pre-Tax Deductions', unit: '$', category: 'projection', description: 'Gross income minus pre-tax contributions' })
+        .subtract(totalTaxTN, { name: 'Net Income', unit: '$', description: 'Take-home pay after all deductions and taxes', formula: 'Gross Income − Pre-Tax Contributions − Total Taxes', category: 'projection' });
+
+      // Savings = Pre-Tax + (Net Income - Annual Spending)
+      const postTaxSavingsTN = netIncomeTN.subtract(spendingTN, { name: 'Post-Tax Savings', unit: '$', category: 'projection', description: 'Net income minus annual spending' });
+      savingsTN = preTaxTN.add(postTaxSavingsTN, { name: 'Annual Savings', unit: '$', category: 'projection', description: 'Pre-tax contributions + post-tax savings', formula: 'Pre-Tax Contributions + (Net Income − Spending)' });
+
+      trackedIncome = grossTN.toTrackedValue();
+      trackedTax = totalTaxTN.toTrackedValue();
+      trackedNetIncome = netIncomeTN.toTrackedValue();
+    } else {
+      // No dynamic income — build basic savings trace
+      const baseSavingsTN = TrackedNumber.setting(yearlyContribution, 'Annual Contribution', 'yearlyContribution', { unit: '$', category: 'projection' });
+      if (incomeGrowthRate && i > 0) {
+        const growthMultiplier = Math.pow(1 + incomeGrowthRate / 100, i);
+        const growthMultTN = TrackedNumber.from(growthMultiplier, 'Growth Multiplier', { description: `${i} years at ${incomeGrowthRate}%` });
+        const grownContribTN = baseSavingsTN.multiply(growthMultTN, { name: 'Grown Contribution', unit: '$', category: 'projection' });
+        const spendIncreaseTN = spendingTN.subtract(TrackedNumber.from(baseAnnualSpend, 'Baseline Annual Spending', { unit: '$', category: 'spending' }), { name: 'Spending Increase', unit: '$', category: 'projection', description: 'How much spending grew above baseline' });
+        savingsTN = grownContribTN.subtract(spendIncreaseTN, { name: 'Annual Savings', unit: '$', category: 'projection', description: 'Contribution minus spending increase', formula: 'Grown Contribution − Spending Increase' });
+      } else {
+        const spendIncreaseTN = spendingTN.subtract(TrackedNumber.from(baseAnnualSpend, 'Baseline Annual Spending', { unit: '$', category: 'spending' }), { name: 'Spending Increase', unit: '$', category: 'projection', description: 'How much spending grew above baseline' });
+        savingsTN = baseSavingsTN.subtract(spendIncreaseTN, { name: 'Annual Savings', unit: '$', category: 'projection', description: 'Contribution minus spending increase', formula: 'Annual Contribution − Spending Increase' });
+      }
+    }
+
+    const newNwTN = prevNwTN.add(interestTN, { name: 'NW + Interest', unit: '$', category: 'projection' })
+      .add(savingsTN, { name: 'Net Worth', unit: '$', description: 'End-of-year net worth', formula: 'Prior NW + Interest + Savings', category: 'net_worth' });
+
+    const endNwTN = TrackedNumber.from(yearNetWorth, 'Net Worth', { unit: '$', category: 'swr' });
+    const swrSettingTN = TrackedNumber.setting(swr, 'Safe Withdrawal Rate', 'swr', { unit: '%', category: 'swr' });
+    const swrTN = calculateSwrAmountsTN(endNwTN, swrSettingTN);
+
+    const fiTargetTN = calculateFiTargetTN(monthlySpendTN, swrSettingTN);
+    const fiProgressTN = calculateFiProgressTN(endNwTN, fiTargetTN);
+
     data.push({
       year,
       age,
@@ -2091,13 +2200,23 @@ export function generateProjections(
       coastFiYear,
       coastFiAge: coastFiYear && birthYear ? coastFiYear - birthYear : null,
       isFiYear,
-      // Add tax information from dynamic projections if available
+      // Tax information from dynamic projections
       grossIncome: dynamicRow?.grossIncome,
       totalTax: dynamicRow?.totalTax,
       netIncome: dynamicRow?.netIncome,
       preTaxContributions: dynamicRow?.preTaxContributions,
       isCrossover,
       swrCoversSpend,
+      // Pre-built traces
+      trackedSpending: spendingTN.toTrackedValue(),
+      trackedSavings: savingsTN.toTrackedValue(),
+      trackedNetWorth: newNwTN.toTrackedValue(),
+      trackedMonthlySwr: swrTN.annual.toTrackedValue(),
+      trackedFiTarget: fiTargetTN.toTrackedValue(),
+      trackedFiProgress: fiProgressTN.toTrackedValue(),
+      trackedIncome,
+      trackedTax,
+      trackedNetIncome,
     });
     
     // Update for next iteration
@@ -2133,11 +2252,14 @@ export function generateMonthlyProjections(
 
   const monthlyRate = currentRate / 100 / 12; // Monthly return rate
   const contribution = monthlyContribution ?? yearlyContribution / 12;
-  
+
   const data: MonthlyProjectionRow[] = [];
   let netWorth = startingNetWorth;
   let cumulativeInterest = 0;
   let cumulativeContributions = 0;
+
+  // Base monthly spending at month 0 — used to calculate spending increase that reduces savings
+  const baseMonthlySpending = calculateLevelBasedSpending(startingNetWorth, settings, 0);
 
   const now = new Date();
   const startYear = now.getFullYear();
@@ -2162,8 +2284,10 @@ export function generateMonthlyProjections(
       // If we have net income info, calculate savings as income - spending
       monthlySavings = monthlyNetIncome - monthlySpending;
     } else {
-      // Otherwise use the contribution amount
-      monthlySavings = contribution;
+      // Savings = base contribution minus the spending increase above baseline
+      // Mirrors yearly logic: as spending grows, savings shrinks
+      const spendingIncrease = monthlySpending - baseMonthlySpending;
+      monthlySavings = contribution - spendingIncrease;
     }
 
     // Calculate interest on current balance
@@ -2183,6 +2307,39 @@ export function generateMonthlyProjections(
     const fiProgress = fiTarget > 0 ? (netWorth / fiTarget) * 100 : 0;
     const swrCoversSpend = monthlySpending > 0 && swrAmounts.monthly >= monthlySpending;
 
+    // Build TrackedNumber traces for drill-down tooltips
+    const nwTN = TrackedNumber.from(startingNW, 'Starting Net Worth', { unit: '$', category: 'projection' });
+    const baseBudgetTN = TrackedNumber.setting(baseMonthlyBudget, 'Base Monthly Budget', 'baseMonthlyBudget', { unit: '$', description: 'Your base spending floor', category: 'spending' });
+    const growthRateTN = TrackedNumber.setting(spendingGrowthRate, 'Spending Growth Rate', 'spendingGrowthRate', { unit: '%', description: 'Additional spending as % of net worth', category: 'spending' });
+    const inflationTN = TrackedNumber.setting(inflationRate, 'Inflation Rate', 'inflationRate', { unit: '%', category: 'spending' });
+    const yearsTN = TrackedNumber.from(yearsFromStart, 'Years From Now', { unit: 'years', category: 'projection' });
+
+    const spendingTN = calculateLevelBasedSpendingTN(nwTN, baseBudgetTN, growthRateTN, inflationTN, yearsTN);
+
+    const monthlyRateTN = TrackedNumber.from(monthlyRate, 'Monthly Return Rate', { description: `${currentRate}% annual ÷ 12`, category: 'projection' });
+    const interestTN = nwTN.multiply(monthlyRateTN, { name: 'Monthly Interest', unit: '$', category: 'projection' });
+
+    let savingsTN: TrackedNumber;
+    if (monthlyNetIncome !== undefined) {
+      const incomeTN = TrackedNumber.from(monthlyNetIncome, 'Monthly Net Income', { unit: '$', category: 'projection' });
+      savingsTN = incomeTN.subtract(spendingTN, { name: 'Monthly Savings', unit: '$', description: 'Net income minus spending', category: 'projection' });
+    } else {
+      const contributionTN = TrackedNumber.from(contribution, 'Monthly Contribution', { unit: '$', category: 'projection' });
+      const baseSpendTN = TrackedNumber.from(baseMonthlySpending, 'Baseline Spending', { unit: '$', description: 'Spending at month 0', category: 'projection' });
+      const spendIncreaseTN = spendingTN.subtract(baseSpendTN, { name: 'Spending Increase', unit: '$', description: 'How much spending grew above baseline', category: 'projection' });
+      savingsTN = contributionTN.subtract(spendIncreaseTN, { name: 'Monthly Savings', unit: '$', description: 'Contribution minus spending increase', category: 'projection' });
+    }
+
+    const newNwTN = nwTN.add(interestTN, { name: 'NW + Interest', unit: '$', category: 'projection' })
+      .add(savingsTN, { name: 'Net Worth', unit: '$', description: 'End-of-month net worth', formula: 'Starting NW + Interest + Savings', category: 'net_worth' });
+
+    const endNwTN = TrackedNumber.from(netWorth, 'Net Worth', { unit: '$', category: 'swr' });
+    const swrSettingTN = TrackedNumber.setting(swr, 'Safe Withdrawal Rate', 'swr', { unit: '%', category: 'swr' });
+    const swrTN = calculateSwrAmountsTN(endNwTN, swrSettingTN);
+
+    const fiTargetTN = calculateFiTargetTN(spendingTN, swrSettingTN);
+    const fiProgressTN = calculateFiProgressTN(endNwTN, fiTargetTN);
+
     data.push({
       month,
       year,
@@ -2200,6 +2357,12 @@ export function generateMonthlyProjections(
       fiTarget,
       fiProgress,
       swrCoversSpend,
+      trackedSpending: spendingTN.toTrackedValue(),
+      trackedSavings: savingsTN.toTrackedValue(),
+      trackedNetWorth: newNwTN.toTrackedValue(),
+      trackedMonthlySwr: swrTN.monthly.toTrackedValue(),
+      trackedFiTarget: fiTargetTN.toTrackedValue(),
+      trackedFiProgress: fiProgressTN.toTrackedValue(),
     });
   }
 
@@ -2293,6 +2456,35 @@ export function generateProjectionsWithMonthlySpending(
       isFiYear,
       isCrossover,
       swrCoversSpend,
+      // Build yearly traced values from the monthly data
+      trackedSpending: (() => {
+        const annualSpendTN = TrackedNumber.from(yearSpending, 'Annual Spending', {
+          unit: '$',
+          category: 'spending',
+          description: 'Sum of 12 months of level-based spending',
+          formula: 'Sum of monthly spending for the year',
+        });
+        return annualSpendTN.toTrackedValue();
+      })(),
+      trackedSavings: (() => {
+        const annualSavingsTN = TrackedNumber.from(yearSavings, 'Annual Savings', {
+          unit: '$',
+          category: 'projection',
+          description: 'Net savings for the year after spending',
+          formula: 'Sum of monthly savings for the year',
+        });
+        return annualSavingsTN.toTrackedValue();
+      })(),
+      trackedNetWorth: lastMonth.trackedNetWorth,
+      trackedMonthlySwr: (() => {
+        // For yearly view, show annual SWR
+        const endNwTN = TrackedNumber.from(yearNetWorth, 'Net Worth', { unit: '$', category: 'swr' });
+        const swrSettingTN = TrackedNumber.setting(swr, 'Safe Withdrawal Rate', 'swr', { unit: '%', category: 'swr' });
+        const swrResult = calculateSwrAmountsTN(endNwTN, swrSettingTN);
+        return swrResult.annual.toTrackedValue();
+      })(),
+      trackedFiTarget: lastMonth.trackedFiTarget,
+      trackedFiProgress: lastMonth.trackedFiProgress,
     });
   }
 

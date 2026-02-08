@@ -1,9 +1,11 @@
 /**
  * Calculation Tracing System
- * 
+ *
  * This module provides a way to track calculations with their inputs, formulas,
  * and results. This enables transparency and debugging of financial calculations.
  */
+
+import { TrackedNumber } from './TrackedNumber';
 
 // ============================================================================
 // TYPES
@@ -396,66 +398,36 @@ export const calculationRegistry = new CalculationRegistry();
 // ============================================================================
 
 /**
- * Calculate FI target with full tracing
+ * Calculate FI target with full tracing.
+ * Delegates to the TrackedNumber version for recursive drill-down.
  */
 export function calculateFiTargetTracked(
   monthlySpend: number,
   swr: number,
   monthlySpendSource?: { source: ValueSource; settingKey?: string; trace?: TrackedCalculation }
 ): TrackedValue {
-  const builder = new CalculationBuilder('fi_target', 'FI Target', 'fi_target')
-    .setDescription('The net worth needed to achieve financial independence. This is the amount where your investments can sustain your spending using the safe withdrawal rate.')
-    .setFormula('FI Target = (Monthly Spend × 12) ÷ SWR%')
-    .setUnit('$');
-
-  // Add monthly spend with appropriate source
+  // Build a TrackedNumber for the monthly spend input
+  let spendTN: TrackedNumber;
   if (monthlySpendSource?.trace) {
-    builder.addTrackedInput('Monthly Spend', { value: monthlySpend, trace: monthlySpendSource.trace }, 'Your current monthly spending level');
-  } else if (monthlySpendSource?.source) {
-    builder.addInputWithSource('Monthly Spend', monthlySpend, monthlySpendSource.source, { 
-      unit: '$', 
-      settingKey: monthlySpendSource.settingKey,
-      description: 'Your monthly spending'
-    });
+    spendTN = TrackedNumber.fromTrackedValue({ value: monthlySpend, trace: monthlySpendSource.trace });
   } else {
-    builder.addInputWithSource('Monthly Spend', monthlySpend, 'calculated', { 
-      unit: '$', 
-      description: 'Your monthly spending (level-based or fixed)' 
-    });
+    spendTN = TrackedNumber.from(monthlySpend, 'Monthly Spend', { unit: '$', category: 'fi_target', description: 'Your monthly spending (level-based or fixed)' });
   }
-  
-  builder.addSetting('Safe Withdrawal Rate', swr, 'swr', { 
-    unit: '%', 
-    description: 'The percentage you can safely withdraw annually without depleting your portfolio' 
+
+  const swrTN = TrackedNumber.setting(swr, 'Safe Withdrawal Rate', 'swr', {
+    unit: '%',
+    description: 'The percentage you can safely withdraw annually without depleting your portfolio',
+    category: 'fi_target',
   });
 
-  if (monthlySpend <= 0 || swr <= 0) {
-    return builder.build(0);
-  }
-
-  const annualSpend = monthlySpend * 12;
-  const swrDecimal = swr / 100;
-  const fiTarget = annualSpend / swrDecimal;
-
-  builder
-    .addStep('Calculate annual spending', `$${monthlySpend.toLocaleString()}/mo × 12 months`, [
-      { name: 'Monthly Spend', value: monthlySpend, unit: '$' }
-    ], annualSpend, '$')
-    .addStep('Convert SWR to decimal', `${swr}% ÷ 100 = ${swrDecimal}`, [
-      { name: 'SWR', value: swr, unit: '%' }
-    ], swrDecimal)
-    .addStep('Calculate FI Target', `$${annualSpend.toLocaleString()} ÷ ${swrDecimal} = $${fiTarget.toLocaleString()}`, [
-      { name: 'Annual Spend', value: annualSpend, unit: '$' },
-      { name: 'SWR decimal', value: swrDecimal }
-    ], fiTarget, '$');
-
-  const result = builder.build(fiTarget);
+  const result = calculateFiTargetTN(spendTN, swrTN);
   calculationRegistry.register(result.trace);
-  return result;
+  return result.toTrackedValue();
 }
 
 /**
- * Calculate SWR amounts with full tracing
+ * Calculate SWR amounts with full tracing.
+ * Delegates to the TrackedNumber version for recursive drill-down.
  */
 export function calculateSwrAmountsTracked(
   netWorth: number,
@@ -466,47 +438,19 @@ export function calculateSwrAmountsTracked(
   weekly: TrackedValue;
   daily: TrackedValue;
 } {
-  const swrDecimal = swr / 100;
-  const annual = netWorth * swrDecimal;
-  const monthly = annual / 12;
-  const weekly = annual / 52;
-  const daily = annual / 365;
+  const nwTN = TrackedNumber.from(netWorth, 'Net Worth', { unit: '$', category: 'swr' });
+  const swrTN = TrackedNumber.setting(swr, 'Safe Withdrawal Rate', 'swr', {
+    unit: '%',
+    description: 'Annual withdrawal rate',
+    category: 'swr',
+  });
 
-  const annualBuilder = new CalculationBuilder('swr_annual', 'Annual SWR', 'swr')
-    .setDescription('The amount you can safely withdraw per year based on your net worth and SWR')
-    .setFormula('Annual SWR = Net Worth × (SWR ÷ 100)')
-    .setUnit('$')
-    .addInput('Net Worth', netWorth, '$', 'Your current total net worth')
-    .addInput('Safe Withdrawal Rate', swr, '%', 'Annual withdrawal rate')
-    .addStep('Convert SWR to decimal', 'SWR ÷ 100', [], swrDecimal)
-    .addStep('Calculate annual withdrawal', 'Net Worth × SWR decimal', [], annual);
-
-  const monthlyBuilder = new CalculationBuilder('swr_monthly', 'Monthly SWR', 'swr')
-    .setDescription('Monthly safe withdrawal amount')
-    .setFormula('Monthly SWR = Annual SWR ÷ 12')
-    .setUnit('$')
-    .addInput('Annual SWR', annual, '$')
-    .addStep('Divide by 12 months', 'Annual SWR ÷ 12', [], monthly);
-
-  const weeklyBuilder = new CalculationBuilder('swr_weekly', 'Weekly SWR', 'swr')
-    .setDescription('Weekly safe withdrawal amount')
-    .setFormula('Weekly SWR = Annual SWR ÷ 52')
-    .setUnit('$')
-    .addInput('Annual SWR', annual, '$')
-    .addStep('Divide by 52 weeks', 'Annual SWR ÷ 52', [], weekly);
-
-  const dailyBuilder = new CalculationBuilder('swr_daily', 'Daily SWR', 'swr')
-    .setDescription('Daily safe withdrawal amount')
-    .setFormula('Daily SWR = Annual SWR ÷ 365')
-    .setUnit('$')
-    .addInput('Annual SWR', annual, '$')
-    .addStep('Divide by 365 days', 'Annual SWR ÷ 365', [], daily);
-
+  const result = calculateSwrAmountsTN(nwTN, swrTN);
   return {
-    annual: annualBuilder.build(annual),
-    monthly: monthlyBuilder.build(monthly),
-    weekly: weeklyBuilder.build(weekly),
-    daily: dailyBuilder.build(daily),
+    annual: result.annual.toTrackedValue(),
+    monthly: result.monthly.toTrackedValue(),
+    weekly: result.weekly.toTrackedValue(),
+    daily: result.daily.toTrackedValue(),
   };
 }
 
@@ -636,27 +580,21 @@ export function calculateRealTimeNetWorthTracked(
 }
 
 /**
- * Calculate FI progress with tracing
+ * Calculate FI progress with tracing.
+ * Delegates to the TrackedNumber version for recursive drill-down.
  */
 export function calculateFiProgressTracked(
   netWorth: number,
   fiTarget: number
 ): TrackedValue {
-  const progress = fiTarget > 0 ? (netWorth / fiTarget) * 100 : 0;
-
-  return new CalculationBuilder('fi_progress', 'FI Progress', 'fi_target')
-    .setDescription('Your progress towards financial independence as a percentage')
-    .setFormula('FI Progress = (Net Worth ÷ FI Target) × 100')
-    .setUnit('%')
-    .addInput('Net Worth', netWorth, '$')
-    .addInput('FI Target', fiTarget, '$')
-    .addStep('Divide net worth by target', 'Net Worth ÷ FI Target', [], netWorth / (fiTarget || 1))
-    .addStep('Convert to percentage', '× 100', [], progress)
-    .build(progress);
+  const nwTN = TrackedNumber.from(netWorth, 'Net Worth', { unit: '$', category: 'fi_target' });
+  const fiTN = TrackedNumber.from(fiTarget, 'FI Target', { unit: '$', category: 'fi_target' });
+  return calculateFiProgressTN(nwTN, fiTN).toTrackedValue();
 }
 
 /**
  * Calculate level-based spending with tracing
+ * Delegates to the TrackedNumber version for recursive drill-down.
  */
 export function calculateLevelBasedSpendingTracked(
   netWorth: number,
@@ -665,26 +603,13 @@ export function calculateLevelBasedSpendingTracked(
   inflationRate: number,
   yearsFromNow: number = 0
 ): TrackedValue {
-  // Adjust base for inflation
-  const inflatedBase = baseMonthlyBudget * Math.pow(1 + inflationRate / 100, yearsFromNow);
-  
-  // Add net worth portion (annual rate / 12 for monthly)
-  const netWorthPortion = netWorth * (spendingGrowthRate / 100) / 12;
-  const totalSpending = inflatedBase + netWorthPortion;
-
-  return new CalculationBuilder('level_spending', 'Level-Based Spending', 'spending')
-    .setDescription('Monthly spending budget based on your net worth level')
-    .setFormula('Spending = Inflation-Adjusted Base + (Net Worth × Growth Rate ÷ 12)')
-    .setUnit('$')
-    .addInput('Base Monthly Budget', baseMonthlyBudget, '$', 'Your base spending floor')
-    .addInput('Net Worth', netWorth, '$')
-    .addInput('Spending Growth Rate', spendingGrowthRate, '%', 'Additional spending as % of net worth')
-    .addInput('Inflation Rate', inflationRate, '%')
-    .addInput('Years From Now', yearsFromNow, 'years')
-    .addStep('Adjust base for inflation', `Base × (1 + ${inflationRate}%)^${yearsFromNow}`, [], inflatedBase)
-    .addStep('Calculate net worth portion', `Net Worth × ${spendingGrowthRate}% ÷ 12`, [], netWorthPortion)
-    .addStep('Sum components', 'Inflated Base + Net Worth Portion', [], totalSpending)
-    .build(totalSpending);
+  return calculateLevelBasedSpendingTN(
+    TrackedNumber.from(netWorth, 'Net Worth', { unit: '$', category: 'spending' }),
+    TrackedNumber.setting(baseMonthlyBudget, 'Base Monthly Budget', 'baseMonthlyBudget', { unit: '$', description: 'Your base spending floor' }),
+    TrackedNumber.setting(spendingGrowthRate, 'Spending Growth Rate', 'spendingGrowthRate', { unit: '%', description: 'Additional spending as % of net worth' }),
+    TrackedNumber.setting(inflationRate, 'Inflation Rate', 'inflationRate', { unit: '%' }),
+    TrackedNumber.from(yearsFromNow, 'Years From Now', { unit: 'years' }),
+  ).toTrackedValue();
 }
 
 /**
@@ -748,4 +673,157 @@ export function calculateCompoundGrowthTracked(
       .addInput('Yearly Contribution', yearlyContribution, '$')
       .build(totalContributed),
   };
+}
+
+// ============================================================================
+// TRACKEDNUMBER-BASED CALCULATION FUNCTIONS
+// ============================================================================
+
+/**
+ * Level-based spending via TrackedNumber — fully recursive drill-down.
+ *
+ * Computes: inflatedBase + netWorthPortion
+ *   inflatedBase   = baseBudget × (1 + inflation/100) ^ years
+ *   netWorthPortion = netWorth × growthRate/100 / 12
+ */
+export function calculateLevelBasedSpendingTN(
+  netWorth: TrackedNumber,
+  baseBudget: TrackedNumber,
+  growthRate: TrackedNumber,
+  inflation: TrackedNumber,
+  years: TrackedNumber,
+): TrackedNumber {
+  // inflatedBase = baseBudget × (1 + inflation/100) ^ years
+  const one = TrackedNumber.constant(1, '1');
+  const hundred = TrackedNumber.constant(100, '100');
+  const inflationDecimal = inflation.divide(hundred, { name: 'Inflation (decimal)', description: 'Inflation rate as a decimal' });
+  const inflationFactor = one.add(inflationDecimal, { name: 'Inflation Factor', description: '1 + inflation rate' });
+  const inflationMultiplier = inflationFactor.pow(years, { name: 'Inflation Multiplier', description: 'Compounded inflation over projection period' });
+  const inflatedBase = baseBudget.multiply(inflationMultiplier, {
+    name: 'Inflation-Adjusted Base',
+    unit: '$',
+    description: 'Base budget adjusted for inflation',
+    category: 'spending',
+  });
+
+  // netWorthPortion = netWorth × growthRate/100 / 12
+  const growthDecimal = growthRate.divide(hundred, { name: 'Growth Rate (decimal)', description: 'Spending growth rate as a decimal' });
+  const annualNwPortion = netWorth.multiply(growthDecimal, { name: 'Annual NW Portion', unit: '$', description: 'Additional annual spending from net worth' });
+  const twelve = TrackedNumber.constant(12, 'Months per year');
+  const netWorthPortion = annualNwPortion.divide(twelve, {
+    name: 'Net Worth Portion',
+    unit: '$',
+    description: 'Additional monthly spending from net worth',
+    category: 'spending',
+  });
+
+  return inflatedBase.add(netWorthPortion, {
+    name: 'Level-Based Spending',
+    unit: '$',
+    description: 'Monthly spending budget based on your net worth level',
+    formula: 'Inflation-Adjusted Base + Net Worth Portion',
+    category: 'spending',
+  });
+}
+
+/**
+ * FI target via TrackedNumber — (monthlySpend × 12) / (swr / 100)
+ */
+export function calculateFiTargetTN(
+  monthlySpend: TrackedNumber,
+  swr: TrackedNumber,
+): TrackedNumber {
+  if (monthlySpend.value <= 0 || swr.value <= 0) {
+    return TrackedNumber.from(0, 'FI Target', { unit: '$', category: 'fi_target', description: 'Cannot compute — spend or SWR is zero' });
+  }
+
+  const twelve = TrackedNumber.constant(12, 'Months per year');
+  const annualSpend = monthlySpend.multiply(twelve, {
+    name: 'Annual Spending',
+    unit: '$',
+    description: 'Monthly spend annualized',
+    category: 'fi_target',
+  });
+
+  const hundred = TrackedNumber.constant(100, '100');
+  const swrDecimal = swr.divide(hundred, { name: 'SWR (decimal)', description: 'Safe withdrawal rate as a decimal' });
+
+  return annualSpend.divide(swrDecimal, {
+    name: 'FI Target',
+    unit: '$',
+    description: 'The net worth needed to achieve financial independence',
+    formula: '(Monthly Spend × 12) ÷ (SWR ÷ 100)',
+    category: 'fi_target',
+  });
+}
+
+/**
+ * SWR amounts via TrackedNumber — netWorth × swr/100, then divides for periods.
+ */
+export function calculateSwrAmountsTN(
+  netWorth: TrackedNumber,
+  swr: TrackedNumber,
+): { annual: TrackedNumber; monthly: TrackedNumber; weekly: TrackedNumber; daily: TrackedNumber } {
+  const hundred = TrackedNumber.constant(100, '100');
+  const swrDecimal = swr.divide(hundred, { name: 'SWR (decimal)', description: 'Safe withdrawal rate as a decimal' });
+
+  const annual = netWorth.multiply(swrDecimal, {
+    name: 'Annual SWR',
+    unit: '$',
+    description: 'The amount you can safely withdraw per year',
+    formula: 'Net Worth × (SWR ÷ 100)',
+    category: 'swr',
+  });
+
+  const twelve = TrackedNumber.constant(12, 'Months per year');
+  const monthly = annual.divide(twelve, {
+    name: 'Monthly SWR',
+    unit: '$',
+    description: 'Monthly safe withdrawal amount',
+    formula: 'Annual SWR ÷ 12',
+    category: 'swr',
+  });
+
+  const fiftyTwo = TrackedNumber.constant(52, 'Weeks per year');
+  const weekly = annual.divide(fiftyTwo, {
+    name: 'Weekly SWR',
+    unit: '$',
+    description: 'Weekly safe withdrawal amount',
+    formula: 'Annual SWR ÷ 52',
+    category: 'swr',
+  });
+
+  const threeSixtyFive = TrackedNumber.constant(365, 'Days per year');
+  const daily = annual.divide(threeSixtyFive, {
+    name: 'Daily SWR',
+    unit: '$',
+    description: 'Daily safe withdrawal amount',
+    formula: 'Annual SWR ÷ 365',
+    category: 'swr',
+  });
+
+  return { annual, monthly, weekly, daily };
+}
+
+/**
+ * FI progress via TrackedNumber — (netWorth / fiTarget) × 100
+ */
+export function calculateFiProgressTN(
+  netWorth: TrackedNumber,
+  fiTarget: TrackedNumber,
+): TrackedNumber {
+  if (fiTarget.value <= 0) {
+    return TrackedNumber.from(0, 'FI Progress', { unit: '%', category: 'fi_target', description: 'Cannot compute — FI target is zero' });
+  }
+
+  const ratio = netWorth.divide(fiTarget, { name: 'NW / FI Target', description: 'Ratio of net worth to FI target' });
+  const hundred = TrackedNumber.constant(100, '100');
+
+  return ratio.multiply(hundred, {
+    name: 'FI Progress',
+    unit: '%',
+    description: 'Your progress towards financial independence as a percentage',
+    formula: '(Net Worth ÷ FI Target) × 100',
+    category: 'fi_target',
+  });
 }
