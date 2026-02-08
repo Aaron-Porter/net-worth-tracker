@@ -22,15 +22,35 @@ export const add = mutation({
   args: {
     amount: v.number(),
     timestamp: v.number(),
+    cash: v.optional(v.number()),
+    retirement: v.optional(v.number()),
+    hsa: v.optional(v.number()),
+    brokerage: v.optional(v.number()),
+    debts: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
 
+    const hasBreakdown = args.cash !== undefined || args.retirement !== undefined ||
+      args.hsa !== undefined || args.brokerage !== undefined || args.debts !== undefined;
+
+    // When breakdown is provided, compute amount server-side
+    const amount = hasBreakdown
+      ? (args.cash ?? 0) + (args.retirement ?? 0) + (args.hsa ?? 0) + (args.brokerage ?? 0) - (args.debts ?? 0)
+      : args.amount;
+
     return await ctx.db.insert("netWorthEntries", {
       userId,
-      amount: args.amount,
+      amount,
       timestamp: args.timestamp,
+      ...(hasBreakdown ? {
+        cash: args.cash ?? 0,
+        retirement: args.retirement ?? 0,
+        hsa: args.hsa ?? 0,
+        brokerage: args.brokerage ?? 0,
+        debts: args.debts ?? 0,
+      } : {}),
     });
   },
 });

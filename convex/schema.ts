@@ -15,6 +15,12 @@ export default defineSchema({
     userId: v.id("users"),
     amount: v.number(),
     timestamp: v.number(),
+    // Asset type breakdown (optional - old entries treated as 100% brokerage)
+    cash: v.optional(v.number()),
+    retirement: v.optional(v.number()),  // 401k, IRA, Roth
+    hsa: v.optional(v.number()),
+    brokerage: v.optional(v.number()),
+    debts: v.optional(v.number()),       // positive = amount owed
   }).index("by_user", ["userId"]),
 
   // Scenarios are the primary entity - each contains a complete set of financial assumptions
@@ -51,6 +57,13 @@ export default defineSchema({
     // Calculated/derived field (can be overridden)
     yearlyContribution: v.number(), // Total annual savings (pre-tax + post-tax) - used in projections
     
+    // Per-bucket growth rate overrides (optional - defaults to currentRate or asset-specific defaults)
+    cashRate: v.optional(v.number()),
+    retirementRate: v.optional(v.number()),
+    hsaRate: v.optional(v.number()),
+    brokerageRate: v.optional(v.number()),
+    debtRate: v.optional(v.number()),
+
     // Legacy field kept for backwards compatibility
     effectiveTaxRate: v.optional(v.number()), // Manual override if user prefers
     

@@ -148,6 +148,12 @@ export const create = mutation({
     preTaxHSA: v.optional(v.number()),
     preTaxOther: v.optional(v.number()),
     effectiveTaxRate: v.optional(v.number()),
+    // Per-bucket growth rate overrides
+    cashRate: v.optional(v.number()),
+    retirementRate: v.optional(v.number()),
+    hsaRate: v.optional(v.number()),
+    brokerageRate: v.optional(v.number()),
+    debtRate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -192,6 +198,11 @@ export const create = mutation({
       preTaxHSA: args.preTaxHSA,
       preTaxOther: args.preTaxOther,
       effectiveTaxRate: args.effectiveTaxRate,
+      cashRate: args.cashRate,
+      retirementRate: args.retirementRate,
+      hsaRate: args.hsaRate,
+      brokerageRate: args.brokerageRate,
+      debtRate: args.debtRate,
       createdAt: now,
       updatedAt: now,
     });
@@ -269,6 +280,12 @@ export const update = mutation({
     preTaxHSA: v.optional(v.number()),
     preTaxOther: v.optional(v.number()),
     effectiveTaxRate: v.optional(v.number()),
+    // Per-bucket growth rate overrides
+    cashRate: v.optional(v.number()),
+    retirementRate: v.optional(v.number()),
+    hsaRate: v.optional(v.number()),
+    brokerageRate: v.optional(v.number()),
+    debtRate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -391,6 +408,11 @@ export const duplicate = mutation({
       preTaxHSA: scenario.preTaxHSA,
       preTaxOther: scenario.preTaxOther,
       effectiveTaxRate: scenario.effectiveTaxRate,
+      cashRate: scenario.cashRate,
+      retirementRate: scenario.retirementRate,
+      hsaRate: scenario.hsaRate,
+      brokerageRate: scenario.brokerageRate,
+      debtRate: scenario.debtRate,
       createdAt: now,
       updatedAt: now,
     });
