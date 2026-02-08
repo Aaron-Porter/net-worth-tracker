@@ -2139,11 +2139,16 @@ export function generateMonthlyProjections(
   let cumulativeInterest = 0;
   let cumulativeContributions = 0;
 
+  const now = new Date();
+  const startYear = now.getFullYear();
+  const startMonth = now.getMonth(); // 0-based
+
   for (let i = 0; i < months; i++) {
     const monthIndex = i;
     const yearsFromStart = i / 12;
-    const year = new Date().getFullYear() + Math.floor(i / 12);
-    const month = (i % 12) + 1; // 1-12
+    const totalMonths = startMonth + i;
+    const year = startYear + Math.floor(totalMonths / 12);
+    const month = (totalMonths % 12) + 1; // 1-12
 
     const startingNW = netWorth;
 
