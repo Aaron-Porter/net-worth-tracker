@@ -162,6 +162,7 @@ export interface FiMilestone {
   targetValue: number;
   // When this milestone was/will be achieved
   year: number | null;
+  month: number | null; // 1-12, projected month within the achievement year
   age: number | null;
   yearsFromNow: number | null;
   // Status
@@ -1485,6 +1486,16 @@ export function calculateLevelBasedSpending(
 }
 
 /**
+ * Linearly interpolate between two year-end values to estimate the month (1-12)
+ * within the achievement year when a target is crossed.
+ */
+function interpolateMonth(prevValue: number, currValue: number, target: number): number {
+  if (currValue <= prevValue) return 1;
+  const fraction = (target - prevValue) / (currValue - prevValue);
+  return Math.max(1, Math.min(12, Math.ceil(fraction * 12) || 1));
+}
+
+/**
  * Calculate FI milestones from projections
  * Returns information about achieved and upcoming milestones on the path to FI
  */
@@ -1522,26 +1533,33 @@ export function calculateFiMilestones(
       // Percentage-based milestones (10%, 25%, 50%, 75%, 100%)
       const targetProgress = def.targetValue;
       const isAchieved = currentFiProgress >= targetProgress;
-      
+
       // Find the first year when this milestone is/was achieved
       let milestoneYear: number | null = null;
+      let milestoneMonth: number | null = null;
       let milestoneNetWorth: number | null = null;
-      
+      let prevFiProgress = currentFiProgress;
+
       for (const row of projections) {
         if (row.fiProgress >= targetProgress) {
           milestoneYear = row.year;
           milestoneNetWorth = row.netWorth;
+          if (!isAchieved) {
+            milestoneMonth = interpolateMonth(prevFiProgress, row.fiProgress, targetProgress);
+          }
           break;
         }
+        prevFiProgress = row.fiProgress;
       }
-      
+
       milestone = {
         ...def,
         year: milestoneYear,
+        month: milestoneMonth,
         age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
         yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
         isAchieved,
-        netWorthAtMilestone: milestoneNetWorth,
+        netWorthAtMilestone: isAchieved ? null : milestoneNetWorth,
       };
     } else if (def.type === 'lifestyle') {
       // Lifestyle-based milestones (based on spending multipliers)
@@ -1550,28 +1568,36 @@ export function calculateFiMilestones(
       const lifestyleFiTarget = calculateFiTarget(adjustedSpend, settings.swr);
       const lifestyleFiProgress = lifestyleFiTarget > 0 ? (currentNetWorth / lifestyleFiTarget) * 100 : 0;
       const isAchieved = lifestyleFiProgress >= 100;
-      
+
       // Find the first year when this lifestyle FI is achieved
       let milestoneYear: number | null = null;
+      let milestoneMonth: number | null = null;
       let milestoneNetWorth: number | null = null;
-      
+      let prevSurplus = currentNetWorth - lifestyleFiTarget;
+
       for (const row of projections) {
         const rowSpend = row.monthlySpend * spendingMultiplier;
         const rowTarget = calculateFiTarget(rowSpend, settings.swr);
-        if (row.netWorth >= rowTarget) {
+        const surplus = row.netWorth - rowTarget;
+        if (surplus >= 0) {
           milestoneYear = row.year;
           milestoneNetWorth = row.netWorth;
+          if (!isAchieved) {
+            milestoneMonth = interpolateMonth(prevSurplus, surplus, 0);
+          }
           break;
         }
+        prevSurplus = surplus;
       }
-      
+
       milestone = {
         ...def,
         year: milestoneYear,
+        month: milestoneMonth,
         age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
         yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
         isAchieved,
-        netWorthAtMilestone: milestoneNetWorth,
+        netWorthAtMilestone: isAchieved ? null : milestoneNetWorth,
       };
     } else if (def.type === 'runway') {
       // Runway milestones - years of expenses covered by current net worth
@@ -1579,91 +1605,97 @@ export function calculateFiMilestones(
       const annualExpenses = currentMonthlySpend * 12;
       const currentRunwayYears = annualExpenses > 0 ? currentNetWorth / annualExpenses : 0;
       const isAchieved = currentRunwayYears >= targetYears;
-      
+
       // Find the first year when this runway is achieved
       let milestoneYear: number | null = null;
+      let milestoneMonth: number | null = null;
       let milestoneNetWorth: number | null = null;
-      
+      let prevRunwayYears = currentRunwayYears;
+
       for (const row of projections) {
         const rowAnnualExpenses = row.monthlySpend * 12;
         const rowRunwayYears = rowAnnualExpenses > 0 ? row.netWorth / rowAnnualExpenses : 0;
         if (rowRunwayYears >= targetYears) {
           milestoneYear = row.year;
           milestoneNetWorth = row.netWorth;
+          if (!isAchieved) {
+            milestoneMonth = interpolateMonth(prevRunwayYears, rowRunwayYears, targetYears);
+          }
           break;
         }
+        prevRunwayYears = rowRunwayYears;
       }
-      
+
       milestone = {
         ...def,
         year: milestoneYear,
+        month: milestoneMonth,
         age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
         yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
         isAchieved,
-        netWorthAtMilestone: milestoneNetWorth,
+        netWorthAtMilestone: isAchieved ? null : milestoneNetWorth,
       };
     } else if (def.type === 'coast') {
       // Coast milestones - what % of FI would current NW grow to by age 65 with $0 contributions?
       const targetCoastPercent = def.targetValue;
       const retirementAge = 65;
       const currentAge = birthYear ? currentYear - birthYear : null;
-      const yearsToRetirement = currentAge !== null ? Math.max(0, retirementAge - currentAge) : 30; // Default to 30 years if no birth year
+      const yearsToRetirement = currentAge !== null ? Math.max(0, retirementAge - currentAge) : 30;
       const returnRate = settings.currentRate / 100;
-      
+
       // Calculate what current NW would grow to by retirement with no contributions
       const futureValueMultiplier = Math.pow(1 + returnRate, yearsToRetirement);
       const coastedNetWorth = currentNetWorth * futureValueMultiplier;
-      
+
       // Estimate FI target at retirement (accounting for inflation on spending)
       const inflationRate = settings.inflationRate / 100;
       const futureMonthlySpend = currentMonthlySpend * Math.pow(1 + inflationRate, yearsToRetirement);
       const futureFiTarget = calculateFiTarget(futureMonthlySpend, settings.swr);
-      
+
       // Calculate coast FI percentage
       const coastFiPercent = futureFiTarget > 0 ? (coastedNetWorth / futureFiTarget) * 100 : 0;
       const isAchieved = coastFiPercent >= targetCoastPercent;
-      
+
       // Find the first year when this coast milestone is achieved
-      // For each year, calculate: if we stopped contributing THEN, would we coast to targetCoastPercent?
       let milestoneYear: number | null = null;
+      let milestoneMonth: number | null = null;
       let milestoneNetWorth: number | null = null;
-      
+      let prevCoastPercent = coastFiPercent;
+
       for (const row of projections) {
         const rowAge = birthYear ? row.year - birthYear : null;
         const rowYearsToRetirement = rowAge !== null ? Math.max(0, retirementAge - rowAge) : Math.max(0, 30 - row.yearsFromEntry);
-        
+
+        let rowCoastPercent: number;
         if (rowYearsToRetirement <= 0) {
-          // Already at or past retirement
-          if (row.fiProgress >= targetCoastPercent) {
-            milestoneYear = row.year;
-            milestoneNetWorth = row.netWorth;
-            break;
-          }
+          rowCoastPercent = row.fiProgress;
         } else {
           const rowFutureMultiplier = Math.pow(1 + returnRate, rowYearsToRetirement);
           const rowCoastedNW = row.netWorth * rowFutureMultiplier;
-          
-          // Calculate FI target at that future retirement
           const rowFutureSpend = row.monthlySpend * Math.pow(1 + inflationRate, rowYearsToRetirement);
           const rowFutureFiTarget = calculateFiTarget(rowFutureSpend, settings.swr);
-          
-          const rowCoastPercent = rowFutureFiTarget > 0 ? (rowCoastedNW / rowFutureFiTarget) * 100 : 0;
-          
-          if (rowCoastPercent >= targetCoastPercent) {
-            milestoneYear = row.year;
-            milestoneNetWorth = row.netWorth;
-            break;
-          }
+          rowCoastPercent = rowFutureFiTarget > 0 ? (rowCoastedNW / rowFutureFiTarget) * 100 : 0;
         }
+
+        if (rowCoastPercent >= targetCoastPercent) {
+          milestoneYear = row.year;
+          milestoneNetWorth = row.netWorth;
+          if (!isAchieved) {
+            milestoneMonth = interpolateMonth(prevCoastPercent, rowCoastPercent, targetCoastPercent);
+          }
+          break;
+        }
+        prevCoastPercent = rowCoastPercent;
       }
-      
+
       milestone = {
         ...def,
         year: milestoneYear,
+        month: milestoneMonth,
         age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
         yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
         isAchieved,
-        netWorthAtMilestone: milestoneNetWorth,
+        netWorthAtMilestone: isAchieved ? null : milestoneNetWorth,
       };
     } else if (def.type === 'retirement_income') {
       // Retirement Income milestones - what purchasing power (in today's dollars) could you have at retirement?
@@ -1697,102 +1729,127 @@ export function calculateFiMilestones(
       // Find the first year when this income milestone is achieved (in real terms)
       // For each year, calculate: if we stopped contributing THEN, would we reach targetRealIncome?
       let milestoneYear: number | null = null;
+      let milestoneMonth: number | null = null;
       let milestoneNetWorth: number | null = null;
-      
+      let prevRealIncome = realIncome;
+
       for (const row of projections) {
         const rowAge = birthYear ? row.year - birthYear : null;
         const rowYearsToRetirement = rowAge !== null ? Math.max(0, retirementAge - rowAge) : Math.max(0, 30 - row.yearsFromEntry);
         const rowInflationMultiplier = Math.pow(1 + inflationRate, rowYearsToRetirement);
-        
+
         // Calculate the projected REAL income if we stopped contributing at this row
         let rowRealIncome: number;
         if (rowYearsToRetirement <= 0) {
-          // Already at or past retirement - no more inflation adjustment needed
           rowRealIncome = row.netWorth * withdrawalRate;
         } else {
           const rowFutureNW = row.netWorth * Math.pow(1 + returnRate, rowYearsToRetirement);
           const rowNominalIncome = rowFutureNW * withdrawalRate;
           rowRealIncome = rowNominalIncome / rowInflationMultiplier;
         }
-        
+
         if (rowRealIncome >= targetRealIncome) {
           milestoneYear = row.year;
           milestoneNetWorth = row.netWorth;
+          if (!isAchieved) {
+            milestoneMonth = interpolateMonth(prevRealIncome, rowRealIncome, targetRealIncome);
+          }
           break;
         }
+        prevRealIncome = rowRealIncome;
       }
-      
+
       milestone = {
         ...def,
         year: milestoneYear,
+        month: milestoneMonth,
         age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
         yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
         isAchieved,
-        netWorthAtMilestone: milestoneNetWorth,
+        netWorthAtMilestone: isAchieved ? null : milestoneNetWorth,
       };
     } else {
       // Special milestones
       if (def.id === 'crossover') {
         // Crossover Point - when interest exceeds contributions
         const crossoverRow = projections.find(p => p.isCrossover);
-        const isAchieved = projections.some(p => p.interest > p.contributed && p.contributed > 0);
-        
-        // For current achievement, check if already achieved
+
         let currentlyAchieved = false;
         if (currentRow.interest > currentRow.contributed && currentRow.contributed > 0) {
           currentlyAchieved = true;
         }
-        
+
+        // Interpolate month for crossover
+        let crossoverMonth: number | null = null;
+        if (crossoverRow && !currentlyAchieved) {
+          const idx = projections.indexOf(crossoverRow);
+          const prevRow = idx > 0 ? projections[idx - 1] : null;
+          const prevSurplus = prevRow
+            ? prevRow.interest - prevRow.contributed
+            : currentRow.interest - currentRow.contributed;
+          const currSurplus = crossoverRow.interest - crossoverRow.contributed;
+          crossoverMonth = interpolateMonth(prevSurplus, currSurplus, 0);
+        }
+
         milestone = {
           ...def,
           year: crossoverRow?.year ?? null,
+          month: crossoverMonth,
           age: crossoverRow?.year && birthYear ? crossoverRow.year - birthYear : null,
           yearsFromNow: crossoverRow?.year ? crossoverRow.year - currentYear : null,
           isAchieved: currentlyAchieved,
-          netWorthAtMilestone: crossoverRow?.netWorth ?? null,
+          netWorthAtMilestone: currentlyAchieved ? null : (crossoverRow?.netWorth ?? null),
         };
       } else if (def.id === 'coast_fi') {
         // Coast FI - when you can stop saving and still reach FI at retirement age
-        // Use the existing coastFiYear calculation from projections
         const coastFiYear = currentRow.coastFiYear;
         const isAchieved = coastFiYear !== null && coastFiYear <= currentYear;
-        
+
         milestone = {
           ...def,
           year: coastFiYear,
+          month: null, // Coast FI year comes from a different calculation path
           age: coastFiYear && birthYear ? coastFiYear - birthYear : null,
           yearsFromNow: coastFiYear ? coastFiYear - currentYear : null,
           isAchieved,
-          netWorthAtMilestone: isAchieved ? currentNetWorth : null,
+          netWorthAtMilestone: null,
         };
       } else if (def.id === 'flamingo_fi') {
         // Flamingo FI - 50% of the way to FI (same as 50% FI but framed differently)
         const isAchieved = currentFiProgress >= 50;
-        
+
         let milestoneYear: number | null = null;
+        let milestoneMonth: number | null = null;
         let milestoneNetWorth: number | null = null;
-        
+        let prevFiProgress = currentFiProgress;
+
         for (const row of projections) {
           if (row.fiProgress >= 50) {
             milestoneYear = row.year;
             milestoneNetWorth = row.netWorth;
+            if (!isAchieved) {
+              milestoneMonth = interpolateMonth(prevFiProgress, row.fiProgress, 50);
+            }
             break;
           }
+          prevFiProgress = row.fiProgress;
         }
-        
+
         milestone = {
           ...def,
           year: milestoneYear,
+          month: milestoneMonth,
           age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
           yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
           isAchieved,
-          netWorthAtMilestone: milestoneNetWorth,
+          netWorthAtMilestone: isAchieved ? null : milestoneNetWorth,
         };
       } else {
         // Unknown special milestone
         milestone = {
           ...def,
           year: null,
+          month: null,
           age: null,
           yearsFromNow: null,
           isAchieved: false,

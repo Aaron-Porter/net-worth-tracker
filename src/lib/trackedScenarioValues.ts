@@ -72,11 +72,11 @@ export interface TrackedProjectionRow {
  */
 export function generateTrackedDashboardValues(
   projection: ScenarioProjection,
-  latestEntryTimestamp: number
+  latestEntryTimestamp: number,
+  includeContributions: boolean = false
 ): TrackedDashboardValues {
   const { scenario, currentNetWorth, growthRates, levelInfo } = projection;
-  const netWorth = currentNetWorth.total;
-  
+
   const timeElapsedYears = (Date.now() - latestEntryTimestamp) / (365.25 * 24 * 60 * 60 * 1000);
   
   // Base Amount trace
@@ -123,16 +123,33 @@ export function generateTrackedDashboardValues(
     .build(currentNetWorth.appreciation);
 
   // Contributions trace
-  const contributionsTracked = new CalculationBuilder('contributions', 'Contributions', 'net_worth')
+  // When includeContributions is true, compute pro-rated contributions + growth on contributions
+  // matching the formula in calculateRealTimeNetWorth (calculations.ts)
+  const yearlyRate = scenario.currentRate / 100;
+  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+  const msRate = yearlyRate / msPerYear;
+  const elapsedMs = Date.now() - latestEntryTimestamp;
+
+  let contributionsValue: number;
+  if (includeContributions && scenario.yearlyContribution > 0) {
+    // Continuous contribution approximation
+    contributionsValue = scenario.yearlyContribution * timeElapsedYears;
+    // Add average growth on contributions (half the time period)
+    contributionsValue += contributionsValue * msRate * (elapsedMs / 2);
+  } else {
+    contributionsValue = 0;
+  }
+
+  const contributionsTracked = new CalculationBuilder('contributions', 'Savings', 'net_worth')
     .setDescription('Contributions added since your last entry (pro-rated from yearly contribution)')
     .setFormula('(Yearly Contribution × Time Elapsed) + Growth on Contributions')
     .setUnit('$')
-    .addSetting('Yearly Contribution', scenario.yearlyContribution, 'yearlyContribution', { 
-      unit: '$', 
-      description: 'Annual contribution amount' 
+    .addSetting('Yearly Contribution', scenario.yearlyContribution, 'yearlyContribution', {
+      unit: '$',
+      description: 'Annual contribution amount'
     })
-    .addInputWithSource('Time Elapsed', timeElapsedYears, 'calculated', { 
-      unit: 'years' 
+    .addInputWithSource('Time Elapsed', timeElapsedYears, 'calculated', {
+      unit: 'years'
     })
     .addStep(
       'Calculate pro-rated contribution',
@@ -141,9 +158,10 @@ export function generateTrackedDashboardValues(
       scenario.yearlyContribution * timeElapsedYears,
       '$'
     )
-    .build(currentNetWorth.contributions);
+    .build(contributionsValue);
 
   // Current Net Worth (combines the above)
+  const netWorth = currentNetWorth.baseAmount + currentNetWorth.appreciation + contributionsValue;
   const currentNetWorthTracked = new CalculationBuilder('current_net_worth', 'Current Net Worth', 'net_worth')
     .setDescription('Your real-time net worth including base amount and appreciation since last entry')
     .setFormula('Base Amount + Appreciation + Contributions')
@@ -153,7 +171,7 @@ export function generateTrackedDashboardValues(
     .addTrackedInput('Contributions', contributionsTracked, 'New contributions since last entry')
     .addStep(
       'Sum all components',
-      `$${currentNetWorth.baseAmount.toLocaleString()} + $${currentNetWorth.appreciation.toLocaleString(undefined, { maximumFractionDigits: 2 })} + $${currentNetWorth.contributions.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      `$${currentNetWorth.baseAmount.toLocaleString()} + $${currentNetWorth.appreciation.toLocaleString(undefined, { maximumFractionDigits: 2 })} + $${contributionsValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
       [],
       netWorth,
       '$'
@@ -164,7 +182,7 @@ export function generateTrackedDashboardValues(
   const growthRatesTracked = calculateGrowthRatesTracked(
     netWorth,
     scenario.currentRate,
-    0 // Not including contributions in growth rate display
+    includeContributions ? scenario.yearlyContribution : 0
   );
 
   // SWR Amounts

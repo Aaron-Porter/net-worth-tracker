@@ -271,11 +271,13 @@ function DashboardTab({
   selectedScenarios,
   setActiveTab,
 }: DashboardTabProps) {
+  const [includeSavings, setIncludeSavings] = useState(false);
+
   // Generate tracked values for calculation transparency
   const trackedValues = useMemo(() => {
     if (!latestEntry || !primaryProjection) return null;
-    return generateTrackedDashboardValues(primaryProjection, latestEntry.timestamp);
-  }, [latestEntry, primaryProjection]);
+    return generateTrackedDashboardValues(primaryProjection, latestEntry.timestamp, includeSavings);
+  }, [latestEntry, primaryProjection, includeSavings]);
 
   // Compounding multiplier data
   const compoundingInfo = useMemo(() => {
@@ -352,23 +354,106 @@ function DashboardTab({
           <div className="mt-4 flex justify-center gap-8 text-sm">
             <div className="text-center">
               <p className="text-slate-500">Base Amount</p>
-              <TrackedValue 
+              <TrackedValue
                 value={trackedValues.baseAmount}
                 className="text-slate-300 font-mono"
               />
             </div>
             <div className="text-center">
               <p className="text-slate-500">Appreciation</p>
-              <span className="text-emerald-400 font-mono">+<TrackedValue 
+              <span className="text-emerald-400 font-mono">+<TrackedValue
                 value={trackedValues.appreciation}
                 decimals={4}
                 className="text-emerald-400 font-mono"
               /></span>
             </div>
+            {includeSavings && (
+              <div className="text-center">
+                <p className="text-slate-500">Savings</p>
+                <span className="text-violet-400 font-mono">+<TrackedValue
+                  value={trackedValues.contributions}
+                  decimals={2}
+                  className="text-violet-400 font-mono"
+                /></span>
+              </div>
+            )}
           </div>
           <p className="text-slate-500 text-center mt-4 text-xs">
             Last updated {getTimeSinceEntry(latestEntry.timestamp)} at {primaryProjection.scenario.currentRate}% annual return
+            {includeSavings && ` + ${formatCurrency(primaryProjection.scenario.yearlyContribution, 0)}/yr savings`}
           </p>
+
+          {/* Toggle + Growth Rates */}
+          <div className="border-t border-slate-700 mt-6 pt-6">
+            {/* Toggle: Interest Only / Interest + Savings */}
+            <div className="flex justify-center mb-4">
+              <div className="inline-flex rounded-lg bg-slate-900/70 p-0.5">
+                <button
+                  onClick={() => setIncludeSavings(false)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    !includeSavings
+                      ? 'bg-emerald-500/20 text-emerald-400'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  Interest Only
+                </button>
+                <button
+                  onClick={() => setIncludeSavings(true)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    includeSavings
+                      ? 'bg-emerald-500/20 text-emerald-400'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  Interest + Savings
+                </button>
+              </div>
+            </div>
+
+            <h3 className="text-sm font-medium text-slate-400 mb-3">
+              {includeSavings ? 'Growth Rate (Interest + Savings)' : 'Appreciation Rate'}
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <p className="text-slate-500 text-xs">Per Second</p>
+                <TrackedValue
+                  value={trackedValues.growthPerSecond}
+                  decimals={6}
+                  className="text-emerald-400 font-mono"
+                />
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <p className="text-slate-500 text-xs">Per Minute</p>
+                <TrackedValue
+                  value={trackedValues.growthPerMinute}
+                  decimals={4}
+                  className="text-emerald-400 font-mono"
+                />
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <p className="text-slate-500 text-xs">Per Hour</p>
+                <TrackedValue
+                  value={trackedValues.growthPerHour}
+                  className="text-emerald-400 font-mono"
+                />
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <p className="text-slate-500 text-xs">Per Day</p>
+                <TrackedValue
+                  value={trackedValues.growthPerDay}
+                  className="text-emerald-400 font-mono"
+                />
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3 col-span-2 sm:col-span-2">
+                <p className="text-slate-500 text-xs">Per Year</p>
+                <TrackedValue
+                  value={trackedValues.growthPerYear}
+                  className="text-emerald-400 font-mono text-lg"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="mb-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700 text-center">
@@ -382,58 +467,12 @@ function DashboardTab({
         </div>
       )}
 
-      {/* Metrics Section */}
+      {/* Spending Section — SWR + Monthly Spending Budget */}
       {latestEntry && primaryProjection && trackedValues && (
         <div className="mt-8 bg-slate-800/50 backdrop-blur rounded-2xl p-8 shadow-xl border border-slate-700">
           <h2 className="text-lg font-semibold text-slate-300 mb-4">
-            Current
+            Spending
           </h2>
-          
-          {/* Growth/Appreciation Rates */}
-          <div className="mb-6">
-            <h3 className="text-sm font-medium text-slate-400 mb-3">
-              Appreciation Rate
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">Per Second</p>
-                <TrackedValue 
-                  value={trackedValues.growthPerSecond}
-                  decimals={6}
-                  className="text-emerald-400 font-mono"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">Per Minute</p>
-                <TrackedValue 
-                  value={trackedValues.growthPerMinute}
-                  decimals={4}
-                  className="text-emerald-400 font-mono"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">Per Hour</p>
-                <TrackedValue 
-                  value={trackedValues.growthPerHour}
-                  className="text-emerald-400 font-mono"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs">Per Day</p>
-                <TrackedValue 
-                  value={trackedValues.growthPerDay}
-                  className="text-emerald-400 font-mono"
-                />
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-3 col-span-2 sm:col-span-2">
-                <p className="text-slate-500 text-xs">Per Year</p>
-                <TrackedValue 
-                  value={trackedValues.growthPerYear}
-                  className="text-emerald-400 font-mono text-lg"
-                />
-              </div>
-            </div>
-          </div>
 
           {/* Safe Withdrawal Rate */}
           <div>
@@ -443,14 +482,14 @@ function DashboardTab({
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Annual</p>
-                <TrackedValue 
+                <TrackedValue
                   value={trackedValues.annualSwr}
                   className="text-amber-400 font-mono text-lg"
                 />
               </div>
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <p className="text-slate-500 text-xs">Monthly</p>
-                <TrackedValue 
+                <TrackedValue
                   value={trackedValues.monthlySwr}
                   className="text-amber-400 font-mono text-lg"
                 />
@@ -466,7 +505,7 @@ function DashboardTab({
             <div className="bg-slate-900/50 rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-slate-500 text-xs">Current Monthly Budget</p>
-                <TrackedValue 
+                <TrackedValue
                   value={trackedValues.currentSpending}
                   className="text-violet-400 font-mono text-2xl font-semibold"
                 />
@@ -486,40 +525,12 @@ function DashboardTab({
               </p>
             </div>
           </div>
-
-          {/* Compounding Multiplier */}
-          {compoundingInfo && (
-            <div className="mt-6">
-              <h3 className="text-sm font-medium text-slate-400 mb-3">
-                Compounding Multiplier
-              </h3>
-              <div className="bg-slate-900/50 rounded-lg p-4">
-                <p className="text-sm text-amber-400/80">
-                  💡 Every $1 you save today = <TrackedValue
-                    value={compoundingInfo.trackedCoast.dollarMultiplier}
-                    showCurrency={false}
-                    formatter={(v) => `$${v.toFixed(2)}`}
-                    className="font-mono font-semibold text-amber-400"
-                  /> at retirement
-                  {compoundingInfo.runwayAndCoastInfo.yearsToRetirement > 0 && (
-                    <span className="text-slate-500"> (<TrackedValue
-                      value={compoundingInfo.trackedCoast.yearsToRetirement}
-                      showCurrency={false}
-                      formatter={(v) => `${Math.round(v)}`}
-                      className="text-slate-500"
-                    /> years of compounding)</span>
-                  )}
-                </p>
-              </div>
-            </div>
-          )}
-
         </div>
       )}
 
       {/* FI Milestones Section */}
       {latestEntry && primaryProjection && (
-        <FiMilestonesCard primaryProjection={primaryProjection} />
+        <FiMilestonesCard primaryProjection={primaryProjection} compoundingInfo={compoundingInfo} />
       )}
     </div>
   )
@@ -531,9 +542,13 @@ function DashboardTab({
 
 interface FiMilestonesCardProps {
   primaryProjection: ScenarioProjection;
+  compoundingInfo?: {
+    runwayAndCoastInfo: ReturnType<typeof calculateRunwayAndCoastInfo>;
+    trackedCoast: ReturnType<typeof createTrackedCoastInfo>;
+  } | null;
 }
 
-function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
+function FiMilestonesCard({ primaryProjection, compoundingInfo }: FiMilestonesCardProps) {
   const { fiMilestones, currentFiProgress, currentNetWorth, projections, scenario } = primaryProjection;
   const currentYear = new Date().getFullYear();
   const currentFiTarget = projections[0]?.fiTarget ?? 0;
@@ -660,11 +675,14 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
                   Next: {fiMilestones.nextMilestone.shortName}
                 </p>
                 <p className="text-slate-500 text-xs">
-                  {fiMilestones.nextMilestone.yearsFromNow === 0 
-                    ? 'This year' 
-                    : fiMilestones.nextMilestone.yearsFromNow === 1
-                      ? 'Next year'
-                      : `In ${fiMilestones.nextMilestone.yearsFromNow} years`}
+                  {(() => {
+                    const m = fiMilestones.nextMilestone!;
+                    const monthAbbrev = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    const monthStr = m.month ? `${monthAbbrev[m.month - 1]} ` : '';
+                    if (m.yearsFromNow === 0) return `${monthStr}${m.year}`;
+                    if (m.yearsFromNow === 1) return m.month ? `${monthStr}${m.year}` : 'Next year';
+                    return m.month ? `${monthStr}${m.year}` : `In ${m.yearsFromNow} years`;
+                  })()}
                   {fiMilestones.nextMilestone.age && ` (age ${fiMilestones.nextMilestone.age})`}
                 </p>
               </div>
@@ -687,6 +705,33 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
         )}
       </div>
       
+      {/* Compounding Multiplier */}
+      {compoundingInfo && (
+        <div className="mb-6">
+          <h3 className="text-sm font-medium text-slate-400 mb-3">
+            Compounding Multiplier
+          </h3>
+          <div className="bg-slate-900/50 rounded-lg p-4">
+            <p className="text-sm text-amber-400/80">
+              💡 Every $1 you save today = <TrackedValue
+                value={compoundingInfo.trackedCoast.dollarMultiplier}
+                showCurrency={false}
+                formatter={(v) => `$${v.toFixed(2)}`}
+                className="font-mono font-semibold text-amber-400"
+              /> at retirement
+              {compoundingInfo.runwayAndCoastInfo.yearsToRetirement > 0 && (
+                <span className="text-slate-500"> (<TrackedValue
+                  value={compoundingInfo.trackedCoast.yearsToRetirement}
+                  showCurrency={false}
+                  formatter={(v) => `${Math.round(v)}`}
+                  className="text-slate-500"
+                /> years of compounding)</span>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Runway Milestones - Security */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
@@ -1061,15 +1106,22 @@ function TrackedMilestoneRow({
           {milestone.year ? (
             <>
               {trackedInfo?.yearsToMilestone ? (
-                <TrackedValue 
+                <TrackedValue
                   value={trackedInfo.yearsToMilestone}
                   showCurrency={false}
-                  formatter={(v) => `${milestone.year}`}
+                  formatter={(v) => {
+                    const monthAbbrev = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    return milestone.month
+                      ? `${monthAbbrev[milestone.month - 1]} ${milestone.year}`
+                      : `${milestone.year}`;
+                  }}
                   className={`text-sm font-mono ${milestone.isAchieved ? 'text-emerald-400' : 'text-slate-400'}`}
                 />
               ) : (
                 <span className={`text-sm font-mono ${milestone.isAchieved ? 'text-emerald-400' : 'text-slate-400'}`}>
-                  {milestone.year}
+                  {milestone.month
+                    ? `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][milestone.month - 1]} ${milestone.year}`
+                    : milestone.year}
                 </span>
               )}
               {milestone.age && (
