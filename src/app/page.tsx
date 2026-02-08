@@ -277,6 +277,39 @@ function DashboardTab({
     return generateTrackedDashboardValues(primaryProjection, latestEntry.timestamp);
   }, [latestEntry, primaryProjection]);
 
+  // Compounding multiplier data
+  const compoundingInfo = useMemo(() => {
+    if (!primaryProjection) return null;
+    const { currentNetWorth, projections, scenario } = primaryProjection;
+    const currentYear = new Date().getFullYear();
+    const firstRow = projections[0];
+    const birthYear = firstRow?.age ? currentYear - firstRow.age : null;
+    const currentAge = birthYear ? currentYear - birthYear : null;
+    const currentMonthlySpend = projections[0]?.monthlySpend ?? 0;
+    const retirementAge = 65;
+
+    const runwayAndCoastInfo = calculateRunwayAndCoastInfo(
+      currentNetWorth.total,
+      currentMonthlySpend,
+      birthYear,
+      scenario.currentRate,
+      scenario.inflationRate,
+      scenario.swr
+    );
+
+    const trackedCoast = createTrackedCoastInfo(
+      currentNetWorth.total,
+      currentMonthlySpend,
+      currentAge,
+      retirementAge,
+      scenario.currentRate,
+      scenario.inflationRate,
+      scenario.swr
+    );
+
+    return { runwayAndCoastInfo, trackedCoast };
+  }, [primaryProjection]);
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
@@ -453,6 +486,33 @@ function DashboardTab({
               </p>
             </div>
           </div>
+
+          {/* Compounding Multiplier */}
+          {compoundingInfo && (
+            <div className="mt-6">
+              <h3 className="text-sm font-medium text-slate-400 mb-3">
+                Compounding Multiplier
+              </h3>
+              <div className="bg-slate-900/50 rounded-lg p-4">
+                <p className="text-sm text-amber-400/80">
+                  💡 Every $1 you save today = <TrackedValue
+                    value={compoundingInfo.trackedCoast.dollarMultiplier}
+                    showCurrency={false}
+                    formatter={(v) => `$${v.toFixed(2)}`}
+                    className="font-mono font-semibold text-amber-400"
+                  /> at retirement
+                  {compoundingInfo.runwayAndCoastInfo.yearsToRetirement > 0 && (
+                    <span className="text-slate-500"> (<TrackedValue
+                      value={compoundingInfo.trackedCoast.yearsToRetirement}
+                      showCurrency={false}
+                      formatter={(v) => `${Math.round(v)}`}
+                      className="text-slate-500"
+                    /> years of compounding)</span>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
 
         </div>
       )}
@@ -689,23 +749,7 @@ function FiMilestonesCard({ primaryProjection }: FiMilestonesCardProps) {
             />
           </div>
         </div>
-        <p className="text-xs text-slate-500 mb-2">If you stopped contributing today (by age {runwayAndCoastInfo.retirementAge})</p>
-        <p className="text-xs text-amber-400/80 mb-3">
-          💡 Every $1 you save today = <TrackedValue 
-            value={trackedCoast.dollarMultiplier}
-            showCurrency={false}
-            formatter={(v) => `$${v.toFixed(2)}`}
-            className="font-mono font-semibold text-amber-400"
-          /> at retirement
-          {runwayAndCoastInfo.yearsToRetirement > 0 && (
-            <span className="text-slate-500"> (<TrackedValue 
-              value={trackedCoast.yearsToRetirement}
-              showCurrency={false}
-              formatter={(v) => `${Math.round(v)}`}
-              className="text-slate-500"
-            /> years of compounding)</span>
-          )}
-        </p>
+        <p className="text-xs text-slate-500 mb-3">If you stopped contributing today (by age {runwayAndCoastInfo.retirementAge})</p>
         <div className="space-y-2">
           {coastMilestones.map(milestone => (
             <TrackedMilestoneRow 
@@ -4198,185 +4242,26 @@ function TaxCalculationDetails({ taxes, isExpanded = false, onToggle }: TaxCalcu
 // SCENARIOS TAB - Step-by-Step Scenario Builder
 // ============================================================================
 
-type WizardStep = 'list' | 'income' | 'filing' | 'pretax' | 'spending' | 'investments' | 'summary';
-
-interface ScenarioWizardState {
-  name: string;
-  grossIncome: string;
-  incomeGrowthRate: string;
-  filingStatus: FilingStatus;
-  stateCode: string;
-  preTax401k: string;
-  preTaxIRA: string;
-  preTaxHSA: string;
-  preTaxOther: string;
-  baseMonthlyBudget: string;
-  spendingGrowthRate: string;
-  currentRate: string;
-  swr: string;
-  inflationRate: string;
-  startDate: string; // YYYY-MM-DD format - when inflation tracking started
-}
-
-const DEFAULT_WIZARD_STATE: ScenarioWizardState = {
-  name: '',
-  grossIncome: '',
-  incomeGrowthRate: '3',
-  filingStatus: 'single',
-  stateCode: '',
-  preTax401k: '',
-  preTaxIRA: '',
-  preTaxHSA: '',
-  preTaxOther: '',
-  baseMonthlyBudget: '3000',
-  spendingGrowthRate: '2',
-  currentRate: '7',
-  swr: '4',
-  inflationRate: '3',
-  startDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
-};
-
 interface ScenariosTabProps {
   scenariosHook: ReturnType<typeof useScenarios>;
 }
 
 function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
-  const [wizardStep, setWizardStep] = useState<WizardStep>('list');
-  const [wizardState, setWizardState] = useState<ScenarioWizardState>(DEFAULT_WIZARD_STATE);
-  const [editingScenarioId, setEditingScenarioId] = useState<string | null>(null);
-  const [quickEditScenario, setQuickEditScenario] = useState<Scenario | null>(null);
+  const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
 
-  // Get current net worth for context
-  const currentNetWorth = scenariosHook.scenarioProjections[0]?.currentNetWorth.total || 0;
-
-  // Calculate income breakdown in real-time as user fills wizard
-  // Uses total unlocked spending (base + net worth portion)
-  const incomeBreakdown = useMemo((): ScenarioIncomeBreakdown | null => {
-    const gross = parseFloat(wizardState.grossIncome) || 0;
-    if (gross <= 0) return null;
-    
-    const baseBudget = parseFloat(wizardState.baseMonthlyBudget) || 3000;
-    const spendingRate = parseFloat(wizardState.spendingGrowthRate) || 0;
-    const netWorthPortion = currentNetWorth * (spendingRate / 100) / 12;
-    const totalUnlockedSpending = baseBudget + netWorthPortion;
-    
-    return calculateScenarioIncome(
-      gross,
-      wizardState.filingStatus,
-      wizardState.stateCode || null,
-      {
-        traditional401k: parseFloat(wizardState.preTax401k) || 0,
-        traditionalIRA: parseFloat(wizardState.preTaxIRA) || 0,
-        hsa: parseFloat(wizardState.preTaxHSA) || 0,
-        other: parseFloat(wizardState.preTaxOther) || 0,
-      },
-      totalUnlockedSpending,
-      currentNetWorth
-    );
-  }, [wizardState, currentNetWorth]);
-
-  const resetWizard = () => {
-    setWizardState(DEFAULT_WIZARD_STATE);
-    setWizardStep('list');
-    setEditingScenarioId(null);
+  const openNewScenario = () => {
+    setEditingScenario({
+      name: '',
+      currentRate: 7,
+      swr: 4,
+      inflationRate: 3,
+      baseMonthlyBudget: 3000,
+      spendingGrowthRate: 2,
+      yearlyContribution: 0,
+    } as Scenario);
   };
 
-  const startNewScenario = () => {
-    setWizardState(DEFAULT_WIZARD_STATE);
-    setEditingScenarioId(null);
-    setWizardStep('income');
-  };
-
-  const startEditingScenario = (scenario: Scenario) => {
-    // Convert timestamp to YYYY-MM-DD, fallback to createdAt if startDate not set
-    const startTimestamp = scenario.startDate ?? scenario.createdAt;
-    const startDateStr = new Date(startTimestamp).toISOString().split('T')[0];
-
-    setWizardState({
-      name: scenario.name,
-      grossIncome: scenario.grossIncome?.toString() || '',
-      incomeGrowthRate: scenario.incomeGrowthRate?.toString() || '3',
-      filingStatus: (scenario.filingStatus as FilingStatus) || 'single',
-      stateCode: scenario.stateCode || '',
-      preTax401k: scenario.preTax401k?.toString() || '',
-      preTaxIRA: scenario.preTaxIRA?.toString() || '',
-      preTaxHSA: scenario.preTaxHSA?.toString() || '',
-      preTaxOther: scenario.preTaxOther?.toString() || '',
-      baseMonthlyBudget: scenario.baseMonthlyBudget.toString(),
-      spendingGrowthRate: scenario.spendingGrowthRate.toString(),
-      currentRate: scenario.currentRate.toString(),
-      swr: scenario.swr.toString(),
-      inflationRate: scenario.inflationRate.toString(),
-      startDate: startDateStr,
-    });
-    setEditingScenarioId(scenario._id);
-    setWizardStep('income');
-  };
-
-  const handleSaveScenario = async () => {
-    // Calculate total yearly contribution from pre-tax + post-tax savings
-    // This is the INITIAL contribution - projections will recalculate dynamically
-    const totalPreTax = (parseFloat(wizardState.preTax401k) || 0) +
-                        (parseFloat(wizardState.preTaxIRA) || 0) +
-                        (parseFloat(wizardState.preTaxHSA) || 0) +
-                        (parseFloat(wizardState.preTaxOther) || 0);
-    const postTaxSavings = incomeBreakdown?.postTaxSavingsAvailable || 0;
-    const totalYearlySavings = totalPreTax + postTaxSavings;
-
-    // Convert start date string to timestamp
-    const startDateTimestamp = wizardState.startDate
-      ? new Date(wizardState.startDate).getTime()
-      : Date.now();
-
-    const scenarioData = {
-      name: wizardState.name.trim() || `Scenario ${new Date().toLocaleDateString()}`,
-      currentRate: parseFloat(wizardState.currentRate) || 7,
-      swr: parseFloat(wizardState.swr) || 4,
-      yearlyContribution: Math.max(0, totalYearlySavings),
-      inflationRate: parseFloat(wizardState.inflationRate) || 3,
-      baseMonthlyBudget: parseFloat(wizardState.baseMonthlyBudget) || 3000,
-      spendingGrowthRate: parseFloat(wizardState.spendingGrowthRate) || 2,
-      startDate: startDateTimestamp,
-      grossIncome: parseFloat(wizardState.grossIncome) || undefined,
-      incomeGrowthRate: parseFloat(wizardState.incomeGrowthRate) || undefined,
-      filingStatus: wizardState.filingStatus,
-      stateCode: wizardState.stateCode || undefined,
-      preTax401k: parseFloat(wizardState.preTax401k) || undefined,
-      preTaxIRA: parseFloat(wizardState.preTaxIRA) || undefined,
-      preTaxHSA: parseFloat(wizardState.preTaxHSA) || undefined,
-      preTaxOther: parseFloat(wizardState.preTaxOther) || undefined,
-      effectiveTaxRate: incomeBreakdown?.taxes.effectiveTotalRate,
-    };
-
-    if (editingScenarioId) {
-      await scenariosHook.updateScenario(editingScenarioId as any, scenarioData);
-    } else {
-      await scenariosHook.createScenario(scenarioData);
-    }
-    
-    resetWizard();
-  };
-
-  const applyInvestmentTemplate = (template: typeof SCENARIO_TEMPLATES[number]) => {
-    setWizardState(prev => ({
-      ...prev,
-      currentRate: template.currentRate.toString(),
-      swr: template.swr.toString(),
-      inflationRate: template.inflationRate.toString(),
-    }));
-  };
-
-  // Wizard step navigation
-  const STEPS: WizardStep[] = ['income', 'filing', 'pretax', 'spending', 'investments', 'summary'];
-  const currentStepIndex = STEPS.indexOf(wizardStep);
-  const canGoNext = currentStepIndex < STEPS.length - 1;
-  const canGoBack = currentStepIndex > 0;
-  const goNext = () => canGoNext && setWizardStep(STEPS[currentStepIndex + 1]);
-  const goBack = () => canGoBack && setWizardStep(STEPS[currentStepIndex - 1]);
-
-  // Show scenario list if not in wizard
-  if (wizardStep === 'list') {
-    return (
+  return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
           Scenario Builder
@@ -4409,7 +4294,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
             Answer a few questions about your income, taxes, spending, and investment assumptions to create a personalized financial projection.
           </p>
           <button
-            onClick={startNewScenario}
+            onClick={openNewScenario}
             className="px-6 py-3 bg-violet-500 text-white rounded-lg hover:bg-violet-600 transition-colors font-medium"
           >
             Start Building
@@ -4448,10 +4333,7 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
                         </button>
                       </>
                     )}
-                    <button onClick={() => setQuickEditScenario(scenario)} className="p-1.5 text-slate-400 hover:text-emerald-400 rounded" title="Quick Edit">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-                    </button>
-                    <button onClick={() => startEditingScenario(scenario)} className="p-1.5 text-slate-400 hover:text-violet-400 rounded" title="Full Wizard">
+                    <button onClick={() => setEditingScenario(scenario)} className="p-1.5 text-slate-400 hover:text-violet-400 rounded" title="Edit">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                     </button>
                     <button onClick={() => scenariosHook.duplicateScenario(scenario._id)} className="p-1.5 text-slate-400 hover:text-slate-200 rounded" title="Duplicate">
@@ -4469,848 +4351,20 @@ function ScenariosTab({ scenariosHook }: ScenariosTabProps) {
           </div>
         )}
 
-        {/* Quick Edit Panel */}
-        {quickEditScenario && typeof document !== 'undefined' && createPortal(
-          <QuickEditPanel
-            scenario={quickEditScenario}
-            onClose={() => setQuickEditScenario(null)}
+        {/* Scenario Editor Modal */}
+        {editingScenario && typeof document !== 'undefined' && createPortal(
+          <ScenarioEditor
+            scenario={editingScenario}
+            onClose={() => setEditingScenario(null)}
             onSave={async (updates) => {
-              await scenariosHook.updateScenario(quickEditScenario._id, updates);
-              setQuickEditScenario(null);
+              await scenariosHook.updateScenario(editingScenario._id, updates);
+              setEditingScenario(null);
             }}
-            currentNetWorth={currentNetWorth}
+            scenariosHook={scenariosHook}
           />,
           document.body
         )}
       </div>
     );
-  }
-
-  // Quick Edit Panel Component
-  function QuickEditPanel({ 
-    scenario, 
-    onClose, 
-    onSave,
-    currentNetWorth 
-  }: { 
-    scenario: Scenario; 
-    onClose: () => void; 
-    onSave: (updates: any) => Promise<void>;
-    currentNetWorth: number;
-  }) {
-    // Convert timestamp to YYYY-MM-DD, fallback to createdAt if startDate not set
-    const startTimestamp = scenario.startDate ?? scenario.createdAt;
-    const startDateStr = new Date(startTimestamp).toISOString().split('T')[0];
-
-    const [form, setForm] = useState({
-      name: scenario.name,
-      grossIncome: scenario.grossIncome?.toString() || '',
-      incomeGrowthRate: scenario.incomeGrowthRate?.toString() || '3',
-      filingStatus: scenario.filingStatus || 'single',
-      stateCode: scenario.stateCode || '',
-      preTax401k: scenario.preTax401k?.toString() || '',
-      preTaxIRA: scenario.preTaxIRA?.toString() || '',
-      preTaxHSA: scenario.preTaxHSA?.toString() || '',
-      baseMonthlyBudget: scenario.baseMonthlyBudget.toString(),
-      spendingGrowthRate: scenario.spendingGrowthRate.toString(),
-      currentRate: scenario.currentRate.toString(),
-      swr: scenario.swr.toString(),
-      inflationRate: scenario.inflationRate.toString(),
-      startDate: startDateStr,
-    });
-    const [saving, setSaving] = useState(false);
-
-    // Calculate live income breakdown
-    const liveBreakdown = useMemo(() => {
-      const gross = parseFloat(form.grossIncome) || 0;
-      if (gross <= 0) return null;
-      
-      const baseBudget = parseFloat(form.baseMonthlyBudget) || 3000;
-      const spendingRate = parseFloat(form.spendingGrowthRate) || 0;
-      const netWorthPortion = currentNetWorth * (spendingRate / 100) / 12;
-      const totalSpending = baseBudget + netWorthPortion;
-      
-      return calculateScenarioIncome(
-        gross,
-        form.filingStatus as FilingStatus,
-        form.stateCode || null,
-        {
-          traditional401k: parseFloat(form.preTax401k) || 0,
-          traditionalIRA: parseFloat(form.preTaxIRA) || 0,
-          hsa: parseFloat(form.preTaxHSA) || 0,
-          other: 0,
-        },
-        totalSpending,
-        currentNetWorth
-      );
-    }, [form, currentNetWorth]);
-
-    const handleSave = async () => {
-      setSaving(true);
-      try {
-        const totalPreTax = (parseFloat(form.preTax401k) || 0) +
-                            (parseFloat(form.preTaxIRA) || 0) +
-                            (parseFloat(form.preTaxHSA) || 0);
-        const postTaxSavings = liveBreakdown?.postTaxSavingsAvailable || 0;
-
-        // Convert start date string to timestamp
-        const startDateTimestamp = form.startDate
-          ? new Date(form.startDate).getTime()
-          : Date.now();
-
-        await onSave({
-          name: form.name,
-          grossIncome: parseFloat(form.grossIncome) || undefined,
-          incomeGrowthRate: parseFloat(form.incomeGrowthRate) || undefined,
-          filingStatus: form.filingStatus,
-          stateCode: form.stateCode || undefined,
-          preTax401k: parseFloat(form.preTax401k) || undefined,
-          preTaxIRA: parseFloat(form.preTaxIRA) || undefined,
-          preTaxHSA: parseFloat(form.preTaxHSA) || undefined,
-          baseMonthlyBudget: parseFloat(form.baseMonthlyBudget) || 3000,
-          spendingGrowthRate: parseFloat(form.spendingGrowthRate) || 0,
-          currentRate: parseFloat(form.currentRate) || 7,
-          swr: parseFloat(form.swr) || 4,
-          inflationRate: parseFloat(form.inflationRate) || 3,
-          startDate: startDateTimestamp,
-          yearlyContribution: totalPreTax + postTaxSavings,
-          effectiveTaxRate: liveBreakdown?.taxes.effectiveTotalRate,
-        });
-      } finally {
-        setSaving(false);
-      }
-    };
-
-    return (
-      <div className="fixed inset-0 z-[9999] pointer-events-auto">
-        <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-        <div className="absolute inset-y-0 right-0 w-full sm:w-[600px] md:w-[700px] bg-slate-800 shadow-2xl overflow-y-auto">
-          {/* Header */}
-          <div className="bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: scenario.color }} />
-              <h2 className="text-xl font-semibold text-slate-200">Quick Edit: {scenario.name}</h2>
-            </div>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-200 p-2">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
-
-          <div className="p-6 space-y-6">
-            {/* Scenario Name */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Scenario Name</label>
-              <input type="text" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-            </div>
-
-            {/* Income Section */}
-            <div className="bg-slate-900/30 rounded-xl p-4 border border-slate-700">
-              <h3 className="text-sm font-semibold text-emerald-400 mb-4 uppercase tracking-wide">Income & Taxes</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Gross Income</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                    <input type="number" value={form.grossIncome} onChange={(e) => setForm(f => ({ ...f, grossIncome: e.target.value }))} placeholder="100000" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 pl-7 pr-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Income Growth %</label>
-                  <input type="number" value={form.incomeGrowthRate} onChange={(e) => setForm(f => ({ ...f, incomeGrowthRate: e.target.value }))} placeholder="3" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Filing Status</label>
-                  <select value={form.filingStatus} onChange={(e) => setForm(f => ({ ...f, filingStatus: e.target.value }))} className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="single">Single</option>
-                    <option value="married_jointly">Married Jointly</option>
-                    <option value="married_separately">Married Separately</option>
-                    <option value="head_of_household">Head of Household</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">State</label>
-                  <select value={form.stateCode} onChange={(e) => setForm(f => ({ ...f, stateCode: e.target.value }))} className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="">No state tax</option>
-                    {Object.entries(STATE_TAX_RATES).map(([code, info]) => (
-                      <option key={code} value={code}>{code} - {info.rate}%</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Pre-tax Savings Section */}
-            <div className="bg-slate-900/30 rounded-xl p-4 border border-slate-700">
-              <h3 className="text-sm font-semibold text-violet-400 mb-4 uppercase tracking-wide">Pre-tax Savings</h3>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">401(k)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                    <input type="number" value={form.preTax401k} onChange={(e) => setForm(f => ({ ...f, preTax401k: e.target.value }))} placeholder="0" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 pl-7 pr-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Traditional IRA</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                    <input type="number" value={form.preTaxIRA} onChange={(e) => setForm(f => ({ ...f, preTaxIRA: e.target.value }))} placeholder="0" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 pl-7 pr-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">HSA</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                    <input type="number" value={form.preTaxHSA} onChange={(e) => setForm(f => ({ ...f, preTaxHSA: e.target.value }))} placeholder="0" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 pl-7 pr-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Spending Section */}
-            <div className="bg-slate-900/30 rounded-xl p-4 border border-slate-700">
-              <h3 className="text-sm font-semibold text-amber-400 mb-4 uppercase tracking-wide">Spending</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Base Monthly Budget</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                    <input type="number" value={form.baseMonthlyBudget} onChange={(e) => setForm(f => ({ ...f, baseMonthlyBudget: e.target.value }))} placeholder="3000" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 pl-7 pr-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-500" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Spending Growth Rate %</label>
-                  <input type="number" value={form.spendingGrowthRate} onChange={(e) => setForm(f => ({ ...f, spendingGrowthRate: e.target.value }))} placeholder="2" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-500" />
-                </div>
-              </div>
-            </div>
-
-            {/* Investment Section */}
-            <div className="bg-slate-900/30 rounded-xl p-4 border border-slate-700">
-              <h3 className="text-sm font-semibold text-sky-400 mb-4 uppercase tracking-wide">Investment Assumptions</h3>
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Expected Return %</label>
-                  <input type="number" value={form.currentRate} onChange={(e) => setForm(f => ({ ...f, currentRate: e.target.value }))} placeholder="7" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500" />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Safe Withdrawal %</label>
-                  <input type="number" value={form.swr} onChange={(e) => setForm(f => ({ ...f, swr: e.target.value }))} placeholder="4" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500" />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Inflation %</label>
-                  <input type="number" value={form.inflationRate} onChange={(e) => setForm(f => ({ ...f, inflationRate: e.target.value }))} placeholder="3" step="0.5" className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Scenario Start Date</label>
-                <input type="date" value={form.startDate} onChange={(e) => setForm(f => ({ ...f, startDate: e.target.value }))} className="w-full bg-slate-800 border border-slate-600 rounded-lg py-2 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500" />
-                <p className="mt-1 text-xs text-slate-500">Inflation is calculated from this date</p>
-              </div>
-            </div>
-
-            {/* Live Summary */}
-            {liveBreakdown && (
-              <div className="bg-gradient-to-br from-emerald-500/10 to-sky-500/10 rounded-xl p-4 border border-emerald-500/30">
-                <h3 className="text-sm font-semibold text-slate-200 mb-3">Live Calculation</h3>
-                <div className="grid grid-cols-4 gap-4 text-center">
-                  <div>
-                    <p className="text-xs text-slate-500">Net Income</p>
-                    <SimpleTrackedValue
-                      value={liveBreakdown.taxes.netIncome}
-                      name="Net Income"
-                      description="Annual take-home pay after taxes"
-                      formula="Gross Income - Pre-Tax - All Taxes"
-                      inputs={[
-                        { name: 'Gross', value: liveBreakdown.taxes.grossIncome, unit: '$' },
-                        { name: 'Total Tax', value: liveBreakdown.taxes.totalTax, unit: '$' },
-                      ]}
-                      className="text-lg font-mono text-emerald-400"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Tax Rate</p>
-                    <SimpleTrackedValue value={liveBreakdown.taxes.effectiveTotalRate} name="Effective Tax Rate" description="Total taxes as percentage of gross income" formula="Total Taxes ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-lg font-mono text-red-400" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Annual Spending</p>
-                    <SimpleTrackedValue
-                      value={liveBreakdown.annualSpending}
-                      name="Annual Spending"
-                      description="Level-based annual spending budget"
-                      formula="Monthly Budget × 12"
-                      className="text-lg font-mono text-amber-400"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Total Savings</p>
-                    <SimpleTrackedValue
-                      value={liveBreakdown.totalAnnualSavings}
-                      name="Total Annual Savings"
-                      description="Amount available for investments after spending"
-                      formula="Net Income - Annual Spending"
-                      inputs={[
-                        { name: 'Net Income', value: liveBreakdown.taxes.netIncome, unit: '$' },
-                        { name: 'Spending', value: liveBreakdown.annualSpending, unit: '$' },
-                      ]}
-                      className="text-lg font-mono text-sky-400"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="bg-slate-800 border-t border-slate-700 p-4 flex justify-between">
-            <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-slate-200">
-              Cancel
-            </button>
-            <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 font-medium">
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Wizard Header Component
-  const WizardHeader = ({ title, subtitle, step }: { title: string; subtitle: string; step: number }) => (
-    <div className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={resetWizard} className="text-slate-400 hover:text-slate-200 flex items-center gap-2">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-          Cancel
-        </button>
-        <div className="text-sm text-slate-500">Step {step} of 6</div>
-      </div>
-      <div className="flex gap-1 mb-6">
-        {[1,2,3,4,5,6].map(s => (
-          <div key={s} className={`h-1 flex-1 rounded-full ${s <= step ? 'bg-violet-500' : 'bg-slate-700'}`} />
-        ))}
-      </div>
-      <h2 className="text-2xl font-bold text-slate-200 mb-2">{title}</h2>
-      <p className="text-slate-400">{subtitle}</p>
-    </div>
-  );
-
-  // Navigation buttons
-  const WizardNav = ({ canContinue = true }: { canContinue?: boolean }) => (
-    <div className="flex justify-between mt-8">
-      <button onClick={goBack} disabled={!canGoBack} className="px-4 py-2 text-slate-400 hover:text-slate-200 disabled:opacity-30">
-        Back
-      </button>
-      <button onClick={goNext} disabled={!canContinue || !canGoNext} className="px-6 py-2 bg-violet-500 text-white rounded-lg hover:bg-violet-600 disabled:opacity-50">
-        Continue
-      </button>
-    </div>
-  );
-
-  // Wizard container
-  return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl">
-      {/* STEP 1: Income */}
-      {wizardStep === 'income' && (
-        <>
-          <WizardHeader title="What's your gross annual income?" subtitle="Enter your total income before any taxes or deductions." step={1} />
-          <div className="space-y-4">
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <label className="block text-sm font-medium text-slate-300 mb-2">Annual Gross Income</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
-                <input type="number" value={wizardState.grossIncome} onChange={(e) => setWizardState(s => ({ ...s, grossIncome: e.target.value }))} placeholder="100000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              </div>
-              {wizardState.grossIncome && (
-                <p className="mt-3 text-slate-400">That's <SimpleTrackedValue
-                  value={parseFloat(wizardState.grossIncome) / 12}
-                  name="Monthly Income"
-                  description="Gross monthly income before taxes"
-                  formula="Annual Gross Income ÷ 12"
-                  inputs={[{ name: 'Annual Gross', value: parseFloat(wizardState.grossIncome), unit: '$' }]}
-                  className="text-emerald-400 font-mono"
-                /> per month before taxes.</p>
-              )}
-            </div>
-            
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <label className="block text-sm font-medium text-slate-300 mb-2">Expected Annual Income Growth (%)</label>
-              <p className="text-xs text-slate-500 mb-3">How much do you expect your income to increase each year? (raises, promotions, etc.)</p>
-              <div className="flex gap-4 items-center">
-                <input type="number" value={wizardState.incomeGrowthRate} onChange={(e) => setWizardState(s => ({ ...s, incomeGrowthRate: e.target.value }))} placeholder="3" step="0.5" min="0" max="20" className="w-32 bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 text-xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                <span className="text-slate-400">% per year</span>
-              </div>
-              <div className="mt-3 flex gap-2">
-                {[0, 2, 3, 5, 7].map(rate => (
-                  <button key={rate} onClick={() => setWizardState(s => ({ ...s, incomeGrowthRate: rate.toString() }))} className={`px-3 py-1 text-sm rounded-lg ${parseFloat(wizardState.incomeGrowthRate) === rate ? 'bg-violet-500 text-white' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}>
-                    {rate}%
-                  </button>
-                ))}
-              </div>
-              {wizardState.grossIncome && parseFloat(wizardState.incomeGrowthRate) > 0 && (
-                <div className="mt-4 p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
-                  <p className="text-sm text-emerald-400">
-                    In 10 years, your income would grow to approximately <strong><SimpleTrackedValue
-                      value={parseFloat(wizardState.grossIncome) * Math.pow(1 + parseFloat(wizardState.incomeGrowthRate) / 100, 10)}
-                      name="Income in 10 Years"
-                      description="Projected annual income after 10 years of growth"
-                      formula={`Current Income × (1 + ${wizardState.incomeGrowthRate}%)^10`}
-                      inputs={[
-                        { name: 'Current Income', value: parseFloat(wizardState.grossIncome), unit: '$' },
-                        { name: 'Growth Rate', value: `${wizardState.incomeGrowthRate}%` },
-                        { name: 'Years', value: 10 },
-                      ]}
-                      className="text-emerald-400"
-                    /></strong>
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-          <WizardNav canContinue={!!wizardState.grossIncome} />
-        </>
-      )}
-
-      {/* STEP 2: Filing Status & State */}
-      {wizardStep === 'filing' && (
-        <>
-          <WizardHeader title="How do you file your taxes?" subtitle="This helps us calculate your federal and state tax burden." step={2} />
-          <div className="space-y-4">
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <label className="block text-sm font-medium text-slate-300 mb-3">Filing Status</label>
-              <div className="grid grid-cols-2 gap-3">
-                {(['single', 'married_jointly', 'married_separately', 'head_of_household'] as FilingStatus[]).map(status => (
-                  <button key={status} onClick={() => setWizardState(s => ({ ...s, filingStatus: status }))} className={`p-4 rounded-lg border text-left ${wizardState.filingStatus === status ? 'border-violet-500 bg-violet-500/10' : 'border-slate-600 hover:border-slate-500'}`}>
-                    <span className="font-medium text-slate-200">{status === 'single' ? 'Single' : status === 'married_jointly' ? 'Married Filing Jointly' : status === 'married_separately' ? 'Married Filing Separately' : 'Head of Household'}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <label className="block text-sm font-medium text-slate-300 mb-2">State (for state income tax)</label>
-              <select value={wizardState.stateCode} onChange={(e) => setWizardState(s => ({ ...s, stateCode: e.target.value }))} className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="">No state income tax / Skip</option>
-                {Object.entries(STATE_TAX_RATES).map(([code, info]) => (
-                  <option key={code} value={code}>{info.name} ({info.rate}%)</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <WizardNav />
-        </>
-      )}
-
-      {/* STEP 3: Pre-tax Savings */}
-      {wizardStep === 'pretax' && (
-        <>
-          <WizardHeader title="Pre-tax retirement contributions" subtitle="These reduce your taxable income and grow tax-deferred." step={3} />
-          <div className="space-y-4">
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-sm font-medium text-slate-300">401(k) / 403(b) Contribution</label>
-                <span className="text-xs text-slate-500">Limit: <SimpleTrackedValue value={CONTRIBUTION_LIMITS.traditional401k} name="401(k) Limit" description="IRS annual contribution limit for 401(k)" formula="IRS Limit (2024)" className="text-slate-500" /></span>
-              </div>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
-                <input type="number" value={wizardState.preTax401k} onChange={(e) => setWizardState(s => ({ ...s, preTax401k: e.target.value }))} placeholder="0" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-10 pr-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              </div>
-            </div>
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-sm font-medium text-slate-300">Traditional IRA</label>
-                <span className="text-xs text-slate-500">Limit: <SimpleTrackedValue value={CONTRIBUTION_LIMITS.traditionalIRA} name="IRA Limit" description="IRS annual contribution limit for Traditional IRA" formula="IRS Limit (2024)" className="text-slate-500" /></span>
-              </div>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
-                <input type="number" value={wizardState.preTaxIRA} onChange={(e) => setWizardState(s => ({ ...s, preTaxIRA: e.target.value }))} placeholder="0" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-10 pr-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              </div>
-            </div>
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-sm font-medium text-slate-300">HSA (Health Savings Account)</label>
-                <span className="text-xs text-slate-500">Limit: <SimpleTrackedValue value={CONTRIBUTION_LIMITS.hsa_individual} name="HSA Individual Limit" description="HSA limit for individual coverage" formula="IRS Limit (2024)" className="text-slate-500" />-<SimpleTrackedValue value={CONTRIBUTION_LIMITS.hsa_family} name="HSA Family Limit" description="HSA limit for family coverage" formula="IRS Limit (2024)" className="text-slate-500" /></span>
-              </div>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
-                <input type="number" value={wizardState.preTaxHSA} onChange={(e) => setWizardState(s => ({ ...s, preTaxHSA: e.target.value }))} placeholder="0" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 pl-10 pr-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              </div>
-            </div>
-            {incomeBreakdown && (
-              <div className="bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/30">
-                <p className="text-sm text-emerald-400">Pre-tax savings reduce your taxable income by <strong><SimpleTrackedValue value={incomeBreakdown.totalPreTaxSavings} name="Total Pre-tax Savings" description="Sum of all pre-tax contributions" formula="401(k) + IRA + HSA + Other" className="text-emerald-400" /></strong>, saving you approximately <strong><SimpleTrackedValue value={incomeBreakdown.totalPreTaxSavings * (incomeBreakdown.taxes.marginalFederalRate / 100)} name="Tax Savings" description="Estimated tax savings from pre-tax contributions" formula="Pre-tax Savings × Marginal Tax Rate" inputs={[{ name: 'Pre-tax', value: incomeBreakdown.totalPreTaxSavings, unit: '$' }, { name: 'Marginal Rate', value: `${incomeBreakdown.taxes.marginalFederalRate}%` }]} className="text-emerald-400" /></strong> in taxes.</p>
-              </div>
-            )}
-          </div>
-          <WizardNav />
-        </>
-      )}
-
-      {/* STEP 4: Spending */}
-      {wizardStep === 'spending' && (() => {
-        const baseBudget = parseFloat(wizardState.baseMonthlyBudget) || 0;
-        const spendingRate = parseFloat(wizardState.spendingGrowthRate) || 0;
-        const netWorthPortion = currentNetWorth * (spendingRate / 100) / 12;
-        const totalUnlockedSpending = baseBudget + netWorthPortion;
-        
-        return (
-          <>
-            <WizardHeader title="How much do you spend?" subtitle="Set your base budget and how it grows with your net worth." step={4} />
-            
-            {/* Variable Spending Explanation */}
-            <div className="bg-violet-500/10 rounded-xl p-4 border border-violet-500/30 mb-6">
-              <h4 className="text-sm font-medium text-violet-400 mb-2">Variable Spending System</h4>
-              <p className="text-sm text-slate-400">Your monthly budget has two parts:</p>
-              <div className="mt-2 text-sm">
-                <div className="flex items-center gap-2 text-slate-300">
-                  <span className="w-3 h-3 bg-amber-500 rounded-full"></span>
-                  <span><strong>Base Budget</strong> — Your floor spending (adjusts with inflation)</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-300 mt-1">
-                  <span className="w-3 h-3 bg-emerald-500 rounded-full"></span>
-                  <span><strong>Net Worth Portion</strong> — Extra spending unlocked as wealth grows</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {/* Base Budget */}
-              <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-                <label className="block text-sm font-medium text-slate-300 mb-2">Monthly Base Budget</label>
-                <p className="text-xs text-slate-500 mb-3">Your minimum monthly spending regardless of net worth</p>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
-                  <input type="number" value={wizardState.baseMonthlyBudget} onChange={(e) => setWizardState(s => ({ ...s, baseMonthlyBudget: e.target.value }))} placeholder="3000" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-4 pl-10 pr-4 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                </div>
-                <p className="mt-2 text-sm text-slate-500">Annual base: <SimpleTrackedValue value={baseBudget * 12} name="Annual Base Budget" description="Base budget multiplied by 12 months" formula="Monthly Base × 12" className="text-slate-500" /></p>
-              </div>
-
-              {/* Spending Growth Rate */}
-              <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-                <label className="block text-sm font-medium text-slate-300 mb-2">Spending Growth Rate (%)</label>
-                <p className="text-xs text-slate-500 mb-3">Percentage of net worth added to your monthly budget annually</p>
-                <div className="flex gap-4 items-center">
-                  <input type="number" value={wizardState.spendingGrowthRate} onChange={(e) => setWizardState(s => ({ ...s, spendingGrowthRate: e.target.value }))} placeholder="2" step="0.5" min="0" max="10" className="w-32 bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 text-xl font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                  <span className="text-slate-400">% of net worth / year</span>
-                </div>
-                <div className="mt-3 flex gap-2">
-                  {[0, 1, 2, 3, 4].map(rate => (
-                    <button key={rate} onClick={() => setWizardState(s => ({ ...s, spendingGrowthRate: rate.toString() }))} className={`px-3 py-1 text-sm rounded-lg ${parseFloat(wizardState.spendingGrowthRate) === rate ? 'bg-violet-500 text-white' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}>
-                      {rate}%
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-3 text-xs text-slate-500">
-                  {spendingRate === 0 ? 'Fixed spending — budget stays constant regardless of net worth' :
-                   spendingRate <= 2 ? 'Conservative — modest lifestyle inflation as wealth grows' :
-                   spendingRate <= 3 ? 'Moderate — balanced approach to enjoying wealth growth' :
-                   'Aggressive — significant lifestyle increase with net worth (ensure this is below your return rate!)'}
-                </p>
-              </div>
-
-              {/* Current Unlocked Spending Preview */}
-              {currentNetWorth > 0 && (
-                <div className="bg-gradient-to-br from-emerald-500/10 to-violet-500/10 rounded-xl p-6 border border-emerald-500/30">
-                  <h4 className="text-sm font-medium text-slate-300 mb-4">Your Current Unlocked Spending</h4>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400 flex items-center gap-2">
-                        <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
-                        Base Budget
-                      </span>
-                      <SimpleTrackedValue value={baseBudget} name="Base Budget" description="Fixed monthly spending floor" formula="User Input" className="font-mono text-amber-400" /><span className="text-amber-400">/mo</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400 flex items-center gap-2">
-                        <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
-                        Net Worth Portion
-                        <span className="text-xs text-slate-500">({spendingRate}% × <SimpleTrackedValue value={currentNetWorth} name="Current Net Worth" description="Your current net worth" formula="Sum of all assets" decimals={0} className="text-slate-500" /> ÷ 12)</span>
-                      </span>
-                      <span className="font-mono text-emerald-400">+<SimpleTrackedValue value={netWorthPortion} name="Net Worth Portion" description="Monthly spending from net worth" formula={`Net Worth × ${spendingRate}% ÷ 12`} className="text-emerald-400" />/mo</span>
-                    </div>
-                    <div className="border-t border-slate-600 pt-3 flex justify-between items-center">
-                      <span className="text-slate-200 font-medium">Total Monthly Budget</span>
-                      <SimpleTrackedValue value={totalUnlockedSpending} name="Total Monthly Budget" description="Your unlocked monthly spending" formula="Base Budget + Net Worth Portion" inputs={[{ name: 'Base', value: baseBudget, unit: '$' }, { name: 'NW Portion', value: netWorthPortion, unit: '$' }]} className="text-2xl font-mono text-violet-400" />
-                    </div>
-                    <p className="text-xs text-slate-500 pt-2">
-                      Annual spending: <SimpleTrackedValue value={totalUnlockedSpending * 12} name="Annual Spending" description="Total unlocked monthly spending × 12" formula="Monthly Budget × 12" className="text-slate-500" /> • This grows automatically as your net worth increases
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Money Flow (using actual unlocked spending) */}
-              {incomeBreakdown && (
-                <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-                  <h4 className="text-sm font-medium text-slate-300 mb-4">Your Money Flow</h4>
-                  <div className="space-y-3">
-                    <div className="flex justify-between"><span className="text-slate-400">Gross Income</span><SimpleTrackedValue value={incomeBreakdown.taxes.grossIncome} name="Gross Income" description="Annual income before deductions" formula="User Input" className="font-mono text-slate-200" /></div>
-                    <div className="flex justify-between"><span className="text-slate-400">- Pre-tax Savings</span><span className="font-mono text-emerald-400">-<SimpleTrackedValue value={incomeBreakdown.totalPreTaxSavings} name="Pre-tax Savings" description="401k + IRA + HSA + Other" formula="Sum of pre-tax contributions" className="text-emerald-400" /></span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">- Total Taxes</span><span className="font-mono text-red-400">-<SimpleTrackedValue value={incomeBreakdown.taxes.totalTax} name="Total Taxes" description="Federal + State + FICA taxes" formula="Sum of all taxes" className="text-red-400" /></span></div>
-                    <div className="border-t border-slate-600 pt-2 flex justify-between"><span className="text-slate-300">Net Income</span><SimpleTrackedValue value={incomeBreakdown.taxes.netIncome} name="Net Income" description="Take-home pay after taxes and pre-tax" formula="Gross - Pre-tax - Taxes" className="font-mono text-emerald-400" /></div>
-                    <div className="flex justify-between"><span className="text-slate-400">- Annual Spending</span><span className="font-mono text-amber-400">-<SimpleTrackedValue value={totalUnlockedSpending * 12} name="Annual Spending" description="Total monthly budget × 12" formula="Monthly Budget × 12" className="text-amber-400" /></span></div>
-                    <div className="border-t border-slate-600 pt-2 flex justify-between font-medium">
-                      <span className="text-slate-200">Post-tax Savings Available</span>
-                      <SimpleTrackedValue 
-                        value={Math.max(0, incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12)} 
-                        name="Post-tax Savings" 
-                        description="Amount available for post-tax savings/investments" 
-                        formula="Net Income - Annual Spending"
-                        inputs={[{ name: 'Net Income', value: incomeBreakdown.taxes.netIncome, unit: '$' }, { name: 'Spending', value: totalUnlockedSpending * 12, unit: '$' }]}
-                        className={`font-mono ${incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12 >= 0 ? 'text-sky-400' : 'text-red-400'}`}
-                      />
-                    </div>
-                  </div>
-                  {incomeBreakdown.taxes.netIncome - totalUnlockedSpending * 12 < 0 && (
-                    <div className="mt-4 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
-                      <p className="text-sm text-red-400">Your current spending exceeds your net income. Consider reducing your base budget or spending growth rate.</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Tax Calculation Details */}
-              {incomeBreakdown && (
-                <TaxCalculationDetails taxes={incomeBreakdown.taxes} />
-              )}
-            </div>
-            <WizardNav />
-          </>
-        );
-      })()}
-
-      {/* STEP 5: Investment Assumptions */}
-      {wizardStep === 'investments' && (
-        <>
-          <WizardHeader title="Investment assumptions" subtitle="How do you expect your investments to perform?" step={5} />
-          <div className="mb-4">
-            <p className="text-sm text-slate-500 mb-2">Quick presets:</p>
-            <div className="flex gap-2">
-              {SCENARIO_TEMPLATES.map(t => (
-                <button key={t.name} onClick={() => applyInvestmentTemplate(t)} className="px-3 py-1.5 text-sm bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700">{t.name}</button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <label className="block text-sm font-medium text-slate-300 mb-2">Expected Annual Return (%)</label>
-              <input type="number" value={wizardState.currentRate} onChange={(e) => setWizardState(s => ({ ...s, currentRate: e.target.value }))} placeholder="7" step="0.5" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              <p className="mt-2 text-xs text-slate-500">Historical S&P 500 average: ~7% after inflation</p>
-            </div>
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <label className="block text-sm font-medium text-slate-300 mb-2">Safe Withdrawal Rate (%)</label>
-              <input type="number" value={wizardState.swr} onChange={(e) => setWizardState(s => ({ ...s, swr: e.target.value }))} placeholder="4" step="0.5" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              <p className="mt-2 text-xs text-slate-500">Traditional: 4% (Trinity Study), Conservative: 3-3.5%</p>
-            </div>
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <label className="block text-sm font-medium text-slate-300 mb-2">Expected Inflation Rate (%)</label>
-              <input type="number" value={wizardState.inflationRate} onChange={(e) => setWizardState(s => ({ ...s, inflationRate: e.target.value }))} placeholder="3" step="0.5" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            </div>
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <label className="block text-sm font-medium text-slate-300 mb-2">Scenario Start Date</label>
-              <input type="date" value={wizardState.startDate} onChange={(e) => setWizardState(s => ({ ...s, startDate: e.target.value }))} className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              <p className="mt-2 text-xs text-slate-500">Inflation adjustments are calculated from this date. Your base spending budget represents costs as of this date.</p>
-            </div>
-          </div>
-          <WizardNav />
-        </>
-      )}
-
-      {/* STEP 6: Summary */}
-      {wizardStep === 'summary' && incomeBreakdown && (() => {
-        const baseBudget = parseFloat(wizardState.baseMonthlyBudget) || 0;
-        const spendingRate = parseFloat(wizardState.spendingGrowthRate) || 0;
-        const netWorthPortion = currentNetWorth * (spendingRate / 100) / 12;
-        const totalUnlockedSpending = baseBudget + netWorthPortion;
-        
-        return (
-          <>
-            <WizardHeader title="Your Scenario Summary" subtitle="Review your numbers and save your scenario." step={6} />
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 mb-4">
-              <label className="block text-sm font-medium text-slate-300 mb-2">Scenario Name</label>
-              <input type="text" value={wizardState.name} onChange={(e) => setWizardState(s => ({ ...s, name: e.target.value }))} placeholder="My Financial Plan" className="w-full bg-slate-900/50 border border-slate-600 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            </div>
-            
-            {/* Income Allocation Visual */}
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-emerald-500/30 mb-4">
-              <h4 className="text-lg font-semibold text-slate-200 mb-4">Income Allocation</h4>
-              <div className="h-8 bg-slate-700 rounded-full overflow-hidden flex mb-3">
-                <div className="h-full bg-emerald-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationPreTaxSavings}%` }} title="Pre-tax Savings">{incomeBreakdown.allocationPreTaxSavings >= 8 && 'Pre-tax'}</div>
-                <div className="h-full bg-red-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationTaxes}%` }} title="Taxes">{incomeBreakdown.allocationTaxes >= 8 && 'Taxes'}</div>
-                <div className="h-full bg-amber-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationSpending}%` }} title="Spending">{incomeBreakdown.allocationSpending >= 8 && 'Spending'}</div>
-                <div className="h-full bg-sky-500 flex items-center justify-center text-xs text-white" style={{ width: `${incomeBreakdown.allocationPostTaxSavings}%` }} title="Post-tax Savings">{incomeBreakdown.allocationPostTaxSavings >= 8 && 'Savings'}</div>
-              </div>
-              <div className="grid grid-cols-4 gap-2 text-xs">
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span><span className="text-slate-400">Pre-tax: <SimpleTrackedValue value={incomeBreakdown.allocationPreTaxSavings} name="Pre-tax Allocation" description="Percentage of gross income to pre-tax savings" formula="Pre-tax Savings ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-red-500 rounded-full"></span><span className="text-slate-400">Taxes: <SimpleTrackedValue value={incomeBreakdown.allocationTaxes} name="Tax Allocation" description="Percentage of gross income to taxes" formula="Total Taxes ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-500 rounded-full"></span><span className="text-slate-400">Spending: <SimpleTrackedValue value={incomeBreakdown.allocationSpending} name="Spending Allocation" description="Percentage of gross income to spending" formula="Annual Spending ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
-                <div className="flex items-center gap-1"><span className="w-2 h-2 bg-sky-500 rounded-full"></span><span className="text-slate-400">Post-tax: <SimpleTrackedValue value={incomeBreakdown.allocationPostTaxSavings} name="Post-tax Savings Allocation" description="Percentage of gross income to post-tax savings" formula="Post-tax Savings ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-400" /></span></div>
-              </div>
-            </div>
-
-            {/* Variable Spending Summary */}
-            <div className="bg-slate-800/50 rounded-xl p-6 border border-violet-500/30 mb-4">
-              <h4 className="text-lg font-semibold text-slate-200 mb-4">Variable Spending</h4>
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-xs text-slate-500 uppercase mb-1">Base Budget</p>
-                  <p className="text-xl font-mono text-amber-400"><SimpleTrackedValue value={baseBudget} name="Base Budget" description="Fixed monthly spending floor" formula="User Input" className="text-amber-400" />/mo</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 uppercase mb-1">Growth Rate</p>
-                  <p className="text-xl font-mono text-violet-400">{spendingRate}%</p>
-                  <p className="text-xs text-slate-500">of net worth/yr</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 uppercase mb-1">Current Total</p>
-                  <p className="text-xl font-mono text-emerald-400"><SimpleTrackedValue value={totalUnlockedSpending} name="Current Monthly Budget" description="Base + net worth portion" formula="Base + (Net Worth × Rate ÷ 12)" className="text-emerald-400" />/mo</p>
-                </div>
-              </div>
-              {spendingRate > 0 && (
-                <p className="text-xs text-slate-500 mt-4 text-center">
-                  As your net worth grows, your monthly budget will increase. At <SimpleTrackedValue value={1000000} name="Example Net Worth" description="Example milestone net worth" formula="$1,000,000" decimals={0} className="text-slate-500" /> net worth, your budget would be <SimpleTrackedValue value={baseBudget + (1000000 * spendingRate / 100 / 12)} name="Projected Budget at $1M" description="Budget at $1M net worth" formula={`Base + ($1M × ${spendingRate}% ÷ 12)`} className="text-slate-500" />/mo.
-                </p>
-              )}
-            </div>
-
-            {/* Key Numbers */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-                <p className="text-xs text-slate-500 uppercase">Total Annual Savings (Year 1)</p>
-                <SimpleTrackedValue value={incomeBreakdown.totalAnnualSavings} name="Total Annual Savings" description="Pre-tax + Post-tax savings in year 1" formula="Pre-tax Contributions + Post-tax Savings" inputs={[{ name: 'Pre-tax', value: incomeBreakdown.totalPreTaxSavings, unit: '$' }, { name: 'Post-tax', value: incomeBreakdown.postTaxSavingsAvailable, unit: '$' }]} className="text-2xl font-mono text-sky-400" />
-                <p className="text-xs text-slate-500 mt-1"><SimpleTrackedValue value={incomeBreakdown.savingsRateOfGross} name="Savings Rate" description="Percentage of gross income being saved" formula="Total Savings ÷ Gross Income × 100" formatAs="percent" decimals={1} className="text-slate-500" /> of gross income</p>
-              </div>
-              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-                <p className="text-xs text-slate-500 uppercase">Effective Tax Rate</p>
-                <SimpleTrackedValue value={incomeBreakdown.taxes.effectiveTotalRate} name="Effective Tax Rate" description="Total taxes as percentage of gross income" formula="Total Taxes ÷ Gross Income × 100" inputs={[{ name: 'Taxes', value: incomeBreakdown.taxes.totalTax, unit: '$' }, { name: 'Gross', value: incomeBreakdown.taxes.grossIncome, unit: '$' }]} formatAs="percent" decimals={1} className="text-2xl font-mono text-red-400" />
-                <p className="text-xs text-slate-500 mt-1"><SimpleTrackedValue value={incomeBreakdown.taxes.totalTax} name="Total Taxes" description="All taxes combined" formula="Federal + State + FICA" className="text-slate-500" /> total taxes</p>
-              </div>
-            </div>
-
-            {/* Tax Calculation Details - Expandable */}
-            <div className="mb-4">
-              <TaxCalculationDetails taxes={incomeBreakdown.taxes} />
-            </div>
-
-            {/* Dynamic Projections Preview */}
-            {(() => {
-              const incomeGrowth = parseFloat(wizardState.incomeGrowthRate) || 0;
-              const returnRate = parseFloat(wizardState.currentRate) || 7;
-              const inflation = parseFloat(wizardState.inflationRate) || 3;
-              const gross = parseFloat(wizardState.grossIncome) || 0;
-              
-              // Simple projections for years 1, 5, 10, 20
-              const projectYear = (years: number) => {
-                const projectedGross = gross * Math.pow(1 + incomeGrowth / 100, years);
-                const inflationMult = Math.pow(1 + inflation / 100, years);
-                const projectedBaseBudget = baseBudget * inflationMult;
-                
-                // Estimate net worth growth (compound growth)
-                const estimatedNetWorth = currentNetWorth * Math.pow(1 + returnRate / 100, years) + 
-                  incomeBreakdown.totalAnnualSavings * ((Math.pow(1 + returnRate / 100, years) - 1) / (returnRate / 100));
-                
-                const projectedNetWorthPortion = estimatedNetWorth * (spendingRate / 100) / 12;
-                const projectedTotalSpending = (projectedBaseBudget + projectedNetWorthPortion) * 12;
-                
-                // Rough tax estimate (simplified)
-                const estimatedTaxRate = incomeBreakdown.taxes.effectiveTotalRate + (incomeGrowth * years * 0.1); // Tax rate creep
-                const projectedTax = projectedGross * Math.min(estimatedTaxRate, 45) / 100;
-                const projectedNet = projectedGross - projectedTax - incomeBreakdown.totalPreTaxSavings * inflationMult;
-                const projectedSavings = Math.max(0, projectedNet - projectedTotalSpending) + incomeBreakdown.totalPreTaxSavings * inflationMult;
-                
-                return {
-                  income: projectedGross,
-                  spending: projectedTotalSpending,
-                  savings: projectedSavings,
-                  netWorth: estimatedNetWorth,
-                };
-              };
-              
-              const years = [0, 5, 10, 20];
-              const projections = years.map(y => ({ year: y, ...projectYear(y) }));
-              
-              // Check if savings decreases over time
-              const savingsDecreasing = projections[3].savings < projections[0].savings;
-              
-              return (
-                <div className="bg-slate-800/50 rounded-xl p-6 border border-sky-500/30 mb-4">
-                  <h4 className="text-lg font-semibold text-slate-200 mb-2">How Your Finances Evolve</h4>
-                  <p className="text-xs text-slate-500 mb-4">
-                    Your savings will change over time as income grows ({incomeGrowth}%/yr) and spending increases with net worth ({spendingRate}%/yr).
-                  </p>
-                  
-                  <div className="overflow-x-auto scrollbar-hide touch-pan-x">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-slate-500 text-xs uppercase">
-                          <th className="text-left py-2">Year</th>
-                          <th className="text-right py-2">Income</th>
-                          <th className="text-right py-2">Spending</th>
-                          <th className="text-right py-2">Savings</th>
-                          <th className="text-right py-2">Net Worth</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {projections.map(p => (
-                          <tr key={p.year} className="border-t border-slate-700">
-                            <td className="py-2 text-slate-300">{p.year === 0 ? 'Now' : `Year ${p.year}`}</td>
-                            <td className="py-2 text-right font-mono text-emerald-400">
-                              <SimpleTrackedValue value={p.income} name={`Year ${p.year} Income`} description={p.year === 0 ? "Current gross income" : `Income after ${p.year} year(s) of growth`} formula={p.year === 0 ? "User Input" : `Year 0 Income × (1 + Growth Rate)^${p.year}`} className="text-emerald-400" />
-                            </td>
-                            <td className="py-2 text-right font-mono text-amber-400">
-                              <SimpleTrackedValue value={p.spending} name={`Year ${p.year} Spending`} description="Annual spending based on budget formula" formula="(Base + Net Worth Portion) × 12" className="text-amber-400" />
-                            </td>
-                            <td className={`py-2 text-right font-mono ${p.savings > 0 ? 'text-sky-400' : 'text-red-400'}`}>
-                              <SimpleTrackedValue value={p.savings} name={`Year ${p.year} Savings`} description="Amount saved for the year" formula="Net Income - Annual Spending" className={p.savings > 0 ? 'text-sky-400' : 'text-red-400'} />
-                            </td>
-                            <td className="py-2 text-right font-mono text-violet-400">
-                              <SimpleTrackedValue value={p.netWorth} name={`Year ${p.year} Net Worth`} description="Projected total net worth" formula="Prior Net Worth × (1 + Return) + Savings" className="text-violet-400" />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  {savingsDecreasing && spendingRate > 0 && (
-                    <div className="mt-4 p-3 bg-amber-500/10 rounded-lg border border-amber-500/30">
-                      <p className="text-sm text-amber-400">
-                        <strong>Note:</strong> Your spending rate ({spendingRate}%) may cause savings to decrease over time as your net worth grows. This is by design if you want to enjoy your wealth, but consider if this aligns with your long-term goals.
-                      </p>
-                    </div>
-                  )}
-                  
-                  {incomeGrowth === 0 && spendingRate > 0 && (
-                    <div className="mt-4 p-3 bg-amber-500/10 rounded-lg border border-amber-500/30">
-                      <p className="text-sm text-amber-400">
-                        <strong>Note:</strong> With no income growth but variable spending, your savings rate will decrease over time. Consider adding expected raises or promotions.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Warnings/Suggestions */}
-            {(incomeBreakdown.warnings.length > 0 || incomeBreakdown.suggestions.length > 0) && (
-              <div className="space-y-2 mb-4">
-                {incomeBreakdown.warnings.map((w, i) => (
-                  <div key={i} className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">{w}</div>
-                ))}
-                {incomeBreakdown.suggestions.map((s, i) => (
-                  <div key={i} className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-3 text-sm text-sky-400">{s}</div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex justify-between mt-8">
-              <button onClick={goBack} className="px-4 py-2 text-slate-400 hover:text-slate-200">Back</button>
-              <button onClick={handleSaveScenario} className="px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 font-medium">
-                {editingScenarioId ? 'Save Changes' : 'Create Scenario'}
-              </button>
-            </div>
-          </>
-        );
-      })()}
-    </div>
-  );
 }
+
