@@ -23,7 +23,7 @@ export default function Projections() {
 
   if (authLoading) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-center">
+      <main className="min-h-screen bg-[#060d1f] text-white flex items-center justify-center">
         <div className="text-slate-400">Loading...</div>
       </main>
     )
@@ -35,7 +35,7 @@ export default function Projections() {
 
   // Show loading state while redirecting
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-center">
+    <main className="min-h-screen bg-[#060d1f] text-white flex items-center justify-center">
       <div className="text-slate-400">Redirecting to dashboard...</div>
     </main>
   )
