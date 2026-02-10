@@ -11,6 +11,7 @@ import { TrackedValue, SimpleTrackedValue } from './TrackedValue'
 import { generateTrackedDashboardValues } from '../../lib/trackedScenarioValues'
 import { useScenarios, Scenario, ScenarioProjection } from '../../lib/useScenarios'
 import { CoastFiSection } from './CoastFiSection'
+import { MilestoneProgressCard } from './MilestoneProgressCard'
 import { FiMilestonesCard } from './FiMilestonesCard'
 import { Tab } from '../lib/helpers'
 
@@ -343,6 +344,11 @@ export function DashboardTab({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Milestone Progress Card - prominent next milestone tracker */}
+      {latestEntry && primaryProjection && (
+        <MilestoneProgressCard primaryProjection={primaryProjection} />
       )}
 
       {/* Coast FI Section */}

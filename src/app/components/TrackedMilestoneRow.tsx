@@ -10,6 +10,7 @@ import {
   createTrackedLifestyleMilestone,
   createTrackedCrossoverMilestone,
   createTrackedRetirementIncomeMilestone,
+  createTrackedNetWorthMilestone,
   createTrackedCoastInfo,
 } from '../../lib/trackedScenarioValues'
 
@@ -120,6 +121,16 @@ export function TrackedMilestoneRow({
         effectiveRate,
         scenario.inflationRate,
         scenario.swr,
+        milestone.netWorthAtMilestone,
+        milestone.year,
+        currentYear
+      );
+    } else if (milestone.type === 'net_worth') {
+      return createTrackedNetWorthMilestone(
+        milestone.id,
+        milestone.shortName,
+        milestone.targetValue,
+        currentNetWorth,
         milestone.netWorthAtMilestone,
         milestone.year,
         currentYear

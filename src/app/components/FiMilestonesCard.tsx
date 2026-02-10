@@ -54,6 +54,7 @@ export function FiMilestonesCard({ primaryProjection, latestEntry }: FiMilestone
   const percentageMilestones = fiMilestones.milestones.filter(m => m.type === 'percentage');
   const lifestyleMilestones = fiMilestones.milestones.filter(m => m.type === 'lifestyle');
   const specialMilestones = fiMilestones.milestones.filter(m => m.type === 'special');
+  const netWorthMilestones = fiMilestones.milestones.filter(m => m.type === 'net_worth');
 
   return (
     <div className="mt-8 bg-[#0f1629] rounded-xl p-6 border border-slate-800">
@@ -180,6 +181,39 @@ export function FiMilestonesCard({ primaryProjection, latestEntry }: FiMilestone
         <p className="text-xs text-slate-500 mb-3">How long you could survive without income</p>
         <div className="space-y-2">
           {runwayMilestones.map(milestone => (
+            <TrackedMilestoneRow
+              key={milestone.id}
+              milestone={milestone}
+              currentYear={currentYear}
+              currentNetWorth={currentNetWorth.total}
+              currentMonthlySpend={currentMonthlySpend}
+              currentFiTarget={currentFiTarget}
+              currentFiProgress={currentFiProgress}
+              currentAge={currentAge}
+              retirementAge={retirementAge}
+              effectiveRate={effectiveRate}
+              scenario={scenario}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Net Worth Milestones - Savings Incentives */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-slate-400">
+            Savings Milestones
+          </h3>
+          <div className="text-right">
+            <span className="text-xs text-slate-500">Current: </span>
+            <span className="text-sm font-mono text-amber-400">
+              {formatCurrency(currentNetWorth.total, 0)}
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">Concrete savings targets to track your progress</p>
+        <div className="space-y-2">
+          {netWorthMilestones.map(milestone => (
             <TrackedMilestoneRow
               key={milestone.id}
               milestone={milestone}

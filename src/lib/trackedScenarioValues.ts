@@ -1549,3 +1549,91 @@ export function createTrackedCrossoverMilestone(
     amountNeeded: null,
   };
 }
+
+/**
+ * Create tracked net worth milestone info
+ */
+export function createTrackedNetWorthMilestone(
+  milestoneId: string,
+  milestoneName: string,
+  targetNetWorth: number,
+  currentNetWorth: number,
+  netWorthAtMilestone: number | null,
+  year: number | null,
+  currentYear: number
+): TrackedMilestoneInfo {
+  const amountNeeded = Math.max(0, targetNetWorth - currentNetWorth);
+  const yearsAway = year ? year - currentYear : null;
+  const progressPercent = targetNetWorth > 0 ? Math.min(100, (currentNetWorth / targetNetWorth) * 100) : 0;
+
+  const targetValueTracked = new CalculationBuilder(`${milestoneId}_target`, `${milestoneName} Target`, 'milestone')
+    .setDescription(`The net worth target for the ${milestoneName} milestone. This is a concrete savings goal to incentivize progress.`)
+    .setFormula('Fixed Target Value')
+    .setUnit('$')
+    .addInputWithSource('Target Net Worth', targetNetWorth, 'constant', {
+      unit: '$',
+      description: `${milestoneName} milestone target`
+    })
+    .addInputWithSource('Current Net Worth', currentNetWorth, 'calculated', { unit: '$' })
+    .addInputWithSource('Progress', progressPercent, 'calculated', {
+      unit: '%',
+      description: `${progressPercent.toFixed(1)}% of the way there`
+    })
+    .addStep(
+      'Progress toward milestone',
+      `$${currentNetWorth.toLocaleString()} ÷ $${targetNetWorth.toLocaleString()} = ${progressPercent.toFixed(1)}%`,
+      [],
+      progressPercent,
+      '%'
+    )
+    .build(targetNetWorth);
+
+  const amountNeededTracked = amountNeeded > 0 ? new CalculationBuilder(`${milestoneId}_amount`, `Amount to ${milestoneName}`, 'milestone')
+    .setDescription(`The additional savings needed to reach ${milestoneName}`)
+    .setFormula('Target Net Worth - Current Net Worth')
+    .setUnit('$')
+    .addTrackedInput(`${milestoneName} Target`, targetValueTracked)
+    .addInputWithSource('Current Net Worth', currentNetWorth, 'calculated', { unit: '$' })
+    .addStep(
+      'Calculate remaining amount',
+      `$${targetNetWorth.toLocaleString()} - $${currentNetWorth.toLocaleString()} = $${amountNeeded.toLocaleString()}`,
+      [],
+      amountNeeded,
+      '$'
+    )
+    .build(amountNeeded) : null;
+
+  const yearsToMilestoneTracked = yearsAway !== null ? new CalculationBuilder(`${milestoneId}_years`, `Years to ${milestoneName}`, 'milestone')
+    .setDescription(`Projected years until you reach ${milestoneName}`)
+    .setFormula('Milestone Year - Current Year')
+    .setUnit('years')
+    .addInputWithSource('Milestone Year', year!, 'calculated', {
+      description: 'Projected year of achievement based on your growth trajectory'
+    })
+    .addInputWithSource('Current Year', currentYear, 'constant')
+    .addStep(
+      'Calculate years remaining',
+      `${year} - ${currentYear} = ${yearsAway} years`,
+      [],
+      yearsAway,
+      'years'
+    )
+    .build(yearsAway) : null;
+
+  const netWorthAtMilestoneTracked = netWorthAtMilestone !== null ? new CalculationBuilder(`${milestoneId}_nw`, `Net Worth at ${milestoneName}`, 'milestone')
+    .setDescription(`Your projected net worth when you reach ${milestoneName}`)
+    .setFormula('Projected Net Worth at Milestone Achievement')
+    .setUnit('$')
+    .addInputWithSource('Net Worth', netWorthAtMilestone, 'calculated', {
+      unit: '$',
+      description: 'Based on your current growth trajectory'
+    })
+    .build(netWorthAtMilestone) : null;
+
+  return {
+    targetValue: targetValueTracked,
+    netWorthAtMilestone: netWorthAtMilestoneTracked,
+    yearsToMilestone: yearsToMilestoneTracked,
+    amountNeeded: amountNeededTracked,
+  };
+}

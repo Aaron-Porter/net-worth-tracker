@@ -246,13 +246,14 @@ export interface CalculatedFinancials {
 // FI MILESTONES - Goals along the journey to 100% FI
 // ============================================================================
 
-export type FiMilestoneType = 
+export type FiMilestoneType =
   | 'percentage'        // Based on FI progress percentage (10%, 25%, 50%, 75%, 100%)
   | 'lifestyle'         // Based on spending levels (Lean FI, Regular FI, Fat FI)
   | 'special'           // Special milestones (Coast FI, Barista FI, Crossover)
   | 'runway'            // Based on years of expenses covered (security milestones)
   | 'coast'             // Based on projected FI % if you stop contributing today
-  | 'retirement_income'; // Based on projected annual income at retirement age if you stop contributing today
+  | 'retirement_income' // Based on projected annual income at retirement age if you stop contributing today
+  | 'net_worth';        // Based on absolute net worth thresholds (savings incentive milestones)
 
 export interface FiMilestone {
   id: string;
@@ -817,6 +818,188 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
     type: 'retirement_income',
     targetValue: 2000000,
     color: '#d97706', // amber-600 (gold)
+    icon: 'diamond',
+  },
+
+  // Net worth absolute milestones - concrete savings targets that incentivize progress
+  {
+    id: 'nw_1k',
+    name: '$1,000 Saved',
+    shortName: '$1K Saved',
+    description: 'Your first $1,000! This is the hardest milestone - you proved you can save. Everything builds from here.',
+    type: 'net_worth',
+    targetValue: 1000,
+    color: '#94a3b8', // slate-400
+    icon: 'piggy-bank',
+  },
+  {
+    id: 'nw_5k',
+    name: '$5,000 Saved',
+    shortName: '$5K Saved',
+    description: 'A solid emergency fund is taking shape. You have real financial resilience now.',
+    type: 'net_worth',
+    targetValue: 5000,
+    color: '#64748b', // slate-500
+    icon: 'piggy-bank',
+  },
+  {
+    id: 'nw_10k',
+    name: '$10,000 Saved',
+    shortName: '$10K Saved',
+    description: 'Five figures! You\'re building a real financial foundation. Most Americans don\'t have this much saved.',
+    type: 'net_worth',
+    targetValue: 10000,
+    color: '#60a5fa', // blue-400
+    icon: 'piggy-bank',
+  },
+  {
+    id: 'nw_25k',
+    name: '$25,000 Saved',
+    shortName: '$25K Saved',
+    description: 'A quarter of the way to six figures. Your money is starting to generate meaningful returns.',
+    type: 'net_worth',
+    targetValue: 25000,
+    color: '#3b82f6', // blue-500
+    icon: 'wallet',
+  },
+  {
+    id: 'nw_50k',
+    name: '$50,000 Saved',
+    shortName: '$50K Saved',
+    description: 'Halfway to six figures! Compound interest is becoming a noticeable force in your portfolio.',
+    type: 'net_worth',
+    targetValue: 50000,
+    color: '#a78bfa', // violet-400
+    icon: 'wallet',
+  },
+  {
+    id: 'nw_75k',
+    name: '$75,000 Saved',
+    shortName: '$75K Saved',
+    description: 'Three-quarters of the way to $100K. The hardest part is behind you.',
+    type: 'net_worth',
+    targetValue: 75000,
+    color: '#8b5cf6', // violet-500
+    icon: 'wallet',
+  },
+  {
+    id: 'nw_100k',
+    name: '$100,000 Saved',
+    shortName: '$100K Saved',
+    description: 'Six figures! Charlie Munger said the first $100K is the hardest. From here, compounding accelerates dramatically.',
+    type: 'net_worth',
+    targetValue: 100000,
+    color: '#22c55e', // green-500
+    icon: 'banknote',
+  },
+  {
+    id: 'nw_150k',
+    name: '$150,000 Saved',
+    shortName: '$150K Saved',
+    description: 'Your portfolio is generating serious returns. At 7%, that\'s over $10K/year in growth alone.',
+    type: 'net_worth',
+    targetValue: 150000,
+    color: '#14b8a6', // teal-500
+    icon: 'banknote',
+  },
+  {
+    id: 'nw_200k',
+    name: '$200,000 Saved',
+    shortName: '$200K Saved',
+    description: 'Double six figures! Your net worth is now working as hard as a part-time employee.',
+    type: 'net_worth',
+    targetValue: 200000,
+    color: '#10b981', // emerald-500
+    icon: 'banknote',
+  },
+  {
+    id: 'nw_250k',
+    name: '$250,000 Saved',
+    shortName: '$250K Saved',
+    description: 'A quarter million! You\'re in the top 30% of American households by net worth.',
+    type: 'net_worth',
+    targetValue: 250000,
+    color: '#f59e0b', // amber-500
+    icon: 'gem',
+  },
+  {
+    id: 'nw_500k',
+    name: '$500,000 Saved',
+    shortName: '$500K Saved',
+    description: 'Half a million! At 4% SWR, this could cover $20K/year indefinitely. You have real options.',
+    type: 'net_worth',
+    targetValue: 500000,
+    color: '#eab308', // yellow-500
+    icon: 'gem',
+  },
+  {
+    id: 'nw_750k',
+    name: '$750,000 Saved',
+    shortName: '$750K Saved',
+    description: 'Three-quarters of a million. The second $500K comes much faster than the first.',
+    type: 'net_worth',
+    targetValue: 750000,
+    color: '#f97316', // orange-500
+    icon: 'gem',
+  },
+  {
+    id: 'nw_1m',
+    name: '$1,000,000 Saved',
+    shortName: '$1M Saved',
+    description: 'You\'re a millionaire! A major life achievement. At 4% SWR, this generates $40K/year forever.',
+    type: 'net_worth',
+    targetValue: 1000000,
+    color: '#fbbf24', // amber-400 (gold)
+    icon: 'crown',
+  },
+  {
+    id: 'nw_1_5m',
+    name: '$1,500,000 Saved',
+    shortName: '$1.5M Saved',
+    description: 'One and a half million. Your investment returns likely exceed your annual savings contributions.',
+    type: 'net_worth',
+    targetValue: 1500000,
+    color: '#ec4899', // pink-500
+    icon: 'crown',
+  },
+  {
+    id: 'nw_2m',
+    name: '$2,000,000 Saved',
+    shortName: '$2M Saved',
+    description: 'Double millionaire! At 4% SWR, this generates $80K/year - a comfortable lifestyle without working.',
+    type: 'net_worth',
+    targetValue: 2000000,
+    color: '#dc2626', // red-600
+    icon: 'trophy',
+  },
+  {
+    id: 'nw_3m',
+    name: '$3,000,000 Saved',
+    shortName: '$3M Saved',
+    description: 'Three million. You\'re in the top 5% of households. Your money is truly working for you.',
+    type: 'net_worth',
+    targetValue: 3000000,
+    color: '#7c3aed', // violet-600
+    icon: 'trophy',
+  },
+  {
+    id: 'nw_5m',
+    name: '$5,000,000 Saved',
+    shortName: '$5M Saved',
+    description: 'Five million! You\'ve achieved financial abundance. At 4% SWR, that\'s $200K/year indefinitely.',
+    type: 'net_worth',
+    targetValue: 5000000,
+    color: '#6d28d9', // violet-700
+    icon: 'diamond',
+  },
+  {
+    id: 'nw_10m',
+    name: '$10,000,000 Saved',
+    shortName: '$10M Saved',
+    description: 'Eight figures! Decamillionaire status. True generational wealth.',
+    type: 'net_worth',
+    targetValue: 10000000,
+    color: '#4c1d95', // violet-900
     icon: 'diamond',
   },
 ] as const;
@@ -1723,6 +1906,37 @@ export function calculateFiMilestones(
           break;
         }
         prevRunwayYears = rowRunwayYears;
+      }
+
+      milestone = {
+        ...def,
+        year: milestoneYear,
+        month: milestoneMonth,
+        age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+        yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+        isAchieved,
+        netWorthAtMilestone: isAchieved ? null : milestoneNetWorth,
+      };
+    } else if (def.type === 'net_worth') {
+      // Net worth absolute milestones - concrete savings targets
+      const targetNetWorth = def.targetValue;
+      const isAchieved = currentNetWorth >= targetNetWorth;
+
+      let milestoneYear: number | null = null;
+      let milestoneMonth: number | null = null;
+      let milestoneNetWorth: number | null = null;
+      let prevNW = currentNetWorth;
+
+      for (const row of projections) {
+        if (row.netWorth >= targetNetWorth) {
+          milestoneYear = row.year;
+          milestoneNetWorth = row.netWorth;
+          if (!isAchieved) {
+            milestoneMonth = interpolateMonth(prevNW, row.netWorth, targetNetWorth);
+          }
+          break;
+        }
+        prevNW = row.netWorth;
       }
 
       milestone = {
