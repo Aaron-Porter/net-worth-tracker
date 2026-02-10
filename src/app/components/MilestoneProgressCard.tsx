@@ -21,7 +21,9 @@ function getMilestoneTypeLabel(type: string): string {
     case 'lifestyle': return 'Lifestyle';
     case 'runway': return 'Runway';
     case 'coast': return 'Coast FI';
-    case 'net_worth': return 'Net Worth';
+    case 'passive_income': return 'Passive Income';
+    case 'expense_coverage': return 'Bills Covered';
+    case 'wealth_multiplier': return 'Compounding';
     case 'retirement_income': return 'Retirement';
     case 'special': return 'Special';
     default: return '';
@@ -34,7 +36,9 @@ function getMilestoneTypeColor(type: string): string {
     case 'lifestyle': return '#14b8a6';
     case 'runway': return '#60a5fa';
     case 'coast': return '#a78bfa';
-    case 'net_worth': return '#f59e0b';
+    case 'passive_income': return '#22c55e';
+    case 'expense_coverage': return '#8b5cf6';
+    case 'wealth_multiplier': return '#f59e0b';
     case 'retirement_income': return '#ec4899';
     case 'special': return '#8b5cf6';
     default: return '#94a3b8';
@@ -70,6 +74,9 @@ function calculateSegmentProgress(
   currentFiProgress: number,
   currentMonthlySpend: number,
   swr: number,
+  currentDailySwr: number,
+  currentMonthlySwr: number,
+  totalContributions: number,
 ): number {
   const sameType = milestones.filter(m => m.type === nextMilestone.type);
   const idx = sameType.findIndex(m => m.id === nextMilestone.id);
@@ -82,11 +89,27 @@ function calculateSegmentProgress(
     return Math.max(0, Math.min(100, ((currentFiProgress - prevTarget) / range) * 100));
   }
 
-  if (nextMilestone.type === 'net_worth') {
-    const prevTarget = prevMilestone?.isAchieved ? (prevMilestone.targetValue) : 0;
+  if (nextMilestone.type === 'passive_income') {
+    const prevTarget = prevMilestone?.isAchieved ? prevMilestone.targetValue : 0;
     const range = nextMilestone.targetValue - prevTarget;
     if (range <= 0) return 0;
-    return Math.max(0, Math.min(100, ((currentNetWorth - prevTarget) / range) * 100));
+    return Math.max(0, Math.min(100, ((currentDailySwr - prevTarget) / range) * 100));
+  }
+
+  if (nextMilestone.type === 'expense_coverage') {
+    const currentCoverage = currentMonthlySpend > 0 ? (currentMonthlySwr / currentMonthlySpend) * 100 : 0;
+    const prevTarget = prevMilestone?.isAchieved ? prevMilestone.targetValue : 0;
+    const range = nextMilestone.targetValue - prevTarget;
+    if (range <= 0) return 0;
+    return Math.max(0, Math.min(100, ((currentCoverage - prevTarget) / range) * 100));
+  }
+
+  if (nextMilestone.type === 'wealth_multiplier') {
+    const currentMultiplier = totalContributions > 0 ? currentNetWorth / totalContributions : 0;
+    const prevTarget = prevMilestone?.isAchieved ? prevMilestone.targetValue : 1;
+    const range = nextMilestone.targetValue - prevTarget;
+    if (range <= 0) return 0;
+    return Math.max(0, Math.min(100, ((currentMultiplier - prevTarget) / range) * 100));
   }
 
   if (nextMilestone.type === 'runway') {
@@ -135,8 +158,15 @@ function calculateAmountToMilestone(
     const targetNW = currentFiTarget * (milestone.targetValue / 100);
     return Math.max(0, targetNW - currentNetWorth);
   }
-  if (milestone.type === 'net_worth') {
-    return Math.max(0, milestone.targetValue - currentNetWorth);
+  if (milestone.type === 'passive_income') {
+    const targetAnnualSwr = milestone.targetValue * 365;
+    const targetNW = swr > 0 ? targetAnnualSwr / (swr / 100) : 0;
+    return Math.max(0, targetNW - currentNetWorth);
+  }
+  if (milestone.type === 'expense_coverage') {
+    const targetMonthlySwr = currentMonthlySpend * (milestone.targetValue / 100);
+    const targetNW = swr > 0 ? (targetMonthlySwr * 12) / (swr / 100) : 0;
+    return Math.max(0, targetNW - currentNetWorth);
   }
   if (milestone.type === 'runway') {
     const targetNW = currentMonthlySpend * 12 * milestone.targetValue;
@@ -146,6 +176,7 @@ function calculateAmountToMilestone(
     const targetNW = (currentMonthlySpend * milestone.targetValue * 12) / (swr / 100);
     return Math.max(0, targetNW - currentNetWorth);
   }
+  // For wealth_multiplier and others, use netWorthAtMilestone
   if (milestone.netWorthAtMilestone) {
     return Math.max(0, milestone.netWorthAtMilestone - currentNetWorth);
   }
@@ -184,6 +215,9 @@ export function MilestoneProgressCard({ primaryProjection }: MilestoneProgressCa
   const { fiMilestones, currentFiProgress, currentNetWorth, projections, scenario } = primaryProjection;
   const currentMonthlySpend = projections[0]?.monthlySpend ?? 0;
   const currentFiTarget = projections[0]?.fiTarget ?? 0;
+  const currentDailySwr = projections[0]?.dailySwr ?? 0;
+  const currentMonthlySwr = projections[0]?.monthlySwr ?? 0;
+  const totalContributions = projections[0]?.contributed ?? 0;
   const currentYear = new Date().getFullYear();
 
   // Find the absolute next milestone (soonest across all types)
@@ -202,8 +236,11 @@ export function MilestoneProgressCard({ primaryProjection }: MilestoneProgressCa
       currentFiProgress,
       currentMonthlySpend,
       scenario.swr,
+      currentDailySwr,
+      currentMonthlySwr,
+      totalContributions,
     );
-  }, [nextMilestone, fiMilestones.milestones, currentNetWorth.total, currentFiProgress, currentMonthlySpend, scenario.swr]);
+  }, [nextMilestone, fiMilestones.milestones, currentNetWorth.total, currentFiProgress, currentMonthlySpend, scenario.swr, currentDailySwr, currentMonthlySwr, totalContributions]);
 
   // Amount needed
   const amountToNext = useMemo(() => {

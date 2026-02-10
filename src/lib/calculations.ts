@@ -253,7 +253,9 @@ export type FiMilestoneType =
   | 'runway'            // Based on years of expenses covered (security milestones)
   | 'coast'             // Based on projected FI % if you stop contributing today
   | 'retirement_income' // Based on projected annual income at retirement age if you stop contributing today
-  | 'net_worth';        // Based on absolute net worth thresholds (savings incentive milestones)
+  | 'passive_income'    // Based on daily SWR passive income (what your money earns you per day)
+  | 'expense_coverage'  // Based on % of monthly expenses covered by SWR (how much of your life is paid for)
+  | 'wealth_multiplier'; // Based on net worth vs total contributions (the power of compounding)
 
 export interface FiMilestone {
   id: string;
@@ -821,186 +823,266 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
     icon: 'diamond',
   },
 
-  // Net worth absolute milestones - concrete savings targets that incentivize progress
+  // Passive income milestones - what your money earns you per day (SWR-based)
+  // These answer: "What does my portfolio actually DO for me right now?"
+  // Based on daily safe withdrawal rate (annualSwr / 365)
   {
-    id: 'nw_1k',
-    name: '$1,000 Saved',
-    shortName: '$1K Saved',
-    description: 'Your first $1,000! This is the hardest milestone - you proved you can save. Everything builds from here.',
-    type: 'net_worth',
-    targetValue: 1000,
+    id: 'passive_1_day',
+    name: '$1/Day Passive Income',
+    shortName: '$1/Day',
+    description: 'Your investments earn you a dollar every day. It\'s small, but it\'s money working while you sleep.',
+    type: 'passive_income',
+    targetValue: 1, // $1/day
     color: '#94a3b8', // slate-400
-    icon: 'piggy-bank',
+    icon: 'coins',
   },
   {
-    id: 'nw_5k',
-    name: '$5,000 Saved',
-    shortName: '$5K Saved',
-    description: 'A solid emergency fund is taking shape. You have real financial resilience now.',
-    type: 'net_worth',
-    targetValue: 5000,
+    id: 'passive_5_day',
+    name: '$5/Day - Daily Coffee',
+    shortName: '$5/Day',
+    description: 'Your portfolio buys you a coffee every single day, forever. Your morning latte is on your investments.',
+    type: 'passive_income',
+    targetValue: 5, // $5/day
     color: '#64748b', // slate-500
-    icon: 'piggy-bank',
+    icon: 'coffee',
   },
   {
-    id: 'nw_10k',
-    name: '$10,000 Saved',
-    shortName: '$10K Saved',
-    description: 'Five figures! You\'re building a real financial foundation. Most Americans don\'t have this much saved.',
-    type: 'net_worth',
-    targetValue: 10000,
+    id: 'passive_10_day',
+    name: '$10/Day - Daily Meals',
+    shortName: '$10/Day',
+    description: 'Your investments cover a meal every day. That\'s $300/month generated while you do absolutely nothing.',
+    type: 'passive_income',
+    targetValue: 10, // $10/day
     color: '#60a5fa', // blue-400
-    icon: 'piggy-bank',
+    icon: 'utensils',
   },
   {
-    id: 'nw_25k',
-    name: '$25,000 Saved',
-    shortName: '$25K Saved',
-    description: 'A quarter of the way to six figures. Your money is starting to generate meaningful returns.',
-    type: 'net_worth',
-    targetValue: 25000,
+    id: 'passive_25_day',
+    name: '$25/Day - Car Payment',
+    shortName: '$25/Day',
+    description: 'Passive income covers a typical car payment and insurance. Your commute is funded by your portfolio.',
+    type: 'passive_income',
+    targetValue: 25, // $25/day
     color: '#3b82f6', // blue-500
-    icon: 'wallet',
+    icon: 'car',
   },
   {
-    id: 'nw_50k',
-    name: '$50,000 Saved',
-    shortName: '$50K Saved',
-    description: 'Halfway to six figures! Compound interest is becoming a noticeable force in your portfolio.',
-    type: 'net_worth',
-    targetValue: 50000,
+    id: 'passive_50_day',
+    name: '$50/Day - Part-Time Job',
+    shortName: '$50/Day',
+    description: 'Your money earns what a part-time job pays — $18,250/year — except it never calls in sick or takes a day off.',
+    type: 'passive_income',
+    targetValue: 50, // $50/day
     color: '#a78bfa', // violet-400
-    icon: 'wallet',
+    icon: 'briefcase',
   },
   {
-    id: 'nw_75k',
-    name: '$75,000 Saved',
-    shortName: '$75K Saved',
-    description: 'Three-quarters of the way to $100K. The hardest part is behind you.',
-    type: 'net_worth',
-    targetValue: 75000,
+    id: 'passive_75_day',
+    name: '$75/Day - Rent Money',
+    shortName: '$75/Day',
+    description: 'Your investments cover a typical monthly rent payment ($2,250/mo). Housing is handled by your portfolio.',
+    type: 'passive_income',
+    targetValue: 75, // $75/day
     color: '#8b5cf6', // violet-500
-    icon: 'wallet',
+    icon: 'home',
   },
   {
-    id: 'nw_100k',
-    name: '$100,000 Saved',
-    shortName: '$100K Saved',
-    description: 'Six figures! Charlie Munger said the first $100K is the hardest. From here, compounding accelerates dramatically.',
-    type: 'net_worth',
-    targetValue: 100000,
+    id: 'passive_100_day',
+    name: '$100/Day - Full-Time Minimum Wage',
+    shortName: '$100/Day',
+    description: 'Your portfolio earns more than a full-time minimum wage worker. That\'s $36,500/year on autopilot.',
+    type: 'passive_income',
+    targetValue: 100, // $100/day
     color: '#22c55e', // green-500
     icon: 'banknote',
   },
   {
-    id: 'nw_150k',
-    name: '$150,000 Saved',
-    shortName: '$150K Saved',
-    description: 'Your portfolio is generating serious returns. At 7%, that\'s over $10K/year in growth alone.',
-    type: 'net_worth',
-    targetValue: 150000,
+    id: 'passive_150_day',
+    name: '$150/Day - Median Income',
+    shortName: '$150/Day',
+    description: 'Passive income matches the US median individual income (~$55K/year). Your money out-earns most workers.',
+    type: 'passive_income',
+    targetValue: 150, // $150/day
     color: '#14b8a6', // teal-500
-    icon: 'banknote',
+    icon: 'trending-up',
   },
   {
-    id: 'nw_200k',
-    name: '$200,000 Saved',
-    shortName: '$200K Saved',
-    description: 'Double six figures! Your net worth is now working as hard as a part-time employee.',
-    type: 'net_worth',
-    targetValue: 200000,
+    id: 'passive_200_day',
+    name: '$200/Day - Household Income',
+    shortName: '$200/Day',
+    description: 'Your investments generate $73K/year — more than the median US household income, with zero hours worked.',
+    type: 'passive_income',
+    targetValue: 200, // $200/day
     color: '#10b981', // emerald-500
-    icon: 'banknote',
+    icon: 'trending-up',
   },
   {
-    id: 'nw_250k',
-    name: '$250,000 Saved',
-    shortName: '$250K Saved',
-    description: 'A quarter million! You\'re in the top 30% of American households by net worth.',
-    type: 'net_worth',
-    targetValue: 250000,
+    id: 'passive_500_day',
+    name: '$500/Day - Senior Salary',
+    shortName: '$500/Day',
+    description: 'Your money earns $182K/year — more than most senior professionals. Work is truly optional.',
+    type: 'passive_income',
+    targetValue: 500, // $500/day
     color: '#f59e0b', // amber-500
     icon: 'gem',
   },
   {
-    id: 'nw_500k',
-    name: '$500,000 Saved',
-    shortName: '$500K Saved',
-    description: 'Half a million! At 4% SWR, this could cover $20K/year indefinitely. You have real options.',
-    type: 'net_worth',
-    targetValue: 500000,
-    color: '#eab308', // yellow-500
-    icon: 'gem',
-  },
-  {
-    id: 'nw_750k',
-    name: '$750,000 Saved',
-    shortName: '$750K Saved',
-    description: 'Three-quarters of a million. The second $500K comes much faster than the first.',
-    type: 'net_worth',
-    targetValue: 750000,
-    color: '#f97316', // orange-500
-    icon: 'gem',
-  },
-  {
-    id: 'nw_1m',
-    name: '$1,000,000 Saved',
-    shortName: '$1M Saved',
-    description: 'You\'re a millionaire! A major life achievement. At 4% SWR, this generates $40K/year forever.',
-    type: 'net_worth',
-    targetValue: 1000000,
+    id: 'passive_1000_day',
+    name: '$1,000/Day - Executive Pay',
+    shortName: '$1K/Day',
+    description: 'Your portfolio generates $365K/year. That\'s C-suite compensation, generated entirely by past savings.',
+    type: 'passive_income',
+    targetValue: 1000, // $1000/day
     color: '#fbbf24', // amber-400 (gold)
     icon: 'crown',
   },
+
+  // Expense coverage milestones - what % of your lifestyle is paid for by investments
+  // These answer: "How much of my life do I actually need to work for?"
+  // Based on monthlySwr / monthlySpend
   {
-    id: 'nw_1_5m',
-    name: '$1,500,000 Saved',
-    shortName: '$1.5M Saved',
-    description: 'One and a half million. Your investment returns likely exceed your annual savings contributions.',
-    type: 'net_worth',
-    targetValue: 1500000,
-    color: '#ec4899', // pink-500
+    id: 'cover_5',
+    name: '5% Covered - Phone Bill',
+    shortName: '5% Covered',
+    description: 'Your investments cover 5% of expenses — roughly your phone bill. Small, but your money is starting to pull its weight.',
+    type: 'expense_coverage',
+    targetValue: 5, // 5% of expenses
+    color: '#94a3b8', // slate-400
+    icon: 'phone',
+  },
+  {
+    id: 'cover_10',
+    name: '10% Covered - Subscriptions',
+    shortName: '10% Covered',
+    description: 'Passive income covers 10% of your bills. Streaming, gym, subscriptions — all paid by your portfolio.',
+    type: 'expense_coverage',
+    targetValue: 10, // 10%
+    color: '#64748b', // slate-500
+    icon: 'tv',
+  },
+  {
+    id: 'cover_20',
+    name: '20% Covered - Groceries',
+    shortName: '20% Covered',
+    description: 'One-fifth of your expenses are covered. Your weekly grocery run is funded entirely by investment returns.',
+    type: 'expense_coverage',
+    targetValue: 20, // 20%
+    color: '#60a5fa', // blue-400
+    icon: 'shopping-cart',
+  },
+  {
+    id: 'cover_30',
+    name: '30% Covered - Utilities + Food',
+    shortName: '30% Covered',
+    description: 'Nearly a third of your lifestyle runs on autopilot. Groceries, utilities, and insurance — handled.',
+    type: 'expense_coverage',
+    targetValue: 30, // 30%
+    color: '#a78bfa', // violet-400
+    icon: 'zap',
+  },
+  {
+    id: 'cover_50',
+    name: '50% Covered - Half Your Life',
+    shortName: '50% Covered',
+    description: 'Half your expenses are paid by your portfolio. You could work half the hours and maintain your lifestyle.',
+    type: 'expense_coverage',
+    targetValue: 50, // 50%
+    color: '#8b5cf6', // violet-500
+    icon: 'clock',
+  },
+  {
+    id: 'cover_75',
+    name: '75% Covered - Almost Free',
+    shortName: '75% Covered',
+    description: 'Three-quarters of your life is funded by investments. A barista job would cover the rest.',
+    type: 'expense_coverage',
+    targetValue: 75, // 75%
+    color: '#f59e0b', // amber-500
+    icon: 'coffee',
+  },
+  {
+    id: 'cover_100',
+    name: '100% Covered - Work Optional',
+    shortName: '100% Covered',
+    description: 'Every single bill is covered by passive income. You work because you want to, not because you have to.',
+    type: 'expense_coverage',
+    targetValue: 100, // 100%
+    color: '#10b981', // emerald-500
+    icon: 'check-circle',
+  },
+  {
+    id: 'cover_150',
+    name: '150% Covered - Lifestyle Surplus',
+    shortName: '150% Covered',
+    description: 'Passive income is 50% more than you spend. Room for spontaneous trips, generous gifts, and full financial peace.',
+    type: 'expense_coverage',
+    targetValue: 150, // 150%
+    color: '#fbbf24', // amber-400 (gold)
+    icon: 'star',
+  },
+
+  // Wealth multiplier milestones - how much compounding has amplified your savings
+  // These answer: "How hard is my money working compared to what I put in?"
+  // Based on netWorth / totalContributions (cumulative)
+  {
+    id: 'mult_1_25x',
+    name: '1.25x - First Returns',
+    shortName: '1.25x Returns',
+    description: 'For every $4 you saved, you earned $1 from investment returns. Compounding has entered the chat.',
+    type: 'wealth_multiplier',
+    targetValue: 1.25, // net worth = 1.25x contributions
+    color: '#94a3b8', // slate-400
+    icon: 'trending-up',
+  },
+  {
+    id: 'mult_1_5x',
+    name: '1.5x - Money Making Money',
+    shortName: '1.5x Returns',
+    description: 'For every $2 you saved, $1 came from investment returns. Your money is earning its keep.',
+    type: 'wealth_multiplier',
+    targetValue: 1.5,
+    color: '#60a5fa', // blue-400
+    icon: 'trending-up',
+  },
+  {
+    id: 'mult_2x',
+    name: '2x - The Doubling Point',
+    shortName: '2x Doubled',
+    description: 'Your investments doubled your contributions. Half your wealth came from returns, not from saving.',
+    type: 'wealth_multiplier',
+    targetValue: 2.0,
+    color: '#a78bfa', // violet-400
+    icon: 'repeat',
+  },
+  {
+    id: 'mult_3x',
+    name: '3x - Compounding Machine',
+    shortName: '3x Returns',
+    description: 'Two-thirds of your wealth is from investment returns. For every $1 saved, you earned $2.',
+    type: 'wealth_multiplier',
+    targetValue: 3.0,
+    color: '#8b5cf6', // violet-500
+    icon: 'zap',
+  },
+  {
+    id: 'mult_5x',
+    name: '5x - Money Working Overtime',
+    shortName: '5x Returns',
+    description: '80% of your wealth is from compounding. For every $1 you saved, $4 came from investment returns alone.',
+    type: 'wealth_multiplier',
+    targetValue: 5.0,
+    color: '#f59e0b', // amber-500
+    icon: 'flame',
+  },
+  {
+    id: 'mult_10x',
+    name: '10x - Wealth Snowball',
+    shortName: '10x Returns',
+    description: '90% of your wealth is investment returns. Your original savings are just the seed — the market did the rest.',
+    type: 'wealth_multiplier',
+    targetValue: 10.0,
+    color: '#fbbf24', // amber-400 (gold)
     icon: 'crown',
-  },
-  {
-    id: 'nw_2m',
-    name: '$2,000,000 Saved',
-    shortName: '$2M Saved',
-    description: 'Double millionaire! At 4% SWR, this generates $80K/year - a comfortable lifestyle without working.',
-    type: 'net_worth',
-    targetValue: 2000000,
-    color: '#dc2626', // red-600
-    icon: 'trophy',
-  },
-  {
-    id: 'nw_3m',
-    name: '$3,000,000 Saved',
-    shortName: '$3M Saved',
-    description: 'Three million. You\'re in the top 5% of households. Your money is truly working for you.',
-    type: 'net_worth',
-    targetValue: 3000000,
-    color: '#7c3aed', // violet-600
-    icon: 'trophy',
-  },
-  {
-    id: 'nw_5m',
-    name: '$5,000,000 Saved',
-    shortName: '$5M Saved',
-    description: 'Five million! You\'ve achieved financial abundance. At 4% SWR, that\'s $200K/year indefinitely.',
-    type: 'net_worth',
-    targetValue: 5000000,
-    color: '#6d28d9', // violet-700
-    icon: 'diamond',
-  },
-  {
-    id: 'nw_10m',
-    name: '$10,000,000 Saved',
-    shortName: '$10M Saved',
-    description: 'Eight figures! Decamillionaire status. True generational wealth.',
-    type: 'net_worth',
-    targetValue: 10000000,
-    color: '#4c1d95', // violet-900
-    icon: 'diamond',
   },
 ] as const;
 
@@ -1917,26 +1999,102 @@ export function calculateFiMilestones(
         isAchieved,
         netWorthAtMilestone: isAchieved ? null : milestoneNetWorth,
       };
-    } else if (def.type === 'net_worth') {
-      // Net worth absolute milestones - concrete savings targets
-      const targetNetWorth = def.targetValue;
-      const isAchieved = currentNetWorth >= targetNetWorth;
+    } else if (def.type === 'passive_income') {
+      // Passive income milestones - based on daily SWR (what your money earns you per day)
+      const targetDailySwr = def.targetValue;
+      const currentDailySwr = currentRow.dailySwr;
+      const isAchieved = currentDailySwr >= targetDailySwr;
 
       let milestoneYear: number | null = null;
       let milestoneMonth: number | null = null;
       let milestoneNetWorth: number | null = null;
-      let prevNW = currentNetWorth;
+      let prevDailySwr = currentDailySwr;
 
       for (const row of projections) {
-        if (row.netWorth >= targetNetWorth) {
+        if (row.dailySwr >= targetDailySwr) {
           milestoneYear = row.year;
           milestoneNetWorth = row.netWorth;
           if (!isAchieved) {
-            milestoneMonth = interpolateMonth(prevNW, row.netWorth, targetNetWorth);
+            milestoneMonth = interpolateMonth(prevDailySwr, row.dailySwr, targetDailySwr);
           }
           break;
         }
-        prevNW = row.netWorth;
+        prevDailySwr = row.dailySwr;
+      }
+
+      milestone = {
+        ...def,
+        year: milestoneYear,
+        month: milestoneMonth,
+        age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+        yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+        isAchieved,
+        netWorthAtMilestone: isAchieved ? null : milestoneNetWorth,
+      };
+    } else if (def.type === 'expense_coverage') {
+      // Expense coverage milestones - what % of monthly expenses are covered by SWR
+      const targetCoveragePercent = def.targetValue;
+      const currentCoverage = currentMonthlySpend > 0
+        ? (currentRow.monthlySwr / currentMonthlySpend) * 100
+        : 0;
+      const isAchieved = currentCoverage >= targetCoveragePercent;
+
+      let milestoneYear: number | null = null;
+      let milestoneMonth: number | null = null;
+      let milestoneNetWorth: number | null = null;
+      let prevCoverage = currentCoverage;
+
+      for (const row of projections) {
+        const rowCoverage = row.monthlySpend > 0
+          ? (row.monthlySwr / row.monthlySpend) * 100
+          : 0;
+        if (rowCoverage >= targetCoveragePercent) {
+          milestoneYear = row.year;
+          milestoneNetWorth = row.netWorth;
+          if (!isAchieved) {
+            milestoneMonth = interpolateMonth(prevCoverage, rowCoverage, targetCoveragePercent);
+          }
+          break;
+        }
+        prevCoverage = rowCoverage;
+      }
+
+      milestone = {
+        ...def,
+        year: milestoneYear,
+        month: milestoneMonth,
+        age: milestoneYear && birthYear ? milestoneYear - birthYear : null,
+        yearsFromNow: milestoneYear ? milestoneYear - currentYear : null,
+        isAchieved,
+        netWorthAtMilestone: isAchieved ? null : milestoneNetWorth,
+      };
+    } else if (def.type === 'wealth_multiplier') {
+      // Wealth multiplier milestones - net worth as a multiple of total contributions
+      const targetMultiplier = def.targetValue;
+      const currentContributed = currentRow.contributed;
+      const currentMultiplier = currentContributed > 0
+        ? currentNetWorth / currentContributed
+        : 0;
+      const isAchieved = currentContributed > 0 && currentMultiplier >= targetMultiplier;
+
+      let milestoneYear: number | null = null;
+      let milestoneMonth: number | null = null;
+      let milestoneNetWorth: number | null = null;
+      let prevMultiplier = currentMultiplier;
+
+      for (const row of projections) {
+        const rowMultiplier = row.contributed > 0
+          ? row.netWorth / row.contributed
+          : 0;
+        if (row.contributed > 0 && rowMultiplier >= targetMultiplier) {
+          milestoneYear = row.year;
+          milestoneNetWorth = row.netWorth;
+          if (!isAchieved) {
+            milestoneMonth = interpolateMonth(prevMultiplier, rowMultiplier, targetMultiplier);
+          }
+          break;
+        }
+        prevMultiplier = rowMultiplier;
       }
 
       milestone = {

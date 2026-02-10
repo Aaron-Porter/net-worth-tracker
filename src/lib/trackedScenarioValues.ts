@@ -1551,48 +1551,58 @@ export function createTrackedCrossoverMilestone(
 }
 
 /**
- * Create tracked net worth milestone info
+ * Create tracked passive income milestone info
+ * Shows current daily SWR vs target, with net worth needed to reach it
  */
-export function createTrackedNetWorthMilestone(
+export function createTrackedPassiveIncomeMilestone(
   milestoneId: string,
   milestoneName: string,
-  targetNetWorth: number,
+  targetDailySwr: number,
+  currentDailySwr: number,
   currentNetWorth: number,
+  swr: number,
   netWorthAtMilestone: number | null,
   year: number | null,
   currentYear: number
 ): TrackedMilestoneInfo {
+  // NW needed for this daily SWR: targetDailySwr * 365 / (swr/100)
+  const targetAnnualSwr = targetDailySwr * 365;
+  const targetNetWorth = swr > 0 ? targetAnnualSwr / (swr / 100) : 0;
   const amountNeeded = Math.max(0, targetNetWorth - currentNetWorth);
   const yearsAway = year ? year - currentYear : null;
-  const progressPercent = targetNetWorth > 0 ? Math.min(100, (currentNetWorth / targetNetWorth) * 100) : 0;
 
   const targetValueTracked = new CalculationBuilder(`${milestoneId}_target`, `${milestoneName} Target`, 'milestone')
-    .setDescription(`The net worth target for the ${milestoneName} milestone. This is a concrete savings goal to incentivize progress.`)
-    .setFormula('Fixed Target Value')
+    .setDescription(`The net worth required to generate $${targetDailySwr}/day in passive income at a ${swr}% safe withdrawal rate.`)
+    .setFormula('(Daily Target × 365) ÷ SWR%')
     .setUnit('$')
-    .addInputWithSource('Target Net Worth', targetNetWorth, 'constant', {
-      unit: '$',
-      description: `${milestoneName} milestone target`
-    })
-    .addInputWithSource('Current Net Worth', currentNetWorth, 'calculated', { unit: '$' })
-    .addInputWithSource('Progress', progressPercent, 'calculated', {
-      unit: '%',
-      description: `${progressPercent.toFixed(1)}% of the way there`
+    .addInputWithSource('Target Daily Income', targetDailySwr, 'constant', { unit: '$/day' })
+    .addInputWithSource('Target Annual Income', targetAnnualSwr, 'calculated', { unit: '$/year' })
+    .addInputWithSource('Safe Withdrawal Rate', swr, 'setting', { unit: '%' })
+    .addInputWithSource('Current Daily Income', currentDailySwr, 'calculated', {
+      unit: '$/day',
+      description: `Your investments currently earn $${currentDailySwr.toFixed(2)}/day`
     })
     .addStep(
-      'Progress toward milestone',
-      `$${currentNetWorth.toLocaleString()} ÷ $${targetNetWorth.toLocaleString()} = ${progressPercent.toFixed(1)}%`,
+      'Calculate annual income needed',
+      `$${targetDailySwr}/day × 365 = $${targetAnnualSwr.toLocaleString()}/year`,
       [],
-      progressPercent,
-      '%'
+      targetAnnualSwr,
+      '$/year'
+    )
+    .addStep(
+      'Calculate net worth needed',
+      `$${targetAnnualSwr.toLocaleString()} ÷ ${swr}% = $${targetNetWorth.toLocaleString()}`,
+      [],
+      targetNetWorth,
+      '$'
     )
     .build(targetNetWorth);
 
   const amountNeededTracked = amountNeeded > 0 ? new CalculationBuilder(`${milestoneId}_amount`, `Amount to ${milestoneName}`, 'milestone')
-    .setDescription(`The additional savings needed to reach ${milestoneName}`)
+    .setDescription(`Additional net worth needed to generate $${targetDailySwr}/day in passive income`)
     .setFormula('Target Net Worth - Current Net Worth')
     .setUnit('$')
-    .addTrackedInput(`${milestoneName} Target`, targetValueTracked)
+    .addTrackedInput('Target Net Worth', targetValueTracked)
     .addInputWithSource('Current Net Worth', currentNetWorth, 'calculated', { unit: '$' })
     .addStep(
       'Calculate remaining amount',
@@ -1604,30 +1614,178 @@ export function createTrackedNetWorthMilestone(
     .build(amountNeeded) : null;
 
   const yearsToMilestoneTracked = yearsAway !== null ? new CalculationBuilder(`${milestoneId}_years`, `Years to ${milestoneName}`, 'milestone')
-    .setDescription(`Projected years until you reach ${milestoneName}`)
+    .setDescription(`Projected years until your passive income reaches $${targetDailySwr}/day`)
     .setFormula('Milestone Year - Current Year')
     .setUnit('years')
-    .addInputWithSource('Milestone Year', year!, 'calculated', {
-      description: 'Projected year of achievement based on your growth trajectory'
-    })
+    .addInputWithSource('Milestone Year', year!, 'calculated')
     .addInputWithSource('Current Year', currentYear, 'constant')
-    .addStep(
-      'Calculate years remaining',
-      `${year} - ${currentYear} = ${yearsAway} years`,
-      [],
-      yearsAway,
-      'years'
-    )
     .build(yearsAway) : null;
 
   const netWorthAtMilestoneTracked = netWorthAtMilestone !== null ? new CalculationBuilder(`${milestoneId}_nw`, `Net Worth at ${milestoneName}`, 'milestone')
-    .setDescription(`Your projected net worth when you reach ${milestoneName}`)
-    .setFormula('Projected Net Worth at Milestone Achievement')
+    .setDescription(`Your projected net worth when passive income reaches $${targetDailySwr}/day`)
     .setUnit('$')
-    .addInputWithSource('Net Worth', netWorthAtMilestone, 'calculated', {
-      unit: '$',
-      description: 'Based on your current growth trajectory'
+    .addInputWithSource('Net Worth', netWorthAtMilestone, 'calculated', { unit: '$' })
+    .build(netWorthAtMilestone) : null;
+
+  return {
+    targetValue: targetValueTracked,
+    netWorthAtMilestone: netWorthAtMilestoneTracked,
+    yearsToMilestone: yearsToMilestoneTracked,
+    amountNeeded: amountNeededTracked,
+  };
+}
+
+/**
+ * Create tracked expense coverage milestone info
+ * Shows current coverage % and net worth needed for target coverage
+ */
+export function createTrackedExpenseCoverageMilestone(
+  milestoneId: string,
+  milestoneName: string,
+  targetCoveragePercent: number,
+  currentMonthlySwr: number,
+  currentMonthlySpend: number,
+  currentNetWorth: number,
+  swr: number,
+  netWorthAtMilestone: number | null,
+  year: number | null,
+  currentYear: number
+): TrackedMilestoneInfo {
+  const currentCoverage = currentMonthlySpend > 0 ? (currentMonthlySwr / currentMonthlySpend) * 100 : 0;
+  const targetMonthlySwr = currentMonthlySpend * (targetCoveragePercent / 100);
+  const targetNetWorth = swr > 0 ? (targetMonthlySwr * 12) / (swr / 100) : 0;
+  const amountNeeded = Math.max(0, targetNetWorth - currentNetWorth);
+  const yearsAway = year ? year - currentYear : null;
+
+  const targetValueTracked = new CalculationBuilder(`${milestoneId}_target`, `${milestoneName} Target`, 'milestone')
+    .setDescription(`The net worth required for passive income to cover ${targetCoveragePercent}% of your monthly expenses.`)
+    .setFormula('(Monthly Spend × Coverage% × 12) ÷ SWR%')
+    .setUnit('$')
+    .addInputWithSource('Monthly Spending', currentMonthlySpend, 'calculated', { unit: '$/month' })
+    .addInputWithSource('Target Coverage', targetCoveragePercent, 'constant', { unit: '%' })
+    .addInputWithSource('Current Coverage', currentCoverage, 'calculated', {
+      unit: '%',
+      description: `Passive income currently covers ${currentCoverage.toFixed(1)}% of expenses`
     })
+    .addInputWithSource('SWR', swr, 'setting', { unit: '%' })
+    .addStep(
+      'Calculate target monthly SWR',
+      `$${currentMonthlySpend.toLocaleString()}/mo × ${targetCoveragePercent}% = $${targetMonthlySwr.toLocaleString()}/mo`,
+      [],
+      targetMonthlySwr,
+      '$/month'
+    )
+    .addStep(
+      'Calculate net worth needed',
+      `($${targetMonthlySwr.toLocaleString()} × 12) ÷ ${swr}% = $${targetNetWorth.toLocaleString()}`,
+      [],
+      targetNetWorth,
+      '$'
+    )
+    .build(targetNetWorth);
+
+  const amountNeededTracked = amountNeeded > 0 ? new CalculationBuilder(`${milestoneId}_amount`, `Amount to ${milestoneName}`, 'milestone')
+    .setDescription(`Additional net worth needed for passive income to cover ${targetCoveragePercent}% of expenses`)
+    .setFormula('Target Net Worth - Current Net Worth')
+    .setUnit('$')
+    .addTrackedInput('Target Net Worth', targetValueTracked)
+    .addInputWithSource('Current Net Worth', currentNetWorth, 'calculated', { unit: '$' })
+    .build(amountNeeded) : null;
+
+  const yearsToMilestoneTracked = yearsAway !== null ? new CalculationBuilder(`${milestoneId}_years`, `Years to ${milestoneName}`, 'milestone')
+    .setDescription(`Projected years until passive income covers ${targetCoveragePercent}% of expenses`)
+    .setFormula('Milestone Year - Current Year')
+    .setUnit('years')
+    .addInputWithSource('Milestone Year', year!, 'calculated')
+    .addInputWithSource('Current Year', currentYear, 'constant')
+    .build(yearsAway) : null;
+
+  const netWorthAtMilestoneTracked = netWorthAtMilestone !== null ? new CalculationBuilder(`${milestoneId}_nw`, `Net Worth at ${milestoneName}`, 'milestone')
+    .setDescription(`Your projected net worth when passive income covers ${targetCoveragePercent}% of expenses`)
+    .setUnit('$')
+    .addInputWithSource('Net Worth', netWorthAtMilestone, 'calculated', { unit: '$' })
+    .build(netWorthAtMilestone) : null;
+
+  return {
+    targetValue: targetValueTracked,
+    netWorthAtMilestone: netWorthAtMilestoneTracked,
+    yearsToMilestone: yearsToMilestoneTracked,
+    amountNeeded: amountNeededTracked,
+  };
+}
+
+/**
+ * Create tracked wealth multiplier milestone info
+ * Shows how much compounding has amplified contributions
+ */
+export function createTrackedWealthMultiplierMilestone(
+  milestoneId: string,
+  milestoneName: string,
+  targetMultiplier: number,
+  currentNetWorth: number,
+  totalContributions: number,
+  netWorthAtMilestone: number | null,
+  year: number | null,
+  currentYear: number
+): TrackedMilestoneInfo {
+  const currentMultiplier = totalContributions > 0 ? currentNetWorth / totalContributions : 0;
+  const returnsPercent = currentMultiplier > 0 ? ((currentMultiplier - 1) / currentMultiplier) * 100 : 0;
+  const targetNetWorth = totalContributions * targetMultiplier;
+  const amountNeeded = Math.max(0, targetNetWorth - currentNetWorth);
+  const yearsAway = year ? year - currentYear : null;
+
+  const targetValueTracked = new CalculationBuilder(`${milestoneId}_target`, `${milestoneName} Target`, 'milestone')
+    .setDescription(`Your net worth needs to be ${targetMultiplier}x your total contributions. Currently at ${currentMultiplier.toFixed(2)}x.`)
+    .setFormula('Total Contributions × Target Multiplier')
+    .setUnit('$')
+    .addInputWithSource('Total Contributions', totalContributions, 'calculated', {
+      unit: '$',
+      description: 'Total amount you\'ve saved/contributed over time'
+    })
+    .addInputWithSource('Target Multiplier', targetMultiplier, 'constant', {
+      unit: 'x',
+      description: `${targetMultiplier}x your total contributions`
+    })
+    .addInputWithSource('Current Multiplier', currentMultiplier, 'calculated', {
+      unit: 'x',
+      description: `Currently ${currentMultiplier.toFixed(2)}x (${returnsPercent.toFixed(0)}% from returns)`
+    })
+    .addStep(
+      'Current multiplier',
+      `$${currentNetWorth.toLocaleString()} ÷ $${totalContributions.toLocaleString()} = ${currentMultiplier.toFixed(2)}x`,
+      [],
+      currentMultiplier,
+      'x'
+    )
+    .addStep(
+      'Target net worth',
+      `$${totalContributions.toLocaleString()} × ${targetMultiplier}x = $${targetNetWorth.toLocaleString()}`,
+      [],
+      targetNetWorth,
+      '$'
+    )
+    .build(targetNetWorth);
+
+  const amountNeededTracked = amountNeeded > 0 ? new CalculationBuilder(`${milestoneId}_amount`, `Amount to ${milestoneName}`, 'milestone')
+    .setDescription(`Additional growth needed for your investments to reach ${targetMultiplier}x your contributions`)
+    .setFormula('Target Net Worth - Current Net Worth')
+    .setUnit('$')
+    .addTrackedInput('Target Net Worth', targetValueTracked)
+    .addInputWithSource('Current Net Worth', currentNetWorth, 'calculated', { unit: '$' })
+    .build(amountNeeded) : null;
+
+  const yearsToMilestoneTracked = yearsAway !== null ? new CalculationBuilder(`${milestoneId}_years`, `Years to ${milestoneName}`, 'milestone')
+    .setDescription(`Projected years until your wealth reaches ${targetMultiplier}x contributions`)
+    .setFormula('Milestone Year - Current Year')
+    .setUnit('years')
+    .addInputWithSource('Milestone Year', year!, 'calculated')
+    .addInputWithSource('Current Year', currentYear, 'constant')
+    .build(yearsAway) : null;
+
+  const netWorthAtMilestoneTracked = netWorthAtMilestone !== null ? new CalculationBuilder(`${milestoneId}_nw`, `Net Worth at ${milestoneName}`, 'milestone')
+    .setDescription(`Your projected net worth when you reach ${targetMultiplier}x contributions`)
+    .setUnit('$')
+    .addInputWithSource('Net Worth', netWorthAtMilestone, 'calculated', { unit: '$' })
     .build(netWorthAtMilestone) : null;
 
   return {

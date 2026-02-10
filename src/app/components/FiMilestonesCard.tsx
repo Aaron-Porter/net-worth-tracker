@@ -23,6 +23,9 @@ export function FiMilestonesCard({ primaryProjection, latestEntry }: FiMilestone
   const currentYear = new Date().getFullYear();
   const currentFiTarget = projections[0]?.fiTarget ?? 0;
   const currentMonthlySpend = projections[0]?.monthlySpend ?? 0;
+  const currentDailySwr = projections[0]?.dailySwr ?? 0;
+  const currentMonthlySwr = projections[0]?.monthlySwr ?? 0;
+  const totalContributions = projections[0]?.contributed ?? 0;
 
   // Get birth year from projections if available
   const firstRow = projections[0];
@@ -49,12 +52,31 @@ export function FiMilestonesCard({ primaryProjection, latestEntry }: FiMilestone
     return createTrackedRunwayInfo(currentNetWorth.total, currentMonthlySpend);
   }, [currentNetWorth.total, currentMonthlySpend]);
 
+  // Expense coverage percentage
+  const expenseCoverage = currentMonthlySpend > 0
+    ? (currentMonthlySwr / currentMonthlySpend) * 100
+    : 0;
+
+  // Wealth multiplier
+  const wealthMultiplier = totalContributions > 0
+    ? currentNetWorth.total / totalContributions
+    : 0;
+
   // Filter milestones by type for display
   const runwayMilestones = fiMilestones.milestones.filter(m => m.type === 'runway');
   const percentageMilestones = fiMilestones.milestones.filter(m => m.type === 'percentage');
   const lifestyleMilestones = fiMilestones.milestones.filter(m => m.type === 'lifestyle');
   const specialMilestones = fiMilestones.milestones.filter(m => m.type === 'special');
-  const netWorthMilestones = fiMilestones.milestones.filter(m => m.type === 'net_worth');
+  const passiveIncomeMilestones = fiMilestones.milestones.filter(m => m.type === 'passive_income');
+  const expenseCoverageMilestones = fiMilestones.milestones.filter(m => m.type === 'expense_coverage');
+  const wealthMultiplierMilestones = fiMilestones.milestones.filter(m => m.type === 'wealth_multiplier');
+
+  // Common extra props for the new milestone types
+  const extraProps = {
+    currentDailySwr,
+    currentMonthlySwr,
+    totalContributions,
+  };
 
   return (
     <div className="mt-8 bg-[#0f1629] rounded-xl p-6 border border-slate-800">
@@ -151,6 +173,110 @@ export function FiMilestonesCard({ primaryProjection, latestEntry }: FiMilestone
         )}
       </div>
 
+      {/* Passive Income Milestones */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-slate-400">
+            Passive Income
+          </h3>
+          <div className="text-right">
+            <span className="text-xs text-slate-500">Earning: </span>
+            <span className="text-sm font-mono text-emerald-400">
+              {formatCurrency(currentDailySwr, 2)}/day
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">What your investments earn you every day, no work required</p>
+        <div className="space-y-2">
+          {passiveIncomeMilestones.map(milestone => (
+            <TrackedMilestoneRow
+              key={milestone.id}
+              milestone={milestone}
+              currentYear={currentYear}
+              currentNetWorth={currentNetWorth.total}
+              currentMonthlySpend={currentMonthlySpend}
+              currentFiTarget={currentFiTarget}
+              currentFiProgress={currentFiProgress}
+              currentAge={currentAge}
+              retirementAge={retirementAge}
+              effectiveRate={effectiveRate}
+              scenario={scenario}
+              {...extraProps}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Expense Coverage Milestones */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-slate-400">
+            Bills Covered
+          </h3>
+          <div className="text-right">
+            <span className="text-xs text-slate-500">Coverage: </span>
+            <span className="text-sm font-mono text-violet-400">
+              {expenseCoverage.toFixed(1)}%
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">How much of your lifestyle is paid for by your portfolio</p>
+        <div className="space-y-2">
+          {expenseCoverageMilestones.map(milestone => (
+            <TrackedMilestoneRow
+              key={milestone.id}
+              milestone={milestone}
+              currentYear={currentYear}
+              currentNetWorth={currentNetWorth.total}
+              currentMonthlySpend={currentMonthlySpend}
+              currentFiTarget={currentFiTarget}
+              currentFiProgress={currentFiProgress}
+              currentAge={currentAge}
+              retirementAge={retirementAge}
+              effectiveRate={effectiveRate}
+              scenario={scenario}
+              {...extraProps}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Wealth Multiplier Milestones */}
+      {totalContributions > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-slate-400">
+              Compounding Power
+            </h3>
+            <div className="text-right">
+              <span className="text-xs text-slate-500">Multiplier: </span>
+              <span className="text-sm font-mono text-amber-400">
+                {wealthMultiplier.toFixed(2)}x
+              </span>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 mb-3">How much your investments have amplified every dollar you saved</p>
+          <div className="space-y-2">
+            {wealthMultiplierMilestones.map(milestone => (
+              <TrackedMilestoneRow
+                key={milestone.id}
+                milestone={milestone}
+                currentYear={currentYear}
+                currentNetWorth={currentNetWorth.total}
+                currentMonthlySpend={currentMonthlySpend}
+                currentFiTarget={currentFiTarget}
+                currentFiProgress={currentFiProgress}
+                currentAge={currentAge}
+                retirementAge={retirementAge}
+                effectiveRate={effectiveRate}
+                scenario={scenario}
+                {...extraProps}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Runway Milestones - Security */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
@@ -193,39 +319,7 @@ export function FiMilestonesCard({ primaryProjection, latestEntry }: FiMilestone
               retirementAge={retirementAge}
               effectiveRate={effectiveRate}
               scenario={scenario}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Net Worth Milestones - Savings Incentives */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-slate-400">
-            Savings Milestones
-          </h3>
-          <div className="text-right">
-            <span className="text-xs text-slate-500">Current: </span>
-            <span className="text-sm font-mono text-amber-400">
-              {formatCurrency(currentNetWorth.total, 0)}
-            </span>
-          </div>
-        </div>
-        <p className="text-xs text-slate-500 mb-3">Concrete savings targets to track your progress</p>
-        <div className="space-y-2">
-          {netWorthMilestones.map(milestone => (
-            <TrackedMilestoneRow
-              key={milestone.id}
-              milestone={milestone}
-              currentYear={currentYear}
-              currentNetWorth={currentNetWorth.total}
-              currentMonthlySpend={currentMonthlySpend}
-              currentFiTarget={currentFiTarget}
-              currentFiProgress={currentFiProgress}
-              currentAge={currentAge}
-              retirementAge={retirementAge}
-              effectiveRate={effectiveRate}
-              scenario={scenario}
+              {...extraProps}
             />
           ))}
         </div>
@@ -250,6 +344,7 @@ export function FiMilestonesCard({ primaryProjection, latestEntry }: FiMilestone
               retirementAge={retirementAge}
               effectiveRate={effectiveRate}
               scenario={scenario}
+              {...extraProps}
             />
           ))}
         </div>
@@ -274,6 +369,7 @@ export function FiMilestonesCard({ primaryProjection, latestEntry }: FiMilestone
               retirementAge={retirementAge}
               effectiveRate={effectiveRate}
               scenario={scenario}
+              {...extraProps}
             />
           ))}
         </div>
@@ -298,6 +394,7 @@ export function FiMilestonesCard({ primaryProjection, latestEntry }: FiMilestone
               retirementAge={retirementAge}
               effectiveRate={effectiveRate}
               scenario={scenario}
+              {...extraProps}
             />
           ))}
         </div>

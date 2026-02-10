@@ -10,7 +10,9 @@ import {
   createTrackedLifestyleMilestone,
   createTrackedCrossoverMilestone,
   createTrackedRetirementIncomeMilestone,
-  createTrackedNetWorthMilestone,
+  createTrackedPassiveIncomeMilestone,
+  createTrackedExpenseCoverageMilestone,
+  createTrackedWealthMultiplierMilestone,
   createTrackedCoastInfo,
 } from '../../lib/trackedScenarioValues'
 
@@ -24,6 +26,9 @@ interface TrackedMilestoneRowProps {
   currentAge: number | null;
   retirementAge: number;
   effectiveRate: number;
+  currentDailySwr?: number;
+  currentMonthlySwr?: number;
+  totalContributions?: number;
   scenario: {
     currentRate: number;
     inflationRate: number;
@@ -41,6 +46,9 @@ export function TrackedMilestoneRow({
   currentAge,
   retirementAge,
   effectiveRate,
+  currentDailySwr = 0,
+  currentMonthlySwr = 0,
+  totalContributions = 0,
   scenario,
 }: TrackedMilestoneRowProps) {
   const [showDescription, setShowDescription] = useState(false);
@@ -125,12 +133,38 @@ export function TrackedMilestoneRow({
         milestone.year,
         currentYear
       );
-    } else if (milestone.type === 'net_worth') {
-      return createTrackedNetWorthMilestone(
+    } else if (milestone.type === 'passive_income') {
+      return createTrackedPassiveIncomeMilestone(
+        milestone.id,
+        milestone.shortName,
+        milestone.targetValue,
+        currentDailySwr,
+        currentNetWorth,
+        scenario.swr,
+        milestone.netWorthAtMilestone,
+        milestone.year,
+        currentYear
+      );
+    } else if (milestone.type === 'expense_coverage') {
+      return createTrackedExpenseCoverageMilestone(
+        milestone.id,
+        milestone.shortName,
+        milestone.targetValue,
+        currentMonthlySwr,
+        currentMonthlySpend,
+        currentNetWorth,
+        scenario.swr,
+        milestone.netWorthAtMilestone,
+        milestone.year,
+        currentYear
+      );
+    } else if (milestone.type === 'wealth_multiplier') {
+      return createTrackedWealthMultiplierMilestone(
         milestone.id,
         milestone.shortName,
         milestone.targetValue,
         currentNetWorth,
+        totalContributions,
         milestone.netWorthAtMilestone,
         milestone.year,
         currentYear
@@ -147,7 +181,7 @@ export function TrackedMilestoneRow({
       );
     }
     return null;
-  }, [milestone, currentNetWorth, currentMonthlySpend, currentFiTarget, currentFiProgress, currentAge, retirementAge, effectiveRate, scenario, currentYear]);
+  }, [milestone, currentNetWorth, currentMonthlySpend, currentFiTarget, currentFiProgress, currentAge, retirementAge, effectiveRate, currentDailySwr, currentMonthlySwr, totalContributions, scenario, currentYear]);
 
   return (
     <div
