@@ -4155,8 +4155,8 @@ export function calculateStateTax(
     if (stateCode.toUpperCase() === 'MA' && taxableIncome > 1000000) {
       const baseAmount = 1000000;
       const excessAmount = taxableIncome - baseAmount;
-      const regularTax = baseAmount * (stateInfo.flatRate / 100);
-      const surtax = excessAmount * 4 / 100; // 4% surtax on income over $1M
+      const regularTax = taxableIncome * (stateInfo.flatRate / 100); // 5% on ALL income
+      const surtax = excessAmount * 4 / 100; // Additional 4% surtax on income over $1M
       const totalTax = regularTax + surtax;
       
       return {
@@ -4168,14 +4168,14 @@ export function calculateStateTax(
             bracketMax: 1000000,
             rate: stateInfo.flatRate,
             taxableInBracket: baseAmount,
-            taxFromBracket: regularTax,
+            taxFromBracket: baseAmount * (stateInfo.flatRate / 100),
           },
           {
             bracketMin: 1000000,
             bracketMax: Infinity,
             rate: stateInfo.flatRate + 4,
             taxableInBracket: excessAmount,
-            taxFromBracket: surtax,
+            taxFromBracket: excessAmount * ((stateInfo.flatRate + 4) / 100),
           },
         ],
         type: 'flat',
