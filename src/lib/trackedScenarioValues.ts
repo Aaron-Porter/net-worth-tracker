@@ -1561,15 +1561,15 @@ export function createTrackedPassiveIncomeMilestone(
   year: number | null,
   currentYear: number
 ): TrackedMilestoneInfo {
-  // NW needed for this daily SWR: targetDailySwr * 365 / (swr/100)
-  const targetAnnualSwr = targetDailySwr * 365;
+  // NW needed for this daily SWR: targetDailySwr * 365.25 / (swr/100)
+  const targetAnnualSwr = targetDailySwr * 365.25;
   const targetNetWorth = swr > 0 ? targetAnnualSwr / (swr / 100) : 0;
   const amountNeeded = Math.max(0, targetNetWorth - currentNetWorth);
   const yearsAway = year ? year - currentYear : null;
 
   const targetValueTracked = new CalculationBuilder(`${milestoneId}_target`, `${milestoneName} Target`, 'milestone')
     .setDescription(`The net worth required to generate $${targetDailySwr}/day in passive income at a ${swr}% safe withdrawal rate.`)
-    .setFormula('(Daily Target × 365) ÷ SWR%')
+    .setFormula('(Daily Target × 365.25) ÷ SWR%')
     .setUnit('$')
     .addInputWithSource('Target Daily Income', targetDailySwr, 'constant', { unit: '$/day' })
     .addInputWithSource('Target Annual Income', targetAnnualSwr, 'calculated', { unit: '$/year' })
@@ -1580,7 +1580,7 @@ export function createTrackedPassiveIncomeMilestone(
     })
     .addStep(
       'Calculate annual income needed',
-      `$${targetDailySwr}/day × 365 = $${targetAnnualSwr.toLocaleString()}/year`,
+      `$${targetDailySwr}/day × 365.25 = $${targetAnnualSwr.toLocaleString()}/year`,
       [],
       targetAnnualSwr,
       '$/year'

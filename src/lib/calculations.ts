@@ -825,7 +825,7 @@ export const FI_MILESTONE_DEFINITIONS: readonly FiMilestoneDefinition[] = [
 
   // Passive income milestones - what your money earns you per day (SWR-based)
   // These answer: "What does my portfolio actually DO for me right now?"
-  // Based on daily safe withdrawal rate (annualSwr / 365)
+  // Based on daily safe withdrawal rate (annualSwr / 365.25)
   {
     id: 'passive_1_day',
     name: '$1/Day Passive Income',
@@ -1447,7 +1447,9 @@ export function formatDate(timestamp: number): string {
  */
 export function calculateAge(birthDate: string, year: number): number | null {
   if (!birthDate) return null;
-  const birthYear = new Date(birthDate).getFullYear();
+  const parsed = new Date(birthDate);
+  if (isNaN(parsed.getTime())) return null; // Invalid date string
+  const birthYear = parsed.getFullYear();
   return year - birthYear;
 }
 
@@ -1506,7 +1508,7 @@ export function calculateSwrAmounts(netWorth: number, swr: number): {
     annual,
     monthly: annual / 12,
     weekly: annual / 52,
-    daily: annual / 365,
+    daily: annual / 365.25,
   };
 }
 
@@ -1529,10 +1531,25 @@ export function calculateFutureValue(
   const r = yearlyRate / 100;
   const fullYears = Math.floor(years);
   const partialYear = years - fullYears;
-  
+
+  // Guard: Math.pow(negative_base, fractional_exponent) returns NaN in JavaScript.
+  // Use sign-preserving approach for negative (1+r) with fractional years.
+  const base = 1 + r;
+  const safePow = (b: number, exp: number): number => {
+    if (b >= 0) return Math.pow(b, exp);
+    // For negative base with fractional exponent, use absolute value and preserve sign
+    const intPart = Math.floor(exp);
+    const fracPart = exp - intPart;
+    if (fracPart === 0) return Math.pow(b, exp); // Integer exponent is safe
+    // Approximate: treat fractional part as linear interpolation to avoid NaN
+    const intResult = Math.pow(b, intPart);
+    const nextResult = Math.pow(b, intPart + 1);
+    return intResult + fracPart * (nextResult - intResult);
+  };
+
   // Compound growth on principal
-  const compoundedPrincipal = principal * Math.pow(1 + r, years);
-  
+  const compoundedPrincipal = principal * safePow(base, years);
+
   // Future value of annual contributions (end-of-year deposits)
   // Plus partial year contribution with partial growth
   let contributionGrowth: number;
@@ -1542,10 +1559,10 @@ export function calculateFutureValue(
   } else {
     contributionGrowth = yearlyContribution * fullYears;
   }
-  
+
   // Add partial year contribution with growth
   const partialContribution = partialYear * yearlyContribution;
-  const partialContributionGrowth = partialContribution * Math.pow(1 + r, partialYear / 2); // Average growth
+  const partialContributionGrowth = partialContribution * safePow(base, partialYear / 2); // Average growth
   contributionGrowth += partialContributionGrowth;
   
   const totalContributed = (fullYears + partialYear) * yearlyContribution;
@@ -2139,7 +2156,7 @@ export function calculateFiMilestones(
 
       for (const row of projections) {
         const rowAge = birthYear ? row.year - birthYear : null;
-        const rowYearsToRetirement = rowAge !== null ? Math.max(0, retirementAge - rowAge) : Math.max(0, 30 - row.yearsFromEntry);
+        const rowYearsToRetirement = rowAge !== null ? Math.max(0, retirementAge - rowAge) : Math.max(0, yearsToRetirement - row.yearsFromEntry);
 
         let rowCoastPercent: number;
         if (rowYearsToRetirement <= 0) {
@@ -2210,17 +2227,19 @@ export function calculateFiMilestones(
 
       for (const row of projections) {
         const rowAge = birthYear ? row.year - birthYear : null;
-        const rowYearsToRetirement = rowAge !== null ? Math.max(0, retirementAge - rowAge) : Math.max(0, 30 - row.yearsFromEntry);
-        const rowInflationMultiplier = Math.pow(1 + inflationRate, rowYearsToRetirement);
+        const rowYearsToRetirement = rowAge !== null ? Math.max(0, retirementAge - rowAge) : Math.max(0, yearsToRetirement - row.yearsFromEntry);
 
         // Calculate the projected REAL income if we stopped contributing at this row
+        // Always deflate to TODAY's dollars using the constant inflationMultiplier
+        // (total inflation from now to retirement is the same regardless of which row we evaluate from)
         let rowRealIncome: number;
         if (rowYearsToRetirement <= 0) {
-          rowRealIncome = row.netWorth * withdrawalRate;
+          // Already at/past retirement — income starts now, deflate to today's dollars
+          rowRealIncome = (row.netWorth * withdrawalRate) / inflationMultiplier;
         } else {
           const rowFutureNW = row.netWorth * Math.pow(1 + returnRate, rowYearsToRetirement);
           const rowNominalIncome = rowFutureNW * withdrawalRate;
-          rowRealIncome = rowNominalIncome / rowInflationMultiplier;
+          rowRealIncome = rowNominalIncome / inflationMultiplier;
         }
 
         if (rowRealIncome >= targetRealIncome) {
@@ -2447,8 +2466,9 @@ export function generateProjections(
   
   const r = currentRate / 100;
   const currentYear = new Date().getFullYear();
-  const birthYear = birthDate ? new Date(birthDate).getFullYear() : null;
-  
+  const parsedBirthDate = birthDate ? new Date(birthDate) : null;
+  const birthYear = parsedBirthDate && !isNaN(parsedBirthDate.getTime()) ? parsedBirthDate.getFullYear() : null;
+
   const data: ProjectionRow[] = [];
   let fiYearFound = false;
   let crossoverFound = false;
@@ -2707,7 +2727,7 @@ export function generateMonthlyProjections(
     inflationRate,
   } = settings;
 
-  const monthlyRate = currentRate / 100 / 12; // Monthly return rate
+  const monthlyRate = Math.pow(1 + currentRate / 100, 1 / 12) - 1; // True compound monthly rate
   const contribution = monthlyContribution ?? yearlyContribution / 12;
 
   const data: MonthlyProjectionRow[] = [];
@@ -2835,7 +2855,8 @@ export function generateProjectionsWithMonthlySpending(
 
   const { swr, birthDate } = settings;
   const currentYear = new Date().getFullYear();
-  const birthYear = birthDate ? new Date(birthDate).getFullYear() : null;
+  const parsedBD = birthDate ? new Date(birthDate) : null;
+  const birthYear = parsedBD && !isNaN(parsedBD.getTime()) ? parsedBD.getFullYear() : null;
 
   // Generate monthly projections
   const monthlyData = generateMonthlyProjections(currentNetWorth, settings, years * 12);
@@ -4660,7 +4681,10 @@ export function calculateYearProjection(
   const inflationMultiplier = Math.pow(1 + spendingParams.inflationRate / 100, yearsFromNow);
   const adjusted401kLimit = CONTRIBUTION_LIMITS.traditional401k * inflationMultiplier;
   const adjustedIRALimit = CONTRIBUTION_LIMITS.traditionalIRA * inflationMultiplier;
-  const adjustedHSALimit = CONTRIBUTION_LIMITS.hsa_family * inflationMultiplier;
+  const hsaBaseLimit = (incomeParams.filingStatus === 'married_jointly' || incomeParams.filingStatus === 'head_of_household')
+    ? CONTRIBUTION_LIMITS.hsa_family
+    : CONTRIBUTION_LIMITS.hsa_individual;
+  const adjustedHSALimit = hsaBaseLimit * inflationMultiplier;
   
   const projected401k = Math.min(
     incomeParams.preTaxContributions.traditional401k * preTaxGrowthMultiplier,

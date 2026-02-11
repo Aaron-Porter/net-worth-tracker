@@ -145,7 +145,8 @@ describe('SWR Calculations', () => {
 
     it('should calculate correct daily SWR', () => {
       const result = calculateSwrAmounts(1000000, 4)
-      expect(result.daily).toBeCloseTo(109.59, 1)
+      // $40,000 / 365.25 = $109.51
+      expect(result.daily).toBeCloseTo(109.51, 1)
     })
 
     it('should scale proportionally with net worth', () => {
@@ -176,7 +177,7 @@ describe('SWR Calculations', () => {
       expect(result.monthly.trace.name).toBe('Monthly SWR')
       
       expect(result.weekly.value).toBeCloseTo(769.23, 1)
-      expect(result.daily.value).toBeCloseTo(109.59, 1)
+      expect(result.daily.value).toBeCloseTo(109.51, 1)
     })
   })
 })
@@ -778,8 +779,9 @@ describe('Monthly Projections', () => {
     
     const projections = generateMonthlyProjections(startingNW, settings, 1)
     
-    // First month interest should be roughly 1% of starting balance
-    const expectedInterest = startingNW * (0.12 / 12)
+    // First month interest: true compound monthly rate from 12% annual
+    const monthlyRate = Math.pow(1 + 0.12, 1/12) - 1
+    const expectedInterest = startingNW * monthlyRate
     expect(projections[0].monthlyInterest).toBeCloseTo(expectedInterest, 2)
   })
 

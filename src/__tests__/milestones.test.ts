@@ -1356,8 +1356,8 @@ describe('Numerical Verification Tests', () => {
       // Weekly: $40,000 / 52 = $769.23
       expect(swr.weekly).toBeCloseTo(769.23, 2)
       
-      // Daily: $40,000 / 365 = $109.59
-      expect(swr.daily).toBeCloseTo(109.59, 2)
+      // Daily: $40,000 / 365.25 = $109.51
+      expect(swr.daily).toBeCloseTo(109.51, 2)
     })
   })
 
@@ -1793,13 +1793,13 @@ describe('Retirement Income Milestones', () => {
     
     it('should calculate correct years to milestone for different ages', () => {
       const settings = createMockSettings()
-      const projections = generateTestProjections(100000, settings)
+      const projections = generateTestProjections(250000, settings)
       const milestones = calculateFiMilestones(projections, settings, 1990)
-      
+
       const milestone30k = milestones.milestones.find(m => m.id === 'retirement_income_30k')
-      
-      // For a 35 year old with $100k, when would they reach $30k/year retirement income?
-      // It should be achievable (either now or in the future with continued savings)
+
+      // For a ~36 year old with $250k, when would they reach $30k/year retirement income (in today's dollars)?
+      // With correct inflation deflation over 29 years, this requires substantial NW at retirement
       expect(milestone30k?.year).not.toBeNull()
       
       if (milestone30k?.age) {

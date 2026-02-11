@@ -793,12 +793,12 @@ export function calculateSwrAmountsTN(
     category: 'swr',
   });
 
-  const threeSixtyFive = TrackedNumber.constant(365, 'Days per year');
-  const daily = annual.divide(threeSixtyFive, {
+  const daysPerYear = TrackedNumber.constant(365.25, 'Days per year');
+  const daily = annual.divide(daysPerYear, {
     name: 'Daily SWR',
     unit: '$',
     description: 'Daily safe withdrawal amount',
-    formula: 'Annual SWR ÷ 365',
+    formula: 'Annual SWR ÷ 365.25',
     category: 'swr',
   });
 

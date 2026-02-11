@@ -921,8 +921,8 @@ describe('Projection Generation', () => {
       });
       const result = generateMonthlyProjections(100000, zeroSpendSettings, 12);
 
-      // After 12 months of monthly compounding at 7%/12:
-      const monthlyRate = 0.07 / 12;
+      // After 12 months of true compound monthly rate from 7% annual:
+      const monthlyRate = Math.pow(1 + 0.07, 1/12) - 1;
       let expected = 100000;
       for (let i = 0; i < 12; i++) {
         expected += expected * monthlyRate;
@@ -1804,7 +1804,7 @@ describe('Cross-Calculation Consistency', () => {
     const swr = calculateSwrAmounts(1000000, 4);
     expect(swr.annual).toBeCloseTo(swr.monthly * 12, 2);
     expect(swr.annual).toBeCloseTo(swr.weekly * 52, 2);
-    expect(swr.annual).toBeCloseTo(swr.daily * 365, 2);
+    expect(swr.annual).toBeCloseTo(swr.daily * 365.25, 2);
   });
 
   it('Growth rates scale: perYear = 365.25*perDay = 8766*perHour', () => {
