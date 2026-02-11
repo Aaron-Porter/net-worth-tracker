@@ -90,32 +90,33 @@ export function generateTrackedDashboardValues(
     })
     .build(currentNetWorth.baseAmount);
 
-  // Appreciation trace
+  // Appreciation trace (compound interest)
+  const yearlyRate = scenario.currentRate / 100;
   const appreciationTracked = new CalculationBuilder('appreciation', 'Appreciation', 'net_worth')
-    .setDescription('The growth in your net worth from investment returns since your last entry')
-    .setFormula('Base Amount × Annual Rate × Time Elapsed')
+    .setDescription('The growth in your net worth from compound investment returns since your last entry')
+    .setFormula('Base Amount × ((1 + Rate)^Time − 1)')
     .setUnit('$')
-    .addInputWithSource('Base Amount', currentNetWorth.baseAmount, 'input', { 
-      unit: '$', 
-      description: 'Net worth at last entry' 
+    .addInputWithSource('Base Amount', currentNetWorth.baseAmount, 'input', {
+      unit: '$',
+      description: 'Net worth at last entry'
     })
-    .addSetting('Annual Return Rate', scenario.currentRate, 'currentRate', { 
-      unit: '%', 
-      description: 'Expected annual investment return' 
+    .addSetting('Annual Return Rate', scenario.currentRate, 'currentRate', {
+      unit: '%',
+      description: 'Expected annual investment return'
     })
-    .addInputWithSource('Time Elapsed', timeElapsedYears, 'calculated', { 
-      unit: 'years', 
-      description: 'Time since last entry' 
+    .addInputWithSource('Time Elapsed', timeElapsedYears, 'calculated', {
+      unit: 'years',
+      description: 'Time since last entry'
     })
     .addStep(
-      'Convert rate to decimal', 
-      `${scenario.currentRate}% ÷ 100 = ${(scenario.currentRate / 100).toFixed(4)}`, 
-      [], 
-      scenario.currentRate / 100
+      'Convert rate to decimal',
+      `${scenario.currentRate}% ÷ 100 = ${yearlyRate.toFixed(4)}`,
+      [],
+      yearlyRate
     )
     .addStep(
-      'Calculate appreciation',
-      `$${currentNetWorth.baseAmount.toLocaleString()} × ${(scenario.currentRate / 100).toFixed(4)} × ${timeElapsedYears.toFixed(6)} years`,
+      'Calculate compound appreciation',
+      `$${currentNetWorth.baseAmount.toLocaleString()} × ((1 + ${yearlyRate.toFixed(4)})^${timeElapsedYears.toFixed(6)} − 1)`,
       [],
       currentNetWorth.appreciation,
       '$'
@@ -123,19 +124,14 @@ export function generateTrackedDashboardValues(
     .build(currentNetWorth.appreciation);
 
   // Contributions trace
-  // When includeContributions is true, compute pro-rated contributions + growth on contributions
+  // When includeContributions is true, compute pro-rated contributions + compound growth
   // matching the formula in calculateRealTimeNetWorth (calculations.ts)
-  const yearlyRate = scenario.currentRate / 100;
-  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
-  const msRate = yearlyRate / msPerYear;
-  const elapsedMs = Date.now() - latestEntryTimestamp;
-
   let contributionsValue: number;
   if (includeContributions && scenario.yearlyContribution > 0) {
-    // Continuous contribution approximation
+    // Base contributions pro-rated for elapsed time
     contributionsValue = scenario.yearlyContribution * timeElapsedYears;
-    // Add average growth on contributions (half the time period)
-    contributionsValue += contributionsValue * msRate * (elapsedMs / 2);
+    // Contributions accrue compound growth for an average holding period of half the elapsed time
+    contributionsValue *= Math.pow(1 + yearlyRate, timeElapsedYears / 2);
   } else {
     contributionsValue = 0;
   }

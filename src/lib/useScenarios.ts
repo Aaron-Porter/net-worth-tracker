@@ -128,6 +128,10 @@ export interface UseScenariosReturn {
   // Projections - generated for all selected scenarios
   scenarioProjections: ScenarioProjection[];
   
+  // Contributions toggle for real-time net worth
+  includeContributions: boolean;
+  setIncludeContributions: (value: boolean) => void;
+
   // Net worth entries
   entries: NetWorthEntry[];
   latestEntry: NetWorthEntry | null;
@@ -217,6 +221,7 @@ export function useScenarios(): UseScenariosReturn {
   // Local profile state for controlled inputs
   const [localProfile, setLocalProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [includeContributions, setIncludeContributions] = useState(false);
   
   // Load profile from Convex
   useEffect(() => {
@@ -398,8 +403,8 @@ export function useScenarios(): UseScenariosReturn {
   // on top of stable projections, ticking every 50ms for the dashboard counter.
   const scenarioProjections = useMemo((): ScenarioProjection[] => {
     return stableProjections.map(sp => {
-      const currentNetWorth = calculateRealTimeNetWorth(latestEntry!, sp.scenarioSettings, false);
-      const growthRates = calculateGrowthRates(currentNetWorth.total, sp.scenarioSettings, false);
+      const currentNetWorth = calculateRealTimeNetWorth(latestEntry!, sp.scenarioSettings, includeContributions);
+      const growthRates = calculateGrowthRates(currentNetWorth.total, sp.scenarioSettings, includeContributions);
       const currentSpendForFi = calculateLevelBasedSpending(currentNetWorth.total, sp.scenarioSettings, 0);
       const currentFiTarget = calculateFiTarget(currentSpendForFi, sp.scenarioSettings.swr);
       const currentFiProgress = currentFiTarget > 0 ? (currentNetWorth.total / currentFiTarget) * 100 : 0;
@@ -422,7 +427,7 @@ export function useScenarios(): UseScenariosReturn {
         effectiveRate: sp.effectiveRate,
       };
     });
-  }, [stableProjections, realtimeTick, latestEntry]);
+  }, [stableProjections, realtimeTick, latestEntry, includeContributions]);
   
   const createScenario = useCallback(async (data: CreateScenarioData) => {
     return await createMutation(data);
@@ -481,6 +486,8 @@ export function useScenarios(): UseScenariosReturn {
     setSelected,
     reorderScenarios,
     moveScenario,
+    includeContributions,
+    setIncludeContributions,
     scenarioProjections,
     entries,
     latestEntry,

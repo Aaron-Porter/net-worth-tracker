@@ -1578,13 +1578,14 @@ export function calculateRealTimeNetWorth(
   const yearsElapsed = elapsed / MS_PER_YEAR;
 
   const yearlyRate = settings.currentRate / 100;
-  const msRate = yearlyRate / MS_PER_YEAR;
-  const appreciation = latestEntry.amount * msRate * elapsed;
+  // Use compound interest: appreciation = principal * ((1+r)^t - 1)
+  const appreciation = latestEntry.amount * (Math.pow(1 + yearlyRate, yearsElapsed) - 1);
 
   let contributions = 0;
   if (includeContributions && settings.yearlyContribution > 0) {
     contributions = settings.yearlyContribution * yearsElapsed;
-    contributions += contributions * msRate * (elapsed / 2);
+    // Contributions accrue growth for an average holding period of half the elapsed time
+    contributions *= Math.pow(1 + yearlyRate, yearsElapsed / 2);
   }
 
   return {
@@ -1854,7 +1855,10 @@ export function calculateLevelBasedSpending(
  * within the achievement year when a target is crossed.
  */
 function interpolateMonth(prevValue: number, currValue: number, target: number): number {
-  if (currValue <= prevValue) return 1;
+  // If values aren't increasing, or target is already exceeded by prev, default to January
+  if (currValue <= prevValue || target <= prevValue) return 1;
+  // If target exceeds the current value, the milestone wasn't actually reached this year
+  if (target > currValue) return 12;
   const fraction = (target - prevValue) / (currValue - prevValue);
   return Math.max(1, Math.min(12, Math.ceil(fraction * 12) || 1));
 }
@@ -2493,10 +2497,15 @@ export function generateProjections(
     // If dynamic projections are available, use their tax-aware savings calculations
     // Otherwise, use basic income-growth-adjusted calculation
     let yearAnnualSavings: number;
+    // Track actual out-of-pocket contributions separately from net savings
+    // This is used for crossover detection: "when did investment earnings exceed what I put in?"
+    let yearActualContributions: number;
 
     if (dynamicProjections && dynamicProjections[i]) {
       // Use tax-aware savings from dynamic projections
       yearAnnualSavings = dynamicProjections[i].totalSavings;
+      // Actual contributions = pre-tax + post-tax savings (clamped to 0 — withdrawals aren't contributions)
+      yearActualContributions = Math.max(0, dynamicProjections[i].totalSavings);
     } else {
       // Calculate contribution for this year, applying income growth if specified
       const growthMultiplier = incomeGrowthRate ? Math.pow(1 + incomeGrowthRate / 100, i) : 1;
@@ -2506,6 +2515,9 @@ export function generateProjections(
       // Can be negative if spending increase exceeds income growth - represents drawing from net worth
       const spendingIncrease = yearAnnualSpending - baseAnnualSpend;
       yearAnnualSavings = yearlyContributionGrown - spendingIncrease;
+      // Actual contributions are the grown base contribution (what you earned and set aside)
+      // Spending increases reduce savings but don't undo past contributions
+      yearActualContributions = Math.max(0, yearlyContributionGrown);
     }
 
     // Calculate this year's interest
@@ -2513,10 +2525,10 @@ export function generateProjections(
 
     // New net worth = previous + interest + savings for this year
     const yearNetWorth = previousNetWorth + yearInterest + yearAnnualSavings;
-    
+
     // Update cumulative trackers
     cumulativeInterest += yearInterest;
-    cumulativeContributed += yearAnnualSavings;
+    cumulativeContributed += yearActualContributions;
     
     // Calculate years from entry for reference
     const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999).getTime();
@@ -4240,19 +4252,27 @@ export function calculateStateTax(
 
 /**
  * Calculate FICA taxes (Social Security + Medicare) with detailed breakdown
+ *
+ * HSA contributions made through payroll reduce FICA wages because they are
+ * excluded from gross pay before FICA is calculated (IRC §3121(a)).
+ * 401(k) contributions do NOT reduce FICA — they only reduce federal/state income tax.
  */
 export function calculateFICATax(
-  grossIncome: number, 
-  filingStatus: FilingStatus
+  grossIncome: number,
+  filingStatus: FilingStatus,
+  hsaPayrollContributions: number = 0
 ): FICABreakdown {
+  // HSA payroll contributions reduce wages subject to FICA
+  const ficaWages = Math.max(0, grossIncome - hsaPayrollContributions);
+
   // Social Security (capped at wage base)
-  const socialSecurityWages = Math.min(grossIncome, SOCIAL_SECURITY_WAGE_CAP);
+  const socialSecurityWages = Math.min(ficaWages, SOCIAL_SECURITY_WAGE_CAP);
   const socialSecurityTax = socialSecurityWages * (SOCIAL_SECURITY_RATE / 100);
-  const wagesAboveSsCap = Math.max(0, grossIncome - SOCIAL_SECURITY_WAGE_CAP);
-  
+  const wagesAboveSsCap = Math.max(0, ficaWages - SOCIAL_SECURITY_WAGE_CAP);
+
   // Medicare base tax (no cap)
-  const medicareBaseTax = grossIncome * (MEDICARE_RATE / 100);
-  
+  const medicareBaseTax = ficaWages * (MEDICARE_RATE / 100);
+
   // Additional Medicare Tax threshold depends on filing status
   let additionalMedicareThreshold: number;
   switch (filingStatus) {
@@ -4265,9 +4285,9 @@ export function calculateFICATax(
     default:
       additionalMedicareThreshold = MEDICARE_ADDITIONAL_THRESHOLD_SINGLE;
   }
-  
+
   // Additional Medicare Tax (0.9% on wages above threshold)
-  const additionalMedicareWages = Math.max(0, grossIncome - additionalMedicareThreshold);
+  const additionalMedicareWages = Math.max(0, ficaWages - additionalMedicareThreshold);
   const additionalMedicareTax = additionalMedicareWages * (MEDICARE_ADDITIONAL_RATE / 100);
   
   const totalMedicareTax = medicareBaseTax + additionalMedicareTax;
@@ -4280,7 +4300,7 @@ export function calculateFICATax(
     socialSecurityWageCap: SOCIAL_SECURITY_WAGE_CAP,
     wagesAboveSsCap,
     
-    medicareWages: grossIncome,
+    medicareWages: ficaWages,
     medicareBaseRate: MEDICARE_RATE,
     medicareBaseTax,
     
@@ -4335,9 +4355,8 @@ export function calculateTaxes(
   
   // Calculate FICA with detailed breakdown
   // Note: FICA is calculated on gross wages, NOT reduced by 401k/IRA contributions
-  // However, HSA contributions through payroll DO reduce FICA taxes
-  // For simplicity, we're applying FICA to gross income
-  const ficaResult = calculateFICATax(grossIncome, filingStatus);
+  // However, HSA contributions through payroll DO reduce FICA wages (IRC §3121(a))
+  const ficaResult = calculateFICATax(grossIncome, filingStatus, preTaxContributions.hsa);
   
   // Calculate totals
   const totalIncomeTax = federalResult.tax + stateResult.tax;

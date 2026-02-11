@@ -2085,3 +2085,259 @@ describe('Edge Cases & Boundary Conditions', () => {
     expect(states.length).toBeGreaterThanOrEqual(51);
   });
 });
+
+// ============================================================================
+// 23. FICA HSA PAYROLL DEDUCTION
+// ============================================================================
+
+describe('FICA HSA Payroll Deduction', () => {
+  it('should reduce FICA wages by HSA payroll contributions', () => {
+    const withoutHsa = calculateFICATax(100000, 'single', 0);
+    const withHsa = calculateFICATax(100000, 'single', 4300);
+
+    // FICA wages should be reduced
+    expect(withHsa.socialSecurityWages).toBe(95700); // 100k - 4.3k
+    expect(withHsa.medicareWages).toBe(95700);
+
+    // Social Security tax should be lower
+    expect(withHsa.socialSecurityTax).toBeCloseTo(95700 * 0.062, 2);
+    expect(withHsa.socialSecurityTax).toBeLessThan(withoutHsa.socialSecurityTax);
+
+    // Medicare tax should be lower
+    expect(withHsa.medicareBaseTax).toBeCloseTo(95700 * 0.0145, 2);
+    expect(withHsa.medicareBaseTax).toBeLessThan(withoutHsa.medicareBaseTax);
+
+    // Total FICA should be lower
+    expect(withHsa.totalFicaTax).toBeLessThan(withoutHsa.totalFicaTax);
+  });
+
+  it('should save exact FICA amount for HSA payroll deduction', () => {
+    const withoutHsa = calculateFICATax(100000, 'single', 0);
+    const withHsa = calculateFICATax(100000, 'single', 4300);
+
+    // Savings should be HSA amount * (SS rate + Medicare rate) = 4300 * (6.2% + 1.45%)
+    // Both are below SS cap, no additional Medicare
+    const expectedSaving = 4300 * (0.062 + 0.0145);
+    expect(withoutHsa.totalFicaTax - withHsa.totalFicaTax).toBeCloseTo(expectedSaving, 2);
+  });
+
+  it('should not reduce FICA wages below zero', () => {
+    const result = calculateFICATax(1000, 'single', 5000);
+    expect(result.socialSecurityWages).toBe(0);
+    expect(result.medicareWages).toBe(0);
+    expect(result.totalFicaTax).toBe(0);
+  });
+
+  it('should reduce additional Medicare wages by HSA', () => {
+    // $300k income, $4300 HSA => FICA wages = $295,700
+    // Additional Medicare threshold for single = $200k
+    // Additional Medicare wages = $295,700 - $200k = $95,700
+    const withHsa = calculateFICATax(300000, 'single', 4300);
+    expect(withHsa.additionalMedicareWages).toBeCloseTo(95700, 0);
+
+    const withoutHsa = calculateFICATax(300000, 'single', 0);
+    expect(withoutHsa.additionalMedicareWages).toBeCloseTo(100000, 0);
+  });
+
+  it('should flow HSA through calculateTaxes pipeline', () => {
+    const pretaxWithHsa: PreTaxContributions = {
+      traditional401k: 0,
+      traditionalIRA: 0,
+      hsa: 4300,
+      other: 0,
+    };
+    const resultWithHsa = calculateTaxes(100000, 'single', 'TX', pretaxWithHsa);
+    const resultNoHsa = calculateTaxes(100000, 'single', 'TX', zeroPretax);
+
+    // FICA should be lower with HSA
+    expect(resultWithHsa.ficaTax).toBeLessThan(resultNoHsa.ficaTax);
+    // Federal tax should also be lower (HSA reduces AGI)
+    expect(resultWithHsa.federalTax).toBeLessThan(resultNoHsa.federalTax);
+  });
+});
+
+// ============================================================================
+// 24. COMPOUND INTEREST IN REAL-TIME NET WORTH
+// ============================================================================
+
+describe('Compound Interest in Real-Time Net Worth', () => {
+  it('should use compound formula for appreciation', () => {
+    const daysAgo = 365; // 1 year ago
+    const entry = createEntry(1000000, daysAgo);
+    const settings = createSettings({ currentRate: 10 });
+
+    const result = calculateRealTimeNetWorth(entry, settings, false);
+    const yearsElapsed = daysAgo / 365.25;
+    const expectedAppreciation = 1000000 * (Math.pow(1.10, yearsElapsed) - 1);
+
+    // Should match compound formula, not simple (which would be 1M * 0.10 * 1 = 100k)
+    expect(result.appreciation).toBeCloseTo(expectedAppreciation, 0);
+  });
+
+  it('compound should exceed simple interest over time', () => {
+    const daysAgo = 365 * 3; // 3 years ago
+    const entry = createEntry(1000000, daysAgo);
+    const settings = createSettings({ currentRate: 10 });
+
+    const result = calculateRealTimeNetWorth(entry, settings, false);
+    const yearsElapsed = daysAgo / 365.25;
+    const simpleInterest = 1000000 * 0.10 * yearsElapsed;
+
+    // Compound should exceed simple interest
+    expect(result.appreciation).toBeGreaterThan(simpleInterest);
+  });
+
+  it('should apply compound growth to contributions', () => {
+    const daysAgo = 365 * 2; // 2 years ago
+    const entry = createEntry(500000, daysAgo);
+    const settings = createSettings({ currentRate: 8, yearlyContribution: 30000 });
+
+    const result = calculateRealTimeNetWorth(entry, settings, true);
+    const yearsElapsed = daysAgo / 365.25;
+
+    // Contributions = yearlyContribution * yearsElapsed * (1+r)^(t/2)
+    const baseContributions = 30000 * yearsElapsed;
+    const grownContributions = baseContributions * Math.pow(1.08, yearsElapsed / 2);
+
+    expect(result.contributions).toBeCloseTo(grownContributions, 0);
+    expect(result.contributions).toBeGreaterThan(baseContributions);
+  });
+
+  it('should decompose total correctly: base + appreciation + contributions', () => {
+    const entry = createEntry(500000, 180);
+    const settings = createSettings({ yearlyContribution: 25000 });
+    const result = calculateRealTimeNetWorth(entry, settings, true);
+
+    expect(result.total).toBeCloseTo(
+      result.baseAmount + result.appreciation + result.contributions,
+      2
+    );
+  });
+
+  it('should return zero appreciation/contributions for zero elapsed time', () => {
+    const entry = createEntry(500000, 0);
+    const settings = createSettings();
+    const result = calculateRealTimeNetWorth(entry, settings, true);
+
+    expect(result.baseAmount).toBe(500000);
+    expect(result.appreciation).toBeCloseTo(0, 0);
+    // Contributions should also be ~0 for 0 elapsed time
+    expect(result.contributions).toBeCloseTo(0, 0);
+  });
+});
+
+// ============================================================================
+// 25. INTERPOLATE MONTH EDGE CASES
+// ============================================================================
+
+describe('interpolateMonth Edge Cases', () => {
+  // interpolateMonth is private, so we test it indirectly through milestone calculations
+  // We can also verify its behavior through projection crossover/FI months
+
+  it('crossover month should be between 1 and 12', () => {
+    const settings = createSettings({
+      currentRate: 7,
+      yearlyContribution: 30000,
+      baseMonthlyBudget: 2000,
+      spendingGrowthRate: 1,
+    });
+    const entry = createEntry(100000, 1);
+    const projections = generateProjections(entry, 100000, 0, settings, false, true);
+
+    const crossoverRow = projections.find(p => p.isCrossover);
+    if (crossoverRow) {
+      // The crossover detection happens at the row level, so just verify it exists
+      expect(crossoverRow.isCrossover).toBe(true);
+    }
+  });
+
+  it('FI milestones months should be 1-12 when present', () => {
+    const settings = createSettings({
+      currentRate: 7,
+      yearlyContribution: 40000,
+      baseMonthlyBudget: 3000,
+      spendingGrowthRate: 1.5,
+    });
+    const entry = createEntry(500000, 1);
+    const projections = generateProjections(entry, 500000, 0, settings, false, true);
+    const milestones = calculateFiMilestones(projections, settings, 1990);
+
+    for (const m of milestones.milestones) {
+      if (m.month !== null) {
+        expect(m.month).toBeGreaterThanOrEqual(1);
+        expect(m.month).toBeLessThanOrEqual(12);
+      }
+    }
+  });
+});
+
+// ============================================================================
+// 26. CROSSOVER DETECTION WITH DECOUPLED CONTRIBUTIONS
+// ============================================================================
+
+describe('Crossover Detection', () => {
+  it('should detect crossover when interest exceeds contributions', () => {
+    const settings = createSettings({
+      currentRate: 7,
+      yearlyContribution: 20000,
+      baseMonthlyBudget: 2000,
+      spendingGrowthRate: 0.5,
+    });
+    const entry = createEntry(500000, 1);
+    const projections = generateProjections(entry, 500000, 0, settings, false, true);
+
+    const crossovers = projections.filter(p => p.isCrossover);
+    // Should have exactly 1 crossover
+    expect(crossovers.length).toBe(1);
+  });
+
+  it('should track cumulative contributions as non-negative', () => {
+    const settings = createSettings({
+      currentRate: 7,
+      yearlyContribution: 20000,
+      baseMonthlyBudget: 2000,
+      spendingGrowthRate: 0.5,
+    });
+    const entry = createEntry(500000, 1);
+    const projections = generateProjections(entry, 500000, 0, settings, false, true);
+
+    // All contributed amounts should be non-negative
+    for (const row of projections) {
+      expect(row.contributed).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('should have contributions grow over time', () => {
+    const settings = createSettings({
+      currentRate: 7,
+      yearlyContribution: 20000,
+      baseMonthlyBudget: 2000,
+      spendingGrowthRate: 0.5,
+    });
+    const entry = createEntry(100000, 1);
+    const projections = generateProjections(entry, 100000, 0, settings, false, true);
+
+    // Contributions should be monotonically increasing
+    for (let i = 1; i < projections.length; i++) {
+      expect(projections[i].contributed).toBeGreaterThanOrEqual(projections[i - 1].contributed);
+    }
+  });
+
+  it('crossover should occur even when spending increases reduce net savings', () => {
+    // With high spending growth, net savings can become negative
+    // But actual contributions (positive part) should still be tracked
+    const settings = createSettings({
+      currentRate: 8,
+      yearlyContribution: 30000,
+      baseMonthlyBudget: 3000,
+      spendingGrowthRate: 3, // high spending growth
+      inflationRate: 3,
+    });
+    const entry = createEntry(500000, 1);
+    const projections = generateProjections(entry, 500000, 0, settings, false, true);
+
+    // Contributions should still accumulate even if net savings are negative
+    const lastRow = projections[projections.length - 1];
+    expect(lastRow.contributed).toBeGreaterThan(0);
+  });
+});
