@@ -1,5 +1,5 @@
 // Shared types used across extracted components
-export type Tab = 'dashboard' | 'entries' | 'projections' | 'scenarios'
+export type Tab = 'dashboard' | 'entries' | 'projections' | 'scenarios' | 'budget'
 
 export interface EntryBreakdown {
   cash: string;
