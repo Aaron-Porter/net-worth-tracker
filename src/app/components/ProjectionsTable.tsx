@@ -274,6 +274,9 @@ export function ProjectionsTable({
                     Net Worth
                   </th>
                   <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
+                    Change/{viewMode === 'monthly' ? 'mo' : 'yr'}
+                  </th>
+                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
                     Spending/{viewMode === 'monthly' ? 'mo' : 'yr'}
                   </th>
                   <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
@@ -541,6 +544,87 @@ export function ProjectionsTable({
                           )}
                           {isFiYear && <span className="ml-1 text-xs text-emerald-400">FI</span>}
                         </td>
+                        {/* Change */}
+                        {(() => {
+                          let changeValue = 0;
+                          let growthValue = 0;
+                          let contributionsValue = 0;
+
+                          if (row.isNow) {
+                            // "Now" row — show real-time change since last entry
+                            const appreciation = sp.currentNetWorth.appreciation;
+                            const contributions = sp.currentNetWorth.contributions;
+                            growthValue = appreciation;
+                            contributionsValue = contributions;
+                            changeValue = appreciation + contributions;
+                          } else if (viewMode === 'monthly' && sp.monthlyProjections?.length) {
+                            const monthData = sp.monthlyProjections.find(
+                              m => m.year === lookupYear && m.month === ((row.monthIndex || 0) + 1)
+                            );
+                            if (monthData) {
+                              growthValue = monthData.monthlyInterest;
+                              contributionsValue = monthData.monthlySavings;
+                              changeValue = monthData.monthlyInterest + monthData.monthlySavings;
+                            }
+                          } else {
+                            // Yearly view — compute delta from previous year
+                            const projections = sp.projections;
+                            const currentIdx = projections.findIndex(p => p.year === lookupYear);
+                            if (currentIdx >= 0) {
+                              const currentRow = projections[currentIdx];
+                              const prevNW = currentIdx > 0
+                                ? projections[currentIdx - 1].netWorth
+                                : sp.currentNetWorth.total;
+                              const prevCumulativeInterest = currentIdx > 0
+                                ? projections[currentIdx - 1].interest
+                                : 0;
+
+                              growthValue = currentRow.interest - prevCumulativeInterest;
+                              contributionsValue = currentRow.annualSavings;
+                              changeValue = currentRow.netWorth - prevNW;
+                            }
+                          }
+
+                          const isPositive = changeValue >= 0;
+
+                          return (
+                            <td className={`py-2 px-3 text-right font-mono ${
+                              isPositive ? 'text-emerald-400/80' : 'text-red-400/80'
+                            }`}>
+                              <SimpleTrackedValue
+                                value={changeValue}
+                                name={`Net Worth Change (${displayYearValue})`}
+                                description={`How net worth changed ${viewMode === 'monthly' ? 'this month' : 'this year'} — broken into growth and contributions`}
+                                formula="Growth + Contributions"
+                                inputs={[
+                                  { name: 'Growth (investment returns)', value: growthValue, unit: '$' },
+                                  { name: 'Contributions (savings)', value: contributionsValue, unit: '$' },
+                                ]}
+                                steps={[
+                                  {
+                                    description: 'Investment growth (interest/returns)',
+                                    formula: `${viewMode === 'monthly' ? 'Starting NW' : 'Prior NW'} × ${viewMode === 'monthly' ? 'Monthly' : 'Annual'} Return Rate`,
+                                    result: growthValue,
+                                    unit: '$',
+                                  },
+                                  {
+                                    description: 'Net contributions (savings after spending)',
+                                    formula: viewMode === 'monthly' ? 'Monthly Income − Monthly Spending' : 'Annual Income − Annual Spending',
+                                    result: contributionsValue,
+                                    unit: '$',
+                                  },
+                                  {
+                                    description: 'Total change',
+                                    formula: 'Growth + Contributions',
+                                    result: changeValue,
+                                    unit: '$',
+                                  },
+                                ]}
+                                className={`font-mono ${isPositive ? 'text-emerald-400/80' : 'text-red-400/80'}`}
+                              />
+                            </td>
+                          );
+                        })()}
                         {/* Spending */}
                         <td className="py-2 px-3 text-right font-mono text-rose-400/80">
                           {trackedSource?.trackedSpending ? (
