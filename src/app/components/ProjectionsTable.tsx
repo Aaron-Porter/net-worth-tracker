@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useCallback, useRef } from 'react'
 import {
   formatCurrency,
   calculateSwrAmounts,
@@ -11,6 +11,7 @@ import { TrackedNumber } from '../../lib/TrackedNumber'
 import { TrackedValue, SimpleTrackedValue } from './TrackedValue'
 import { MilestoneBadges } from './MilestoneBadges'
 import { useScenarios, ScenarioProjection } from '../../lib/useScenarios'
+import { ScrollArea } from '../../components/ui'
 
 export function ProjectionsTable({
   scenarioProjections,
@@ -26,6 +27,34 @@ export function ProjectionsTable({
   const [showYearlyDetail, setShowYearlyDetail] = useState(true);
   const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('yearly');
   const [coastTargetAge, setCoastTargetAge] = useState(65);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const resizingRef = useRef<{ col: string; startX: number; startWidth: number } | null>(null);
+
+  const handleResizeStart = useCallback((col: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    const th = (e.target as HTMLElement).closest('th');
+    if (!th) return;
+    const startWidth = th.getBoundingClientRect().width;
+    resizingRef.current = { col, startX: e.clientX, startWidth };
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const diff = ev.clientX - resizingRef.current.startX;
+      const newWidth = Math.max(60, resizingRef.current.startWidth + diff);
+      setColumnWidths(prev => ({ ...prev, [col]: newWidth }));
+    };
+    const onMouseUp = () => {
+      resizingRef.current = null;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, []);
 
   const primaryProjection = scenarioProjections[0];
 
@@ -200,6 +229,47 @@ export function ProjectionsTable({
     });
   }, [viewMode, primaryProjection.projections, primaryProjection.monthlyProjections, birthYear]);
 
+  const hasDynamicIncome = scenarioProjections.some(sp => sp.hasDynamicIncome);
+
+  // Column definitions for resize handles
+  const columns = useMemo(() => {
+    const cols: { id: string; label: string; align: 'left' | 'right'; minWidth: number }[] = [
+      { id: 'year', label: viewMode === 'monthly' ? 'Month' : 'Year', align: 'left', minWidth: 60 },
+    ];
+    if (birthDate) cols.push({ id: 'age', label: 'Age', align: 'left', minWidth: 50 });
+    cols.push(
+      { id: 'scenario', label: 'Scenario', align: 'left', minWidth: 80 },
+      { id: 'netWorth', label: 'Net Worth', align: 'right', minWidth: 90 },
+      { id: 'change', label: `Change/${viewMode === 'monthly' ? 'mo' : 'yr'}`, align: 'right', minWidth: 90 },
+      { id: 'spending', label: `Spending/${viewMode === 'monthly' ? 'mo' : 'yr'}`, align: 'right', minWidth: 90 },
+      { id: 'savings', label: `Savings/${viewMode === 'monthly' ? 'mo' : 'yr'}`, align: 'right', minWidth: 90 },
+      { id: 'swr', label: `SWR/${viewMode === 'monthly' ? 'mo' : 'yr'}`, align: 'right', minWidth: 80 },
+      { id: 'fi', label: 'FI %', align: 'right', minWidth: 70 },
+      { id: 'coast', label: 'Coast', align: 'right', minWidth: 80 },
+      { id: 'milestones', label: 'Milestones', align: 'left', minWidth: 100 },
+    );
+    if (hasDynamicIncome) {
+      cols.push(
+        { id: 'income', label: `Income/${viewMode === 'monthly' ? 'mo' : 'yr'}`, align: 'right', minWidth: 90 },
+        { id: 'taxes', label: `Taxes/${viewMode === 'monthly' ? 'mo' : 'yr'}`, align: 'right', minWidth: 90 },
+        { id: 'netIncome', label: `Net Income/${viewMode === 'monthly' ? 'mo' : 'yr'}`, align: 'right', minWidth: 90 },
+      );
+    }
+    return cols;
+  }, [viewMode, birthDate, hasDynamicIncome]);
+
+  const colStyle = (colId: string): React.CSSProperties | undefined => {
+    const w = columnWidths[colId];
+    return w ? { width: w, minWidth: w, maxWidth: w } : undefined;
+  };
+
+  const ResizeHandle = ({ colId }: { colId: string }) => (
+    <div
+      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-slate-500/50 active:bg-slate-400/50 z-20"
+      onMouseDown={(e) => handleResizeStart(colId, e)}
+    />
+  );
+
   return (
     <div className="flex-1 overflow-auto space-y-4">
       {/* Year-by-Year Detail Table */}
@@ -259,54 +329,20 @@ export function ProjectionsTable({
         </div>
 
         {showYearlyDetail && (
-          <div className="overflow-x-auto scrollbar-hide touch-pan-x">
-            <table className="w-full text-sm">
+          <ScrollArea className="max-h-[80vh]" orientation="both">
+            <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
               <thead className="sticky top-0 bg-slate-800 z-10">
                 <tr className="border-b border-slate-700">
-                  <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    {viewMode === 'monthly' ? 'Month' : 'Year'}
-                  </th>
-                  {birthDate && <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">Age</th>}
-                  <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    Scenario
-                  </th>
-                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    Net Worth
-                  </th>
-                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    Change/{viewMode === 'monthly' ? 'mo' : 'yr'}
-                  </th>
-                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    Spending/{viewMode === 'monthly' ? 'mo' : 'yr'}
-                  </th>
-                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    Savings/{viewMode === 'monthly' ? 'mo' : 'yr'}
-                  </th>
-                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    SWR/{viewMode === 'monthly' ? 'mo' : 'yr'}
-                  </th>
-                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    FI %
-                  </th>
-                  <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    Coast
-                  </th>
-                  <th className="text-left text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                    Milestones
-                  </th>
-                  {scenarioProjections.some(sp => sp.hasDynamicIncome) && (
-                    <>
-                      <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                        Income/{viewMode === 'monthly' ? 'mo' : 'yr'}
-                      </th>
-                      <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                        Taxes/{viewMode === 'monthly' ? 'mo' : 'yr'}
-                      </th>
-                      <th className="text-right text-slate-400 font-medium py-3 px-3 whitespace-nowrap">
-                        Net Income/{viewMode === 'monthly' ? 'mo' : 'yr'}
-                      </th>
-                    </>
-                  )}
+                  {columns.map(col => (
+                    <th
+                      key={col.id}
+                      className={`relative text-slate-400 font-medium py-3 px-3 whitespace-nowrap ${col.align === 'right' ? 'text-right' : 'text-left'}`}
+                      style={colStyle(col.id)}
+                    >
+                      {col.label}
+                      <ResizeHandle colId={col.id} />
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -506,8 +542,9 @@ export function ProjectionsTable({
                         {/* Year/Month - only show in first scenario row */}
                         {isFirstScenario && (
                           <td
-                            className={`py-2 px-3 font-medium align-top ${row.isNow ? 'text-cyan-400' : 'text-slate-300'}`}
+                            className={`py-2 px-3 font-medium truncate ${row.isNow ? 'text-cyan-400' : 'text-slate-300'}`}
                             rowSpan={row.isNow ? 1 : scenarioProjections.length}
+                            style={colStyle('year')}
                           >
                             {displayYearValue}
                           </td>
@@ -515,18 +552,19 @@ export function ProjectionsTable({
                         {/* Age - only show in first scenario row */}
                         {isFirstScenario && birthDate && (
                           <td
-                            className={`py-2 px-3 align-top ${row.isNow ? 'text-cyan-400/70' : 'text-slate-400'}`}
+                            className={`py-2 px-3 truncate ${row.isNow ? 'text-cyan-400/70' : 'text-slate-400'}`}
                             rowSpan={row.isNow ? 1 : scenarioProjections.length}
+                            style={colStyle('age')}
                           >
                             {row.age !== null && typeof row.age === 'number' ? Math.floor(row.age) : row.age}
                           </td>
                         )}
                         {/* Scenario name with color */}
-                        <td className={`py-2 px-3 text-sm font-medium ${row.isNow ? 'text-cyan-400/60' : ''}`} style={row.isNow ? undefined : { color: sp.scenario.color }}>
+                        <td className={`py-2 px-3 text-sm font-medium truncate ${row.isNow ? 'text-cyan-400/60' : ''}`} style={{ ...colStyle('scenario'), ...(row.isNow ? {} : { color: sp.scenario.color }) }}>
                           {row.isNow ? 'Current' : sp.scenario.name}
                         </td>
                         {/* Net Worth */}
-                        <td className="py-2 px-3 text-right font-mono" style={{ color: sp.scenario.color }}>
+                        <td className="py-2 px-3 text-right font-mono truncate" style={{ ...colStyle('netWorth'), color: sp.scenario.color }}>
                           {trackedSource?.trackedNetWorth ? (
                             <TrackedValue value={trackedSource.trackedNetWorth} className="font-mono" />
                           ) : (
@@ -588,9 +626,9 @@ export function ProjectionsTable({
                           const isPositive = changeValue >= 0;
 
                           return (
-                            <td className={`py-2 px-3 text-right font-mono ${
+                            <td className={`py-2 px-3 text-right font-mono truncate ${
                               isPositive ? 'text-emerald-400/80' : 'text-red-400/80'
-                            }`}>
+                            }`} style={colStyle('change')}>
                               <SimpleTrackedValue
                                 value={changeValue}
                                 name={`Net Worth Change (${displayYearValue})`}
@@ -626,7 +664,7 @@ export function ProjectionsTable({
                           );
                         })()}
                         {/* Spending */}
-                        <td className="py-2 px-3 text-right font-mono text-rose-400/80">
+                        <td className="py-2 px-3 text-right font-mono text-rose-400/80 truncate" style={colStyle('spending')}>
                           {trackedSource?.trackedSpending ? (
                             <TrackedValue value={trackedSource.trackedSpending} className="font-mono text-rose-400/80" />
                           ) : (
@@ -644,9 +682,9 @@ export function ProjectionsTable({
                           )}
                         </td>
                         {/* Savings */}
-                        <td className={`py-2 px-3 text-right font-mono ${
+                        <td className={`py-2 px-3 text-right font-mono truncate ${
                           savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'
-                        }`}>
+                        }`} style={colStyle('savings')}>
                           {trackedSource?.trackedSavings ? (
                             <TrackedValue value={trackedSource.trackedSavings} className={`font-mono ${savings > 0 ? 'text-emerald-400/80' : 'text-slate-500'}`} />
                           ) : (
@@ -663,9 +701,9 @@ export function ProjectionsTable({
                           )}
                         </td>
                         {/* SWR */}
-                        <td className={`py-2 px-3 text-right font-mono ${
+                        <td className={`py-2 px-3 text-right font-mono truncate ${
                           swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'
-                        }`}>
+                        }`} style={colStyle('swr')}>
                           {trackedSource?.trackedMonthlySwr ? (
                             <TrackedValue value={trackedSource.trackedMonthlySwr} className={`font-mono ${swrCoversSpend ? 'text-emerald-400' : 'text-amber-400/70'}`} />
                           ) : (
@@ -683,9 +721,9 @@ export function ProjectionsTable({
                           )}
                         </td>
                         {/* FI Progress */}
-                        <td className={`py-2 px-3 text-right font-mono ${
+                        <td className={`py-2 px-3 text-right font-mono truncate ${
                           fiProgress >= 100 ? 'text-emerald-400 font-semibold' : 'text-violet-400'
-                        }`}>
+                        }`} style={colStyle('fi')}>
                           {trackedSource?.trackedFiProgress ? (
                             <TrackedValue
                               value={trackedSource.trackedFiProgress}
@@ -797,7 +835,7 @@ export function ProjectionsTable({
                           };
 
                           return (
-                            <td className="py-2 px-3 text-right font-mono text-cyan-400/80">
+                            <td className="py-2 px-3 text-right font-mono text-cyan-400/80 truncate" style={colStyle('coast')}>
                               <TrackedValue
                                 value={coastWithSteps}
                                 className="font-mono text-cyan-400/80"
@@ -806,7 +844,7 @@ export function ProjectionsTable({
                           );
                         })()}
                         {/* Milestones */}
-                        <td className="py-2 px-3 text-left">
+                        <td className="py-2 px-3 text-left truncate" style={colStyle('milestones')}>
                           {row.isNow ? (
                             // "Now" row: show milestones already achieved
                             <MilestoneBadges
@@ -824,11 +862,11 @@ export function ProjectionsTable({
                           )}
                         </td>
                         {/* Income columns (only if any scenario has income data) */}
-                        {scenarioProjections.some(sp => sp.hasDynamicIncome) && (
+                        {hasDynamicIncome && (
                           <>
-                            <td className={`py-2 px-3 text-right font-mono ${
+                            <td className={`py-2 px-3 text-right font-mono truncate ${
                               hasIncome ? 'text-sky-400/80' : 'text-slate-500'
-                            }`}>
+                            }`} style={colStyle('income')}>
                               {hasIncome ? (
                                 trackedIncomeForDisplay ? (
                                   <TrackedValue value={trackedIncomeForDisplay} className="font-mono text-sky-400/80" />
@@ -848,9 +886,9 @@ export function ProjectionsTable({
                                 )
                               ) : '-'}
                             </td>
-                            <td className={`py-2 px-3 text-right font-mono ${
+                            <td className={`py-2 px-3 text-right font-mono truncate ${
                               hasTax ? 'text-red-400/80' : 'text-slate-500'
-                            }`}>
+                            }`} style={colStyle('taxes')}>
                               {hasTax ? (
                                 trackedTaxForDisplay ? (
                                   <TrackedValue value={trackedTaxForDisplay} className="font-mono text-red-400/80" />
@@ -870,9 +908,9 @@ export function ProjectionsTable({
                                 )
                               ) : '-'}
                             </td>
-                            <td className={`py-2 px-3 text-right font-mono ${
+                            <td className={`py-2 px-3 text-right font-mono truncate ${
                               hasNetIncome ? 'text-emerald-400/80' : 'text-slate-500'
-                            }`}>
+                            }`} style={colStyle('netIncome')}>
                               {hasNetIncome ? (
                                 trackedNetIncomeForDisplay ? (
                                   <TrackedValue value={trackedNetIncomeForDisplay} className="font-mono text-emerald-400/80" />
@@ -901,7 +939,7 @@ export function ProjectionsTable({
                 })}
               </tbody>
             </table>
-          </div>
+          </ScrollArea>
         )}
       </div>
     </div>
