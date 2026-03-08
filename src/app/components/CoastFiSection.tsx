@@ -12,7 +12,7 @@ import {
   createTrackedCoastInfo,
   createTrackedRetirementIncomeInfo,
 } from '../../lib/trackedScenarioValues'
-import { ScenarioProjection } from '../../lib/useScenarios'
+import type { ScenarioProjection } from '../../lib/machines/types'
 import {
   AreaChart,
   Area,

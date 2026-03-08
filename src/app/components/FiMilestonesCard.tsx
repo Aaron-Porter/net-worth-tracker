@@ -11,7 +11,7 @@ import { TrackedMilestoneRow } from './TrackedMilestoneRow'
 import {
   createTrackedRunwayInfo,
 } from '../../lib/trackedScenarioValues'
-import { ScenarioProjection } from '../../lib/useScenarios'
+import type { ScenarioProjection } from '../../lib/machines/types'
 
 interface FiMilestonesCardProps {
   primaryProjection: ScenarioProjection;

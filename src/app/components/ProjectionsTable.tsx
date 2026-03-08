@@ -10,7 +10,8 @@ import type { TrackedValue as TrackedValueType } from '../../lib/calculationTrac
 import { TrackedNumber } from '../../lib/TrackedNumber'
 import { TrackedValue, SimpleTrackedValue } from './TrackedValue'
 import { MilestoneBadges } from './MilestoneBadges'
-import { useScenarios, ScenarioProjection } from '../../lib/useScenarios'
+import type { ScenarioProjection } from '../../lib/machines/types'
+import type { NetWorthEntry } from '../../lib/calculations'
 
 export function ProjectionsTable({
   scenarioProjections,
@@ -19,7 +20,7 @@ export function ProjectionsTable({
 }: {
   scenarioProjections: ScenarioProjection[];
   birthDate: string;
-  latestEntry: ReturnType<typeof useScenarios>['latestEntry'];
+  latestEntry: NetWorthEntry | null;
 }) {
   const currentYear = new Date().getFullYear();
   const birthYear = birthDate ? new Date(birthDate).getFullYear() : null;

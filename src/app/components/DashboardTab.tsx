@@ -5,20 +5,17 @@ import {
   formatCurrency,
   getTimeSinceEntry,
   getEntryAllocation,
-  NetWorthEntry,
 } from '../../lib/calculations'
 import { TrackedValue, SimpleTrackedValue } from './TrackedValue'
 import { generateTrackedDashboardValues } from '../../lib/trackedScenarioValues'
-import { useScenarios, Scenario, ScenarioProjection } from '../../lib/useScenarios'
+import { useFinancialSelector } from '../../lib/hooks/useFinancialActor'
+import { useRealtimeNetWorth } from '../../lib/hooks/useRealtimeNetWorth'
+import type { ScenarioProjection, StableProjectionResult } from '../../lib/machines/types'
 import { CoastFiSection } from './CoastFiSection'
 import { FiMilestonesCard } from './FiMilestonesCard'
 import { Tab } from '../lib/helpers'
 
 interface DashboardTabProps {
-  latestEntry: ReturnType<typeof useScenarios>['latestEntry'];
-  entries: NetWorthEntry[];
-  primaryProjection: ScenarioProjection | null;
-  selectedScenarios: Scenario[];
   setActiveTab: (tab: Tab) => void;
 }
 
@@ -34,14 +31,51 @@ function IconBadge({ color, children }: { color: string; children: React.ReactNo
   );
 }
 
-export function DashboardTab({
-  latestEntry,
-  entries,
-  primaryProjection,
-  selectedScenarios,
-  setActiveTab,
-}: DashboardTabProps) {
+/** Assemble a full ScenarioProjection from stable data + real-time data */
+function assembleProjection(
+  stable: StableProjectionResult,
+  realtimeData: ReturnType<typeof useRealtimeNetWorth>,
+): ScenarioProjection {
+  return {
+    scenario: stable.scenario,
+    projections: stable.projections,
+    levelInfo: stable.levelInfo,
+    growthRates: realtimeData.growthRates,
+    currentNetWorth: realtimeData.currentNetWorth,
+    fiYear: stable.fiYear,
+    fiAge: stable.fiAge,
+    crossoverYear: stable.crossoverYear,
+    currentFiProgress: realtimeData.currentFiProgress,
+    currentMonthlySwr: stable.currentMonthlySwr,
+    dynamicProjections: stable.dynamicProjections,
+    hasDynamicIncome: stable.hasDynamicIncome,
+    fiMilestones: stable.fiMilestones,
+    monthlyProjections: stable.monthlyProjections,
+    effectiveRate: stable.effectiveRate,
+  };
+}
+
+export function DashboardTab({ setActiveTab }: DashboardTabProps) {
   const [includeSavings, setIncludeSavings] = useState(false);
+
+  // Granular selectors — only re-render when these change
+  const latestEntry = useFinancialSelector(s => s.context.entries[0] ?? null);
+  const entries = useFinancialSelector(s => s.context.entries);
+  const primaryStable = useFinancialSelector(s => s.context.stableProjections[0] ?? null);
+
+  // Local real-time ticker — ONLY this component ticks at 50ms
+  const realtimeData = useRealtimeNetWorth(
+    latestEntry,
+    primaryStable?.scenarioSettings ?? null,
+    includeSavings,
+    true, // always active when dashboard is mounted
+  );
+
+  // Assemble full projection for sub-components that need the combined type
+  const primaryProjection = useMemo(() => {
+    if (!primaryStable) return null;
+    return assembleProjection(primaryStable, realtimeData);
+  }, [primaryStable, realtimeData]);
 
   // Generate tracked values for calculation transparency
   const trackedValues = useMemo(() => {
