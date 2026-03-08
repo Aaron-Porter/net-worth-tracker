@@ -23,6 +23,15 @@ export default defineSchema({
     debts: v.optional(v.number()),       // positive = amount owed
   }).index("by_user", ["userId"]),
 
+  // Budget categories for the budget modeling tool
+  budgetCategories: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    monthlyAmount: v.number(),
+    color: v.string(),
+    order: v.number(),
+  }).index("by_user", ["userId"]),
+
   // Scenarios are the primary entity - each contains a complete set of financial assumptions
   scenarios: defineTable({
     userId: v.id("users"),

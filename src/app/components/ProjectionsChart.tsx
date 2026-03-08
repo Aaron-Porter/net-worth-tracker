@@ -8,6 +8,10 @@ import { UnifiedChartTooltip } from './UnifiedChartTooltip'
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -103,6 +107,10 @@ export function ProjectionsChart({
           yearData[`${sp.scenario.name}_spending`] = proj.monthlySpend;
           yearData[`${sp.scenario.name}_savings`] = proj.annualSavings / 12; // Annual to monthly
         }
+        // NW Change breakdown: growth vs contributions
+        yearData[`${sp.scenario.name}_growth`] = proj.yearlyInterest;
+        yearData[`${sp.scenario.name}_contributions`] = proj.yearlyContributions;
+        yearData[`${sp.scenario.name}_nwChange`] = proj.yearlyInterest + proj.yearlyContributions;
         // Embed pre-built traces for chart tooltip drill-down
         if (proj.trackedFiProgress) yearData[`${sp.scenario.name}_trackedFiProgress`] = proj.trackedFiProgress;
         if (proj.trackedNetWorth) yearData[`${sp.scenario.name}_trackedNetWorth`] = proj.trackedNetWorth;
@@ -336,6 +344,140 @@ export function ProjectionsChart({
               </div>
             );
           })}
+        </div>
+
+        {/* Contributions vs Growth Stacked Area Chart */}
+        <div className="bg-[#0f1629] rounded-xl p-4 border border-slate-800">
+          <h4 className="text-sm font-medium mb-3 flex items-center gap-3">
+            <span className="text-slate-200">Yearly Net Worth Change</span>
+            <span className="flex items-center gap-1.5 text-xs">
+              <span className="w-2.5 h-2.5 rounded-sm bg-sky-400/80 inline-block" />
+              <span className="text-sky-400/80">Growth</span>
+            </span>
+            <span className="flex items-center gap-1.5 text-xs">
+              <span className="w-2.5 h-2.5 rounded-sm bg-violet-400/80 inline-block" />
+              <span className="text-violet-400/80">Contributions</span>
+            </span>
+          </h4>
+          <div className="w-full h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={displayData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="year" stroke="#94a3b8" fontSize={12} />
+                <YAxis
+                  stroke="#94a3b8"
+                  fontSize={12}
+                  tickFormatter={(v) => v >= 1000000 ? `$${(v/1000000).toFixed(1)}M` : v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v}`}
+                />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload || payload.length === 0) return null;
+                    // Group by scenario
+                    const scenarioData = new Map<string, { growth: number; contributions: number; color: string }>();
+                    payload.forEach((item: any) => {
+                      const match = item.dataKey?.match(/^(.+)_(growth|contributions)$/);
+                      if (match) {
+                        const [, scenarioName, type] = match;
+                        if (!scenarioData.has(scenarioName)) {
+                          scenarioData.set(scenarioName, { growth: 0, contributions: 0, color: '' });
+                        }
+                        const d = scenarioData.get(scenarioName)!;
+                        if (type === 'growth') {
+                          d.growth = item.value ?? 0;
+                          d.color = item.stroke || item.fill || '#94a3b8';
+                        } else {
+                          d.contributions = item.value ?? 0;
+                        }
+                      }
+                    });
+                    return (
+                      <div className="bg-slate-900 border border-slate-600 rounded-lg p-3 shadow-xl">
+                        <p className="text-slate-400 text-sm font-medium mb-2">Year {label}</p>
+                        <div className="space-y-2">
+                          {Array.from(scenarioData.entries()).map(([name, d]) => {
+                            const total = d.growth + d.contributions;
+                            const growthPct = total !== 0 ? ((d.growth / total) * 100).toFixed(0) : '0';
+                            return (
+                              <div key={name} className="space-y-1">
+                                {scenarioData.size > 1 && (
+                                  <p className="text-xs font-medium" style={{ color: d.color }}>{name}</p>
+                                )}
+                                <div className="flex justify-between gap-4 text-xs">
+                                  <span className="text-slate-400">Total Change</span>
+                                  <span className="font-mono text-slate-200">{formatCurrency(total)}</span>
+                                </div>
+                                <div className="flex justify-between gap-4 text-xs">
+                                  <span className="text-sky-400">Growth ({growthPct}%)</span>
+                                  <span className="font-mono text-sky-400">{formatCurrency(d.growth)}</span>
+                                </div>
+                                <div className="flex justify-between gap-4 text-xs">
+                                  <span className="text-violet-400">Contributions ({100 - Number(growthPct)}%)</span>
+                                  <span className="font-mono text-violet-400">{formatCurrency(d.contributions)}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+                {/* FI year marker */}
+                {scenarioProjections[0]?.fiYear && (
+                  <ReferenceLine
+                    x={scenarioProjections[0].fiYear}
+                    stroke="#10b981"
+                    strokeDasharray="5 5"
+                    strokeOpacity={0.6}
+                    label={{
+                      value: 'FI',
+                      position: 'top',
+                      fill: '#10b981',
+                      fontSize: 10
+                    }}
+                  />
+                )}
+                {/* Crossover year marker */}
+                {scenarioProjections[0]?.crossoverYear && (
+                  <ReferenceLine
+                    x={scenarioProjections[0].crossoverYear}
+                    stroke="#f59e0b"
+                    strokeDasharray="5 5"
+                    strokeOpacity={0.6}
+                    label={{
+                      value: 'Crossover',
+                      position: 'top',
+                      fill: '#f59e0b',
+                      fontSize: 10
+                    }}
+                  />
+                )}
+                {/* Render stacked areas for each scenario */}
+                {scenarioProjections.map((sp) => (
+                  <React.Fragment key={sp.scenario._id}>
+                    <Area
+                      type="monotone"
+                      dataKey={`${sp.scenario.name}_growth`}
+                      name={`${sp.scenario.name} Growth`}
+                      stackId={sp.scenario.name}
+                      stroke="#0ea5e9"
+                      fill="#0ea5e980"
+                      isAnimationActive={false}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey={`${sp.scenario.name}_contributions`}
+                      name={`${sp.scenario.name} Contributions`}
+                      stackId={sp.scenario.name}
+                      stroke="#8b5cf6"
+                      fill="#8b5cf680"
+                      isAnimationActive={false}
+                    />
+                  </React.Fragment>
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
             {/* Year Range Slider Controls */}

@@ -18,13 +18,15 @@ import { DashboardTab } from './DashboardTab'
 import { EntriesTab } from './EntriesTab'
 import { ProjectionsTab } from './ProjectionsTab'
 import { ScenariosTab } from './ScenariosTab'
-import { Tab } from '../lib/helpers'
+import { BudgetTab } from './BudgetTab'
+import { Tab, EntryBreakdown } from '../lib/helpers'
 
 const tabs: { id: Tab; label: string; accent: string }[] = [
   { id: 'dashboard', label: 'Dashboard', accent: 'emerald' },
   { id: 'entries', label: 'Entries', accent: 'emerald' },
   { id: 'projections', label: 'Projections', accent: 'emerald' },
   { id: 'scenarios', label: 'Scenarios', accent: 'violet' },
+  { id: 'budget', label: 'Budget', accent: 'amber' },
 ];
 
 function AuthenticatedAppInner() {
@@ -122,10 +124,20 @@ function AuthenticatedAppInner() {
           <div className="flex gap-0.5 items-center min-w-0 touch-pan-x">
             {tabs.map(tab => {
               const isActive = activeTab === tab.id;
-              const colorClass = tab.accent === 'violet'
-                ? (isActive ? 'text-violet-400' : 'text-slate-500 hover:text-slate-300')
-                : (isActive ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300');
-              const barColor = tab.accent === 'violet' ? 'bg-violet-400' : 'bg-emerald-400';
+              const activeColorMap: Record<string, string> = {
+                emerald: 'text-emerald-400',
+                violet: 'text-violet-400',
+                amber: 'text-amber-400',
+              };
+              const barColorMap: Record<string, string> = {
+                emerald: 'bg-emerald-400',
+                violet: 'bg-violet-400',
+                amber: 'bg-amber-400',
+              };
+              const colorClass = isActive
+                ? (activeColorMap[tab.accent] ?? 'text-emerald-400')
+                : 'text-slate-500 hover:text-slate-300';
+              const barColor = barColorMap[tab.accent] ?? 'bg-emerald-400';
               return (
                 <button
                   key={tab.id}
@@ -185,6 +197,13 @@ function AuthenticatedAppInner() {
       {/* Scenarios Tab */}
       {activeTab === 'scenarios' && (
         <ScenariosTab />
+      )}
+
+      {/* Budget Tab */}
+      {activeTab === 'budget' && (
+        <BudgetTab
+          setActiveTab={setActiveTab}
+        />
       )}
     </main>
   )

@@ -12,6 +12,7 @@ import { useFinancialSelector } from '../../lib/hooks/useFinancialActor'
 import { useRealtimeNetWorth } from '../../lib/hooks/useRealtimeNetWorth'
 import type { ScenarioProjection, StableProjectionResult } from '../../lib/machines/types'
 import { CoastFiSection } from './CoastFiSection'
+import { MilestoneProgressCard } from './MilestoneProgressCard'
 import { FiMilestonesCard } from './FiMilestonesCard'
 import { Tab } from '../lib/helpers'
 
@@ -377,6 +378,11 @@ export function DashboardTab({ setActiveTab }: DashboardTabProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Milestone Progress Card - prominent next milestone tracker */}
+      {latestEntry && primaryProjection && (
+        <MilestoneProgressCard primaryProjection={primaryProjection} />
       )}
 
       {/* Coast FI Section */}
