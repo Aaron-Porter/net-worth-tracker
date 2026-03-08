@@ -582,19 +582,17 @@ export function ProjectionsTable({
                           )}
                           {isFiYear && <span className="ml-1 text-xs text-emerald-400">FI</span>}
                         </td>
-                        {/* Change */}
+                        {/* Change - contributions vs growth breakdown */}
                         {(() => {
-                          let changeValue = 0;
                           let growthValue = 0;
                           let contributionsValue = 0;
 
                           if (row.isNow) {
-                            // "Now" row — show real-time change since last entry
-                            const appreciation = sp.currentNetWorth.appreciation;
-                            const contributions = sp.currentNetWorth.contributions;
-                            growthValue = appreciation;
-                            contributionsValue = contributions;
-                            changeValue = appreciation + contributions;
+                            const firstRow = sp.projections[0];
+                            if (firstRow) {
+                              growthValue = firstRow.yearlyInterest;
+                              contributionsValue = firstRow.yearlyContributions;
+                            }
                           } else if (viewMode === 'monthly' && sp.monthlyProjections?.length) {
                             const monthData = sp.monthlyProjections.find(
                               m => m.year === lookupYear && m.month === ((row.monthIndex || 0) + 1)
@@ -602,64 +600,65 @@ export function ProjectionsTable({
                             if (monthData) {
                               growthValue = monthData.monthlyInterest;
                               contributionsValue = monthData.monthlySavings;
-                              changeValue = monthData.monthlyInterest + monthData.monthlySavings;
                             }
                           } else {
-                            // Yearly view — compute delta from previous year
-                            const projections = sp.projections;
-                            const currentIdx = projections.findIndex(p => p.year === lookupYear);
-                            if (currentIdx >= 0) {
-                              const currentRow = projections[currentIdx];
-                              const prevNW = currentIdx > 0
-                                ? projections[currentIdx - 1].netWorth
-                                : sp.currentNetWorth.total;
-                              const prevCumulativeInterest = currentIdx > 0
-                                ? projections[currentIdx - 1].interest
-                                : 0;
-
-                              growthValue = currentRow.interest - prevCumulativeInterest;
-                              contributionsValue = currentRow.annualSavings;
-                              changeValue = currentRow.netWorth - prevNW;
+                            const sRow = sp.projections.find(p => p.year === lookupYear);
+                            if (sRow) {
+                              growthValue = sRow.yearlyInterest;
+                              contributionsValue = sRow.yearlyContributions;
                             }
                           }
-
+                          const changeValue = growthValue + contributionsValue;
+                          const growthPct = changeValue !== 0 ? Math.abs(growthValue / changeValue) * 100 : 0;
+                          const contribPct = changeValue !== 0 ? Math.abs(contributionsValue / changeValue) * 100 : 0;
                           const isPositive = changeValue >= 0;
 
                           return (
                             <td className={`py-2 px-3 text-right font-mono truncate ${
                               isPositive ? 'text-emerald-400/80' : 'text-red-400/80'
                             }`} style={colStyle('change')}>
-                              <SimpleTrackedValue
-                                value={changeValue}
-                                name={`Net Worth Change (${displayYearValue})`}
-                                description={`How net worth changed ${viewMode === 'monthly' ? 'this month' : 'this year'} — broken into growth and contributions`}
-                                formula="Growth + Contributions"
-                                inputs={[
-                                  { name: 'Growth (investment returns)', value: growthValue, unit: '$' },
-                                  { name: 'Contributions (savings)', value: contributionsValue, unit: '$' },
-                                ]}
-                                steps={[
-                                  {
-                                    description: 'Investment growth (interest/returns)',
-                                    formula: `${viewMode === 'monthly' ? 'Starting NW' : 'Prior NW'} × ${viewMode === 'monthly' ? 'Monthly' : 'Annual'} Return Rate`,
-                                    result: growthValue,
-                                    unit: '$',
-                                  },
-                                  {
-                                    description: 'Net contributions (savings after spending)',
-                                    formula: viewMode === 'monthly' ? 'Monthly Income − Monthly Spending' : 'Annual Income − Annual Spending',
-                                    result: contributionsValue,
-                                    unit: '$',
-                                  },
-                                  {
-                                    description: 'Total change',
-                                    formula: 'Growth + Contributions',
-                                    result: changeValue,
-                                    unit: '$',
-                                  },
-                                ]}
-                                className={`font-mono ${isPositive ? 'text-emerald-400/80' : 'text-red-400/80'}`}
-                              />
+                              <div className="flex flex-col items-end gap-0.5">
+                                <SimpleTrackedValue
+                                  value={changeValue}
+                                  name={`Net Worth Change (${displayYearValue})`}
+                                  description={`How net worth changed ${viewMode === 'monthly' ? 'this month' : 'this year'} — broken into growth and contributions`}
+                                  formula="Growth + Contributions"
+                                  inputs={[
+                                    { name: 'Growth (investment returns)', value: growthValue, unit: '$' },
+                                    { name: 'Contributions (savings)', value: contributionsValue, unit: '$' },
+                                  ]}
+                                  steps={[
+                                    {
+                                      description: 'Investment growth (interest/returns)',
+                                      formula: `${viewMode === 'monthly' ? 'Starting NW' : 'Prior NW'} × ${viewMode === 'monthly' ? 'Monthly' : 'Annual'} Return Rate`,
+                                      result: growthValue,
+                                      unit: '$',
+                                    },
+                                    {
+                                      description: 'Net contributions (savings after spending)',
+                                      formula: viewMode === 'monthly' ? 'Monthly Income − Monthly Spending' : 'Annual Income − Annual Spending',
+                                      result: contributionsValue,
+                                      unit: '$',
+                                    },
+                                  ]}
+                                  className={`font-mono ${isPositive ? 'text-emerald-400/80' : 'text-red-400/80'}`}
+                                />
+                                <div className="flex items-center gap-1.5 text-[10px]">
+                                  <span className="text-sky-400/70" title="Growth (interest)">
+                                    {formatCurrency(growthValue)}
+                                  </span>
+                                  <span className="text-slate-600">/</span>
+                                  <span className={contributionsValue >= 0 ? 'text-violet-400/70' : 'text-rose-400/70'} title="Contributions">
+                                    {formatCurrency(contributionsValue)}
+                                  </span>
+                                </div>
+                                {changeValue > 0 && (
+                                  <div className="w-full h-1 rounded-full overflow-hidden bg-slate-700 flex" style={{ minWidth: '60px' }}>
+                                    <div className="h-full bg-sky-400/60 rounded-l-full" style={{ width: `${growthPct}%` }} />
+                                    <div className="h-full bg-violet-400/60 rounded-r-full" style={{ width: `${contribPct}%` }} />
+                                  </div>
+                                )}
+                              </div>
                             </td>
                           );
                         })()}

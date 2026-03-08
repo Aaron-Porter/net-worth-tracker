@@ -133,6 +133,8 @@ export interface ProjectionRow {
   fiProgress: number;         // Percentage toward FI (0-100+)
   coastFiYear: number | null;
   coastFiAge: number | null;
+  yearlyInterest: number;     // Interest earned this specific year
+  yearlyContributions: number; // Contributions added this specific year (same as annualSavings)
   isFiYear: boolean;          // First year where SWR covers expenses
   isCrossover: boolean;       // First year where interest > contributions
   swrCoversSpend: boolean;    // Whether SWR covers monthly spend
@@ -2644,6 +2646,8 @@ export function generateProjections(
       fiProgress,
       coastFiYear,
       coastFiAge: coastFiYear && birthYear ? coastFiYear - birthYear : null,
+      yearlyInterest: yearInterest,
+      yearlyContributions: yearAnnualSavings,
       isFiYear,
       // Tax information from dynamic projections
       grossIncome: dynamicRow?.grossIncome,
@@ -2893,6 +2897,8 @@ export function generateProjectionsWithMonthlySpending(
       fiProgress,
       coastFiYear: null, // TODO: Calculate if needed
       coastFiAge: null,
+      yearlyInterest: yearInterest,
+      yearlyContributions: yearSavings,
       isFiYear,
       isCrossover,
       swrCoversSpend,
