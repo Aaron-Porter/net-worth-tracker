@@ -1,11 +1,19 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useMemo, useEffect, useCallback } from 'react'
 import { useMutation } from 'convex/react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { api } from '../../../convex/_generated/api'
 import { Id } from '../../../convex/_generated/dataModel'
-import { useScenarios } from '../../lib/useScenarios'
+import {
+  ActorProvider,
+  useFinancialActor,
+  useFinancialSelector,
+  useUIActor,
+  useUISelector,
+} from '../../lib/hooks/useFinancialActor'
+import { useConvexBridge } from '../../lib/hooks/useConvexBridge'
+import { useScenarioActions } from '../../lib/hooks/useScenarioActions'
 import { DashboardTab } from './DashboardTab'
 import { EntriesTab } from './EntriesTab'
 import { ProjectionsTab } from './ProjectionsTab'
@@ -21,69 +29,86 @@ const tabs: { id: Tab; label: string; accent: string }[] = [
   { id: 'budget', label: 'Budget', accent: 'amber' },
 ];
 
-export function AuthenticatedApp() {
+function AuthenticatedAppInner() {
   const { signOut } = useAuthActions()
+  const financialActor = useFinancialActor()
+  const uiActor = useUIActor()
 
-  // Use scenarios hook - the primary source of truth
-  const scenariosHook = useScenarios()
+  // Bridge Convex queries → XState machine
+  useConvexBridge(financialActor)
 
-  // Mutations
+  // Granular subscriptions — only re-render when these specific values change
+  const isLoading = useFinancialSelector(s => s.context.isLoading)
+  const scenarioCount = useFinancialSelector(s => s.context.scenarios.length)
+  const selectedCount = useFinancialSelector(s => s.context.selectedScenarios.length)
+  const hasScenarios = useFinancialSelector(s => s.context.scenarios.length > 0)
+
+  const activeTab = useUISelector(s => s.context.activeTab)
+  const entryBreakdown = useUISelector(s => s.context.entryBreakdown)
+  const projectionsView = useUISelector(s => s.context.projectionsView)
+
+  // Scenario actions (mutations)
+  const actions = useScenarioActions()
+
+  // Entry mutations
   const addEntry = useMutation(api.entries.add)
   const removeEntry = useMutation(api.entries.remove)
 
-  // UI state
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard')
-  const [projectionsView, setProjectionsView] = useState<'table' | 'chart'>('table')
-  const [entryBreakdown, setEntryBreakdown] = useState<EntryBreakdown>({
-    cash: '', retirement: '', hsa: '', brokerage: '', debts: '',
-  });
-
-  // Get the primary scenario (first selected) for dashboard display
-  const primaryProjection = scenariosHook.scenarioProjections[0] || null;
-
   // Create default scenario if user has none
   useEffect(() => {
-    if (!scenariosHook.isLoading && !scenariosHook.hasScenarios) {
-      scenariosHook.createDefaultScenario();
+    if (!isLoading && !hasScenarios) {
+      actions.createDefaultScenario()
     }
-  }, [scenariosHook.isLoading, scenariosHook.hasScenarios, scenariosHook]);
+  }, [isLoading, hasScenarios, actions])
+
+  const setActiveTab = useCallback((tab: Tab) => {
+    uiActor.send({ type: 'SET_TAB', tab })
+  }, [uiActor])
+
+  const setProjectionsView = useCallback((view: 'table' | 'chart') => {
+    uiActor.send({ type: 'SET_PROJECTIONS_VIEW', view })
+  }, [uiActor])
+
+  const setEntryBreakdown = useCallback((breakdown: typeof entryBreakdown) => {
+    uiActor.send({ type: 'SET_ENTRY_BREAKDOWN', breakdown })
+  }, [uiActor])
 
   const entryTotal = useMemo(() => {
-    const cash = parseFloat(entryBreakdown.cash.replace(/,/g, '')) || 0;
-    const retirement = parseFloat(entryBreakdown.retirement.replace(/,/g, '')) || 0;
-    const hsa = parseFloat(entryBreakdown.hsa.replace(/,/g, '')) || 0;
-    const brokerage = parseFloat(entryBreakdown.brokerage.replace(/,/g, '')) || 0;
-    const debts = parseFloat(entryBreakdown.debts.replace(/,/g, '')) || 0;
-    return cash + retirement + hsa + brokerage - debts;
-  }, [entryBreakdown]);
+    const cash = parseFloat(entryBreakdown.cash.replace(/,/g, '')) || 0
+    const retirement = parseFloat(entryBreakdown.retirement.replace(/,/g, '')) || 0
+    const hsa = parseFloat(entryBreakdown.hsa.replace(/,/g, '')) || 0
+    const brokerage = parseFloat(entryBreakdown.brokerage.replace(/,/g, '')) || 0
+    const debts = parseFloat(entryBreakdown.debts.replace(/,/g, '')) || 0
+    return cash + retirement + hsa + brokerage - debts
+  }, [entryBreakdown])
 
-  const handleAddEntry = async () => {
-    const cash = parseFloat(entryBreakdown.cash.replace(/,/g, '')) || 0;
-    const retirement = parseFloat(entryBreakdown.retirement.replace(/,/g, '')) || 0;
-    const hsa = parseFloat(entryBreakdown.hsa.replace(/,/g, '')) || 0;
-    const brokerage = parseFloat(entryBreakdown.brokerage.replace(/,/g, '')) || 0;
-    const debts = parseFloat(entryBreakdown.debts.replace(/,/g, '')) || 0;
-    const amount = cash + retirement + hsa + brokerage - debts;
-    if (amount <= 0) return;
+  const handleAddEntry = useCallback(async () => {
+    const cash = parseFloat(entryBreakdown.cash.replace(/,/g, '')) || 0
+    const retirement = parseFloat(entryBreakdown.retirement.replace(/,/g, '')) || 0
+    const hsa = parseFloat(entryBreakdown.hsa.replace(/,/g, '')) || 0
+    const brokerage = parseFloat(entryBreakdown.brokerage.replace(/,/g, '')) || 0
+    const debts = parseFloat(entryBreakdown.debts.replace(/,/g, '')) || 0
+    const amount = cash + retirement + hsa + brokerage - debts
+    if (amount <= 0) return
 
     await addEntry({
       amount,
       timestamp: Date.now(),
       cash, retirement, hsa, brokerage, debts,
-    });
-    setEntryBreakdown({ cash: '', retirement: '', hsa: '', brokerage: '', debts: '' });
-  }
+    })
+    uiActor.send({ type: 'CLEAR_ENTRY_BREAKDOWN' })
+  }, [entryBreakdown, addEntry, uiActor])
 
-  const handleDeleteEntry = async (id: Id<"netWorthEntries">) => {
+  const handleDeleteEntry = useCallback(async (id: Id<"netWorthEntries">) => {
     await removeEntry({ id })
-  }
+  }, [removeEntry])
 
-  const formatNetWorthInput = (value: string) => {
+  const formatNetWorthInput = useCallback((value: string) => {
     return value.replace(/[^0-9.]/g, '')
-  }
+  }, [])
 
   // Show loading while data is being fetched
-  if (scenariosHook.isLoading) {
+  if (isLoading) {
     return (
       <main className="min-h-screen bg-[#060d1f] text-white flex items-center justify-center">
         <div className="text-slate-500">Loading...</div>
@@ -120,9 +145,9 @@ export function AuthenticatedApp() {
                   className={`px-3 py-3 sm:px-5 sm:py-3.5 text-sm font-medium transition-colors relative whitespace-nowrap ${colorClass}`}
                 >
                   {tab.label}
-                  {tab.id === 'scenarios' && scenariosHook.scenarios.length > 0 && (
+                  {tab.id === 'scenarios' && scenarioCount > 0 && (
                     <span className="ml-1.5 text-[10px] bg-violet-500/20 text-violet-400 px-1.5 py-0.5 rounded-full">
-                      {scenariosHook.selectedScenarios.length}/{scenariosHook.scenarios.length}
+                      {selectedCount}/{scenarioCount}
                     </span>
                   )}
                   {isActive && (
@@ -144,19 +169,12 @@ export function AuthenticatedApp() {
 
       {/* Dashboard Tab */}
       {activeTab === 'dashboard' && (
-        <DashboardTab
-          latestEntry={scenariosHook.latestEntry}
-          entries={scenariosHook.entries}
-          primaryProjection={primaryProjection}
-          selectedScenarios={scenariosHook.selectedScenarios}
-          setActiveTab={setActiveTab}
-        />
+        <DashboardTab setActiveTab={setActiveTab} />
       )}
 
       {/* Entries Tab */}
       {activeTab === 'entries' && (
         <EntriesTab
-          entries={scenariosHook.entries}
           entryBreakdown={entryBreakdown}
           setEntryBreakdown={setEntryBreakdown}
           entryTotal={entryTotal}
@@ -170,30 +188,31 @@ export function AuthenticatedApp() {
       {/* Projections Tab */}
       {activeTab === 'projections' && (
         <ProjectionsTab
-          latestEntry={scenariosHook.latestEntry}
-          scenarioProjections={scenariosHook.scenarioProjections}
-          profile={scenariosHook.profile}
           projectionsView={projectionsView}
           setProjectionsView={setProjectionsView}
           setActiveTab={setActiveTab}
-          scenariosHook={scenariosHook}
         />
       )}
 
       {/* Scenarios Tab */}
       {activeTab === 'scenarios' && (
-        <ScenariosTab
-          scenariosHook={scenariosHook}
-        />
+        <ScenariosTab />
       )}
 
       {/* Budget Tab */}
       {activeTab === 'budget' && (
         <BudgetTab
-          selectedScenarios={scenariosHook.selectedScenarios}
           setActiveTab={setActiveTab}
         />
       )}
     </main>
+  )
+}
+
+export function AuthenticatedApp() {
+  return (
+    <ActorProvider>
+      <AuthenticatedAppInner />
+    </ActorProvider>
   )
 }

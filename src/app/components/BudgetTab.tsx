@@ -5,7 +5,8 @@ import { useQuery, useMutation } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { Id } from '../../../convex/_generated/dataModel'
 import { Card, Button, Input } from '../../components/ui'
-import { Scenario } from '../../lib/useScenarios'
+import type { Scenario } from '../../lib/machines/types'
+import { useFinancialSelector } from '../../lib/hooks/useFinancialActor'
 import {
   calculateTaxes,
   FilingStatus,
@@ -15,7 +16,6 @@ import {
 import { Tab } from '../lib/helpers'
 
 interface BudgetTabProps {
-  selectedScenarios: Scenario[]
   setActiveTab: (tab: Tab) => void
 }
 
@@ -42,7 +42,8 @@ function formatCurrencyWithCents(amount: number): string {
   })
 }
 
-export function BudgetTab({ selectedScenarios, setActiveTab }: BudgetTabProps) {
+export function BudgetTab({ setActiveTab }: BudgetTabProps) {
+  const selectedScenarios = useFinancialSelector(s => s.context.selectedScenarios)
   const categories = useQuery(api.budget.list) ?? []
   const addCategory = useMutation(api.budget.add)
   const updateCategory = useMutation(api.budget.update)

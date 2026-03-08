@@ -2,7 +2,9 @@
 
 import React, { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useScenarios, Scenario, ScenarioProjection } from '../../lib/useScenarios'
+import { useFinancialSelector } from '../../lib/hooks/useFinancialActor'
+import { useScenarioActions } from '../../lib/hooks/useScenarioActions'
+import type { Scenario, StableProjectionResult, ScenarioProjection } from '../../lib/machines/types'
 import { ProjectionsTable } from './ProjectionsTable'
 import { ProjectionsChart } from './ProjectionsChart'
 import { ScenarioManagementPanel } from './ScenarioManagementPanel'
@@ -10,25 +12,51 @@ import { ScenarioEditor } from './ScenarioEditor'
 import { Tab } from '../lib/helpers'
 
 interface ProjectionsTabProps {
-  latestEntry: ReturnType<typeof useScenarios>['latestEntry'];
-  scenarioProjections: ScenarioProjection[];
-  profile: ReturnType<typeof useScenarios>['profile'];
   projectionsView: 'table' | 'chart';
   setProjectionsView: (view: 'table' | 'chart') => void;
   setActiveTab: (tab: Tab) => void;
-  scenariosHook: ReturnType<typeof useScenarios>;
+}
+
+/** Convert StableProjectionResult[] to ScenarioProjection[] (no real-time data needed) */
+function stableToScenarioProjections(stables: StableProjectionResult[]): ScenarioProjection[] {
+  return stables.map(sp => ({
+    scenario: sp.scenario,
+    projections: sp.projections,
+    levelInfo: sp.levelInfo,
+    growthRates: { perSecond: 0, perMinute: 0, perHour: 0, perDay: 0, perYear: 0, yearlyAppreciation: 0, yearlyContributions: 0 },
+    currentNetWorth: { total: sp.projections[0]?.netWorth ?? 0, appreciation: 0, contributions: 0, baseAmount: 0 },
+    fiYear: sp.fiYear,
+    fiAge: sp.fiAge,
+    crossoverYear: sp.crossoverYear,
+    currentFiProgress: 0,
+    currentMonthlySwr: sp.currentMonthlySwr,
+    dynamicProjections: sp.dynamicProjections,
+    hasDynamicIncome: sp.hasDynamicIncome,
+    fiMilestones: sp.fiMilestones,
+    monthlyProjections: sp.monthlyProjections,
+    effectiveRate: sp.effectiveRate,
+  }));
 }
 
 export function ProjectionsTab({
-  latestEntry,
-  scenarioProjections,
-  profile,
   projectionsView,
   setProjectionsView,
   setActiveTab,
-  scenariosHook,
 }: ProjectionsTabProps) {
   const currentYear = new Date().getFullYear();
+
+  // Granular selectors — no real-time dependency
+  const latestEntry = useFinancialSelector(s => s.context.entries[0] ?? null);
+  const stableProjections = useFinancialSelector(s => s.context.stableProjections);
+  const profile = useFinancialSelector(s => s.context.profile);
+  const scenarios = useFinancialSelector(s => s.context.scenarios);
+  const actions = useScenarioActions();
+
+  const scenarioProjections = useMemo(
+    () => stableToScenarioProjections(stableProjections),
+    [stableProjections]
+  );
+
   const primaryProjection = scenarioProjections[0] || null;
 
   // Prepare comparison chart data (limited to 30 years)
@@ -73,6 +101,9 @@ export function ProjectionsTab({
     });
   }, [primaryProjection, scenarioProjections]);
 
+  const [showScenarioPanel, setShowScenarioPanel] = useState(false);
+  const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
+
   if (!latestEntry) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center p-4">
@@ -112,9 +143,6 @@ export function ProjectionsTab({
       </div>
     );
   }
-
-  const [showScenarioPanel, setShowScenarioPanel] = useState(false);
-  const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
 
   return (
     <div className="flex flex-col p-4">
@@ -171,7 +199,8 @@ export function ProjectionsTab({
         <ScenarioManagementPanel
           onClose={() => setShowScenarioPanel(false)}
           onEditScenario={(scenario) => setEditingScenario(scenario)}
-          scenariosHook={scenariosHook}
+          scenarios={scenarios}
+          actions={actions}
         />
       )}
 
@@ -181,10 +210,12 @@ export function ProjectionsTab({
           scenario={editingScenario}
           onClose={() => setEditingScenario(null)}
           onSave={async (updates) => {
-            await scenariosHook.updateScenario(editingScenario._id, updates);
+            await actions.updateScenario(editingScenario._id, updates);
             setEditingScenario(null);
           }}
-          scenariosHook={scenariosHook}
+          scenarios={scenarios}
+          stableProjections={stableProjections}
+          actions={actions}
         />,
         document.body
       )}

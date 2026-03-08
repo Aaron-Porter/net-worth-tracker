@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react'
 import { formatCurrency } from '../../lib/calculations'
 import { SimpleTrackedValue } from './TrackedValue'
-import { ScenarioProjection } from '../../lib/useScenarios'
+import type { ScenarioProjection } from '../../lib/machines/types'
 import { UnifiedChartTooltip } from './UnifiedChartTooltip'
 import {
   LineChart,

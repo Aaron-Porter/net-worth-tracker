@@ -7,7 +7,7 @@ import {
   formatCurrency,
 } from '../../lib/calculations'
 import { SimpleTrackedValue } from './TrackedValue'
-import { ScenarioProjection } from '../../lib/useScenarios'
+import type { ScenarioProjection } from '../../lib/machines/types'
 
 interface MilestoneProgressCardProps {
   primaryProjection: ScenarioProjection;

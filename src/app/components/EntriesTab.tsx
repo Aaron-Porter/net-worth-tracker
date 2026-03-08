@@ -4,11 +4,10 @@ import React from 'react'
 import { Id } from '../../../convex/_generated/dataModel'
 import { formatCurrency, formatDate, getEntryAllocation } from '../../lib/calculations'
 import { SimpleTrackedValue } from './TrackedValue'
-import { useScenarios } from '../../lib/useScenarios'
+import { useFinancialSelector } from '../../lib/hooks/useFinancialActor'
 import { EntryBreakdown, BUCKET_LABELS, Tab } from '../lib/helpers'
 
 interface EntriesTabProps {
-  entries: ReturnType<typeof useScenarios>['entries'];
   entryBreakdown: EntryBreakdown;
   setEntryBreakdown: (value: EntryBreakdown) => void;
   entryTotal: number;
@@ -19,7 +18,6 @@ interface EntriesTabProps {
 }
 
 export function EntriesTab({
-  entries,
   entryBreakdown,
   setEntryBreakdown,
   entryTotal,
@@ -27,6 +25,9 @@ export function EntriesTab({
   handleAddEntry,
   handleDeleteEntry,
 }: EntriesTabProps) {
+  // Subscribe only to entries — no tick dependency
+  const entries = useFinancialSelector(s => s.context.entries);
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <h1 className="text-2xl font-bold text-center mb-1 text-white">

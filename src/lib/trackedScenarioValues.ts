@@ -14,7 +14,7 @@ import {
   calculateFiProgressTracked,
   calculateLevelBasedSpendingTracked,
 } from './calculationTrace';
-import type { ScenarioProjection } from './useScenarios';
+import type { ScenarioProjection } from './machines/types';
 import type { GrowthRates, RealTimeNetWorth, ProjectionRow } from './calculations';
 
 // ============================================================================
