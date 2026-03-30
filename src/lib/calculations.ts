@@ -1106,6 +1106,142 @@ export function calculateRunwayYears(netWorth: number, monthlySpend: number): nu
   return netWorth / annualExpenses;
 }
 
+// ============================================================================
+// TIERED RUNWAY (DRAWDOWN SIMULATION)
+// ============================================================================
+
+export interface RunwayScenario {
+  spendingPct: number;    // 1.0, 0.75, 0.5
+  monthlySpend: number;
+  tier1Months: number;    // Cash + Brokerage only
+  totalMonths: number;    // All assets (retirement/HSA with penalty haircut)
+}
+
+export interface TieredRunwayResult {
+  scenarios: RunwayScenario[];
+  tier1Assets: number;    // Cash + Brokerage total
+  tier2Assets: number;    // Retirement + HSA total (face value)
+  assumptions: {
+    earlyWithdrawalPenalty: number;
+    estimatedIncomeTaxRate: number;
+    brokerageEffectiveTaxRate: number;
+    isPreRetirementAge: boolean;
+  };
+}
+
+/**
+ * Month-by-month drawdown simulation with tiered asset access.
+ *
+ * Tier 1 (liquid): Cash → Brokerage (no penalties, light tax on brokerage gains)
+ * Tier 2 (retirement): Retirement → HSA (10% early withdrawal penalty + income tax if pre-59.5)
+ *
+ * Each month: apply growth to remaining balances, then deduct spending.
+ * Draw order preserves higher-returning assets longer.
+ */
+export function calculateTieredRunway(
+  allocation: AssetAllocation,
+  bucketRates: PerBucketRates,
+  monthlySpend: number,
+  currentAge: number | null,
+  estimatedIncomeTaxRate: number = 0.25,
+): TieredRunwayResult {
+  const isPreRetirement = currentAge === null || currentAge < 59.5;
+  const earlyWithdrawalPenalty = isPreRetirement ? 0.10 : 0;
+  // Brokerage: ~15% cap gains on ~50% gains = ~7.5% effective
+  const brokerageEffectiveTaxRate = 0.075;
+  // Retirement/HSA: penalty + income tax
+  const retirementHaircut = earlyWithdrawalPenalty + estimatedIncomeTaxRate;
+
+  const scenarios: RunwayScenario[] = [];
+
+  for (const pct of [1.0, 0.75, 0.5]) {
+    const spend = monthlySpend * pct;
+    if (spend <= 0) {
+      scenarios.push({ spendingPct: pct, monthlySpend: spend, tier1Months: Infinity, totalMonths: Infinity });
+      continue;
+    }
+
+    // --- Tier 1 simulation (Cash + Brokerage only) ---
+    const tier1Months = simulateDrawdown(
+      [
+        { balance: allocation.cash, monthlyRate: bucketRates.cash / 12, taxRate: 0 },
+        { balance: allocation.brokerage, monthlyRate: bucketRates.brokerage / 12, taxRate: brokerageEffectiveTaxRate },
+      ],
+      spend,
+    );
+
+    // --- Total simulation (all assets, Tier 1 first then Tier 2) ---
+    const totalMonths = simulateDrawdown(
+      [
+        { balance: allocation.cash, monthlyRate: bucketRates.cash / 12, taxRate: 0 },
+        { balance: allocation.brokerage, monthlyRate: bucketRates.brokerage / 12, taxRate: brokerageEffectiveTaxRate },
+        { balance: allocation.retirement, monthlyRate: bucketRates.retirement / 12, taxRate: retirementHaircut },
+        { balance: allocation.hsa, monthlyRate: bucketRates.hsa / 12, taxRate: retirementHaircut },
+      ],
+      spend,
+    );
+
+    scenarios.push({ spendingPct: pct, monthlySpend: spend, tier1Months, totalMonths });
+  }
+
+  return {
+    scenarios,
+    tier1Assets: allocation.cash + allocation.brokerage,
+    tier2Assets: allocation.retirement + allocation.hsa,
+    assumptions: {
+      earlyWithdrawalPenalty,
+      estimatedIncomeTaxRate,
+      brokerageEffectiveTaxRate,
+      isPreRetirementAge: isPreRetirement,
+    },
+  };
+}
+
+/**
+ * Simulate drawing down from an ordered list of asset buckets.
+ * Each bucket has its own growth rate and tax rate on withdrawals.
+ * Draws from buckets in order (first bucket depleted first).
+ * Returns number of months until all assets exhausted.
+ */
+function simulateDrawdown(
+  buckets: Array<{ balance: number; monthlyRate: number; taxRate: number }>,
+  monthlySpend: number,
+  maxMonths: number = 1200, // 100 years cap
+): number {
+  // Work with mutable copies
+  const b = buckets.map(bucket => ({ ...bucket }));
+
+  for (let month = 0; month < maxMonths; month++) {
+    // Apply growth to all buckets
+    for (const bucket of b) {
+      if (bucket.balance > 0) {
+        bucket.balance *= (1 + bucket.monthlyRate);
+      }
+    }
+
+    // Draw spending from buckets in order
+    let remaining = monthlySpend;
+    for (const bucket of b) {
+      if (remaining <= 0) break;
+      if (bucket.balance <= 0) continue;
+
+      // To get $X after tax, need to withdraw $X / (1 - taxRate)
+      const grossNeeded = remaining / (1 - bucket.taxRate);
+      const withdrawal = Math.min(grossNeeded, bucket.balance);
+      bucket.balance -= withdrawal;
+      // Net received after tax
+      remaining -= withdrawal * (1 - bucket.taxRate);
+    }
+
+    // If we couldn't cover spending, we're out
+    if (remaining > 0.01) {
+      return month;
+    }
+  }
+
+  return maxMonths; // effectively infinite
+}
+
 /**
  * Calculate the dollar multiplier - how much $1 saved today becomes at retirement
  * This shows the power of compounding: the more years until retirement, the higher the multiplier
