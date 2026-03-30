@@ -157,29 +157,29 @@ export function ThreeFuturesCard({ primaryProjection, latestEntry }: ThreeFuture
   const primary = runway.scenarios[0] // 100% spending
 
   return (
-    <div className="bg-[#0f1629] rounded-xl p-6 border border-slate-800">
-      <h2 className="text-lg font-semibold text-slate-300 mb-1">Three Futures</h2>
-      <p className="text-slate-500 text-xs mb-6">Same portfolio, three paths forward</p>
+    <div className="bg-[#0f1629] rounded-xl p-4 sm:p-6 border border-slate-800">
+      <h2 className="text-base sm:text-lg font-semibold text-slate-300 mb-1">Three Futures</h2>
+      <p className="text-slate-500 text-xs mb-4 sm:mb-6">Same portfolio, three paths forward</p>
 
       {/* ── Section 1: If You Stopped Earning ── */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-2 h-2 rounded-full bg-red-400" />
+      <div className="mb-5 sm:mb-6">
+        <div className="flex items-center gap-2 mb-2 sm:mb-3">
+          <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
           <h3 className="text-sm font-medium text-slate-300">If you stopped earning</h3>
         </div>
-        <div className="bg-slate-800/30 rounded-lg p-4">
+        <div className="bg-slate-800/30 rounded-lg p-3 sm:p-4">
           {/* Primary runway */}
-          <div className="grid grid-cols-2 gap-4 mb-3">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-3">
             <div>
-              <p className="text-slate-500 text-xs mb-1">Liquid runway</p>
-              <p className="text-lg font-mono font-semibold text-red-400">
+              <p className="text-slate-500 text-[11px] sm:text-xs mb-1">Liquid runway</p>
+              <p className="text-base sm:text-lg font-mono font-semibold text-red-400">
                 {formatMonths(primary.tier1Months)}
               </p>
               <p className="text-[10px] text-slate-600">Cash + Brokerage</p>
             </div>
             <div>
-              <p className="text-slate-500 text-xs mb-1">Total runway</p>
-              <p className="text-lg font-mono font-semibold text-red-400">
+              <p className="text-slate-500 text-[11px] sm:text-xs mb-1">Total runway</p>
+              <p className="text-base sm:text-lg font-mono font-semibold text-red-400">
                 {formatMonths(primary.totalMonths)}
               </p>
               <p className="text-[10px] text-slate-600">
@@ -194,11 +194,11 @@ export function ThreeFuturesCard({ primaryProjection, latestEntry }: ThreeFuture
           {runway.scenarios.length > 1 && (
             <div className="pt-3 border-t border-slate-700/50">
               <p className="text-[10px] text-slate-500 mb-2 uppercase tracking-wider">If you also cut spending</p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="space-y-1.5 text-xs">
                 {runway.scenarios.slice(1).map((s) => (
-                  <div key={s.spendingPct} className="flex justify-between text-slate-400">
-                    <span>At {Math.round(s.spendingPct * 100)}% ({formatCurrency(s.monthlySpend, 0)}/mo)</span>
-                    <span className="font-mono text-slate-300">
+                  <div key={s.spendingPct} className="flex items-baseline justify-between gap-2 text-slate-400">
+                    <span className="shrink-0">{Math.round(s.spendingPct * 100)}% <span className="hidden sm:inline">({formatCurrency(s.monthlySpend, 0)}/mo)</span></span>
+                    <span className="font-mono text-slate-300 text-right">
                       {formatMonths(s.tier1Months)} / {formatMonths(s.totalMonths)}
                     </span>
                   </div>
@@ -210,28 +210,28 @@ export function ThreeFuturesCard({ primaryProjection, latestEntry }: ThreeFuture
       </div>
 
       {/* ── Section 2: If You Stopped Saving ── */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-2 h-2 rounded-full bg-violet-400" />
+      <div className="mb-5 sm:mb-6">
+        <div className="flex items-center gap-2 mb-2 sm:mb-3">
+          <div className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
           <h3 className="text-sm font-medium text-slate-300">If you stopped saving</h3>
         </div>
-        <div className="bg-slate-800/30 rounded-lg p-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-slate-500 text-xs mb-1">
+        <div className="bg-slate-800/30 rounded-lg p-3 sm:p-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <div className="min-w-0">
+              <p className="text-slate-500 text-[11px] sm:text-xs mb-1">
                 Portfolio {pastRetirement ? 'now' : `at ${currentAge !== null ? retirementAge : `+${yearsToRetirement}yr`}`}
               </p>
               <TrackedValue
                 value={trackedCoast.futureNetWorthIfCoast}
-                className="text-lg font-mono font-semibold text-violet-400"
+                className="text-base sm:text-lg font-mono font-semibold text-violet-400"
               />
             </div>
-            <div>
-              <p className="text-slate-500 text-xs mb-1">SWR income (today's $)</p>
+            <div className="min-w-0">
+              <p className="text-slate-500 text-[11px] sm:text-xs mb-1">SWR income (today's $)</p>
               <TrackedValue
                 value={trackedRetirementIncome.projectedRealMonthlyIncome}
                 formatter={(v) => `${formatCurrency(v, 0)}/mo`}
-                className="text-lg font-mono font-semibold text-violet-400"
+                className="text-base sm:text-lg font-mono font-semibold text-violet-400"
               />
             </div>
           </div>
@@ -257,36 +257,36 @@ export function ThreeFuturesCard({ primaryProjection, latestEntry }: ThreeFuture
       </div>
 
       {/* ── Section 3: If You Keep Saving ── */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-2 h-2 rounded-full bg-emerald-400" />
+      <div className="mb-5 sm:mb-6">
+        <div className="flex items-center gap-2 mb-2 sm:mb-3">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
           <h3 className="text-sm font-medium text-slate-300">If you keep saving</h3>
         </div>
-        <div className="bg-slate-800/30 rounded-lg p-4">
+        <div className="bg-slate-800/30 rounded-lg p-3 sm:p-4">
           {keepSaving.fiYear && (
             <div className="mb-3">
-              <p className="text-slate-500 text-xs mb-1">Financial Independence</p>
-              <p className="text-lg font-mono font-semibold text-emerald-400">
+              <p className="text-slate-500 text-[11px] sm:text-xs mb-1">Financial Independence</p>
+              <p className="text-base sm:text-lg font-mono font-semibold text-emerald-400">
                 {keepSaving.fiAge ? `Age ${keepSaving.fiAge}` : `Year ${keepSaving.fiYear}`}
-                <span className="text-sm text-slate-500 font-normal ml-2">
-                  ({keepSaving.fiYear - currentYear} years)
+                <span className="text-xs sm:text-sm text-slate-500 font-normal ml-1.5 sm:ml-2">
+                  ({keepSaving.fiYear - currentYear}yr)
                 </span>
               </p>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
             {keepSaving.nwAtRetirement !== null && (
-              <div>
-                <p className="text-slate-500 text-xs mb-1">NW at {currentAge !== null ? retirementAge : `+${yearsToRetirement}yr`}</p>
-                <p className="text-lg font-mono font-semibold text-emerald-400">
+              <div className="min-w-0">
+                <p className="text-slate-500 text-[11px] sm:text-xs mb-1">NW at {currentAge !== null ? retirementAge : `+${yearsToRetirement}yr`}</p>
+                <p className="text-base sm:text-lg font-mono font-semibold text-emerald-400 truncate">
                   {formatCurrency(keepSaving.nwAtRetirement, 0)}
                 </p>
               </div>
             )}
             {keepSaving.swrMonthlyAtRetirement !== null && (
-              <div>
-                <p className="text-slate-500 text-xs mb-1">SWR income</p>
-                <p className="text-lg font-mono font-semibold text-emerald-400">
+              <div className="min-w-0">
+                <p className="text-slate-500 text-[11px] sm:text-xs mb-1">SWR income</p>
+                <p className="text-base sm:text-lg font-mono font-semibold text-emerald-400 truncate">
                   {formatCurrency(keepSaving.swrMonthlyAtRetirement, 0)}/mo
                 </p>
               </div>
@@ -303,23 +303,23 @@ export function ThreeFuturesCard({ primaryProjection, latestEntry }: ThreeFuture
       {/* ── Trajectory Chart ── */}
       {!pastRetirement && chartData.length > 1 && (
         <div>
-          <div className="h-[160px]">
+          <div className="h-[140px] sm:h-[160px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
+              <AreaChart data={chartData} margin={{ left: -10, right: 4, top: 4, bottom: 0 }}>
                 <XAxis
                   dataKey="label"
                   stroke="#64748b"
                   fontSize={10}
-                  interval={Math.max(0, Math.floor(chartData.length / 5) - 1)}
+                  interval={Math.max(0, Math.floor(chartData.length / 4) - 1)}
                   tick={{ fill: '#64748b' }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
                   stroke="#64748b"
-                  fontSize={10}
+                  fontSize={9}
                   tickFormatter={formatAxisValue}
-                  width={50}
+                  width={42}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -377,14 +377,14 @@ export function ThreeFuturesCard({ primaryProjection, latestEntry }: ThreeFuture
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex justify-center gap-4 mt-2">
+          <div className="flex justify-center gap-3 sm:gap-4 mt-2">
             {[
               { color: '#f87171', label: 'Stop Earning' },
               { color: '#8b5cf6', label: 'Stop Saving' },
               { color: '#10b981', label: 'Keep Saving' },
             ].map(({ color, label }) => (
-              <div key={label} className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                <div className="w-3 h-0.5 rounded" style={{ backgroundColor: color }} />
+              <div key={label} className="flex items-center gap-1 sm:gap-1.5 text-[10px] text-slate-500">
+                <div className="w-2.5 sm:w-3 h-0.5 rounded shrink-0" style={{ backgroundColor: color }} />
                 {label}
               </div>
             ))}

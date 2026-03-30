@@ -93,13 +93,13 @@ export function DashboardTab({ setActiveTab }: DashboardTabProps) {
   }, [latestEntry, entries]);
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-2xl space-y-4">
+    <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-2xl space-y-3 sm:space-y-4">
       {/* Hero Net Worth Card */}
       {latestEntry && primaryProjection && trackedValues ? (
-        <div className="bg-[#0f1629] rounded-xl p-6 border border-slate-800">
+        <div className="bg-[#0f1629] rounded-xl p-4 sm:p-6 border border-slate-800">
           {/* Card Header */}
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between mb-4 sm:mb-5">
+            <div className="flex items-center gap-2 sm:gap-3">
               <IconBadge color="#10b981">
                 <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -124,7 +124,7 @@ export function DashboardTab({ setActiveTab }: DashboardTabProps) {
             <TrackedValue
               value={trackedValues.currentNetWorth}
               decimals={0}
-              className="text-4xl md:text-5xl font-bold font-mono text-white"
+              className="text-3xl sm:text-4xl md:text-5xl font-bold font-mono text-white"
             />
           </div>
 
@@ -237,44 +237,42 @@ export function DashboardTab({ setActiveTab }: DashboardTabProps) {
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-slate-800/30 rounded-lg p-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
+                  <div className="bg-slate-800/30 rounded-lg p-2">
                     <p className="text-slate-500 text-[10px] mb-0.5">Per Second</p>
                     <TrackedValue
                       value={trackedValues.growthPerSecond}
                       decimals={6}
-                      className="text-emerald-400 font-mono text-xs"
+                      className="text-emerald-400 font-mono text-[11px] sm:text-xs"
                     />
                   </div>
-                  <div className="bg-slate-800/30 rounded-lg p-2.5">
+                  <div className="bg-slate-800/30 rounded-lg p-2">
                     <p className="text-slate-500 text-[10px] mb-0.5">Per Minute</p>
                     <TrackedValue
                       value={trackedValues.growthPerMinute}
                       decimals={4}
-                      className="text-emerald-400 font-mono text-xs"
+                      className="text-emerald-400 font-mono text-[11px] sm:text-xs"
                     />
                   </div>
-                  <div className="bg-slate-800/30 rounded-lg p-2.5">
+                  <div className="bg-slate-800/30 rounded-lg p-2">
                     <p className="text-slate-500 text-[10px] mb-0.5">Per Hour</p>
                     <TrackedValue
                       value={trackedValues.growthPerHour}
-                      className="text-emerald-400 font-mono text-xs"
+                      className="text-emerald-400 font-mono text-[11px] sm:text-xs"
                     />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-slate-800/30 rounded-lg p-2.5">
+                  <div className="bg-slate-800/30 rounded-lg p-2">
                     <p className="text-slate-500 text-[10px] mb-0.5">Per Day</p>
                     <TrackedValue
                       value={trackedValues.growthPerDay}
-                      className="text-emerald-400 font-mono text-sm"
+                      className="text-emerald-400 font-mono text-xs sm:text-sm"
                     />
                   </div>
-                  <div className="bg-slate-800/30 rounded-lg p-2.5">
+                  <div className="bg-slate-800/30 rounded-lg p-2 col-span-2 sm:col-span-1">
                     <p className="text-slate-500 text-[10px] mb-0.5">Per Year</p>
                     <TrackedValue
                       value={trackedValues.growthPerYear}
-                      className="text-emerald-400 font-mono text-sm"
+                      className="text-emerald-400 font-mono text-xs sm:text-sm"
                     />
                   </div>
                 </div>
@@ -291,7 +289,7 @@ export function DashboardTab({ setActiveTab }: DashboardTabProps) {
           </div>
         </div>
       ) : (
-        <div className="bg-[#0f1629] rounded-xl p-8 border border-slate-800 text-center">
+        <div className="bg-[#0f1629] rounded-xl p-6 sm:p-8 border border-slate-800 text-center">
           <div className="w-12 h-12 mx-auto mb-4 bg-emerald-500/10 rounded-xl flex items-center justify-center">
             <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
