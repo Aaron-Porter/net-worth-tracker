@@ -6,14 +6,12 @@ import {
   getTimeSinceEntry,
   getEntryAllocation,
 } from '../../lib/calculations'
-import { TrackedValue, SimpleTrackedValue } from './TrackedValue'
+import { TrackedValue } from './TrackedValue'
 import { generateTrackedDashboardValues } from '../../lib/trackedScenarioValues'
 import { useFinancialSelector } from '../../lib/hooks/useFinancialActor'
 import { useRealtimeNetWorth } from '../../lib/hooks/useRealtimeNetWorth'
 import type { ScenarioProjection, StableProjectionResult } from '../../lib/machines/types'
-import { CoastFiSection } from './CoastFiSection'
-import { MilestoneProgressCard } from './MilestoneProgressCard'
-import { FiMilestonesCard } from './FiMilestonesCard'
+import { ThreeFuturesCard } from './ThreeFuturesCard'
 import { Tab } from '../lib/helpers'
 
 interface DashboardTabProps {
@@ -57,6 +55,7 @@ function assembleProjection(
 }
 
 export function DashboardTab({ setActiveTab }: DashboardTabProps) {
+  const [showGrowthRates, setShowGrowthRates] = useState(false);
   const [includeSavings, setIncludeSavings] = useState(false);
 
   // Granular selectors — only re-render when these change
@@ -124,7 +123,7 @@ export function DashboardTab({ setActiveTab }: DashboardTabProps) {
           <div className="mb-1">
             <TrackedValue
               value={trackedValues.currentNetWorth}
-              decimals={6}
+              decimals={0}
               className="text-4xl md:text-5xl font-bold font-mono text-white"
             />
           </div>
@@ -145,35 +144,6 @@ export function DashboardTab({ setActiveTab }: DashboardTabProps) {
               <span className="text-xs text-slate-500">vs last entry</span>
             </div>
           )}
-
-          {/* Breakdown row */}
-          <div className="flex gap-6 text-sm mb-4">
-            <div>
-              <p className="text-slate-500 text-xs mb-0.5">Base</p>
-              <TrackedValue
-                value={trackedValues.baseAmount}
-                className="text-slate-300 font-mono"
-              />
-            </div>
-            <div>
-              <p className="text-slate-500 text-xs mb-0.5">Appreciation</p>
-              <span className="text-emerald-400 font-mono">+<TrackedValue
-                value={trackedValues.appreciation}
-                decimals={4}
-                className="text-emerald-400 font-mono"
-              /></span>
-            </div>
-            {includeSavings && (
-              <div>
-                <p className="text-slate-500 text-xs mb-0.5">Savings</p>
-                <span className="text-violet-400 font-mono">+<TrackedValue
-                  value={trackedValues.contributions}
-                  decimals={2}
-                  className="text-violet-400 font-mono"
-                /></span>
-              </div>
-            )}
-          </div>
 
           {/* Portfolio Composition Bar */}
           {latestEntry && (latestEntry.cash !== undefined || latestEntry.retirement !== undefined ||
@@ -217,11 +187,105 @@ export function DashboardTab({ setActiveTab }: DashboardTabProps) {
             );
           })()}
 
+          {/* Collapsible Growth Rates */}
+          <div className="pt-3 border-t border-slate-800">
+            <button
+              onClick={() => setShowGrowthRates(prev => !prev)}
+              className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-300 transition-colors w-full"
+            >
+              <svg
+                className={`w-3 h-3 transition-transform ${showGrowthRates ? 'rotate-90' : ''}`}
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+              </svg>
+              <span>Growth rates</span>
+              {!showGrowthRates && (
+                <span className="text-emerald-400 font-mono ml-auto">
+                  <TrackedValue
+                    value={trackedValues.growthPerDay}
+                    className="text-emerald-400 font-mono text-xs"
+                  />/day
+                </span>
+              )}
+            </button>
+
+            {showGrowthRates && (
+              <div className="mt-3 space-y-3">
+                <div className="flex justify-end">
+                  <div className="inline-flex rounded-lg bg-slate-800/80 p-0.5">
+                    <button
+                      onClick={() => setIncludeSavings(false)}
+                      className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${
+                        !includeSavings
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      Interest
+                    </button>
+                    <button
+                      onClick={() => setIncludeSavings(true)}
+                      className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${
+                        includeSavings
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      + Savings
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-slate-800/30 rounded-lg p-2.5">
+                    <p className="text-slate-500 text-[10px] mb-0.5">Per Second</p>
+                    <TrackedValue
+                      value={trackedValues.growthPerSecond}
+                      decimals={6}
+                      className="text-emerald-400 font-mono text-xs"
+                    />
+                  </div>
+                  <div className="bg-slate-800/30 rounded-lg p-2.5">
+                    <p className="text-slate-500 text-[10px] mb-0.5">Per Minute</p>
+                    <TrackedValue
+                      value={trackedValues.growthPerMinute}
+                      decimals={4}
+                      className="text-emerald-400 font-mono text-xs"
+                    />
+                  </div>
+                  <div className="bg-slate-800/30 rounded-lg p-2.5">
+                    <p className="text-slate-500 text-[10px] mb-0.5">Per Hour</p>
+                    <TrackedValue
+                      value={trackedValues.growthPerHour}
+                      className="text-emerald-400 font-mono text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-slate-800/30 rounded-lg p-2.5">
+                    <p className="text-slate-500 text-[10px] mb-0.5">Per Day</p>
+                    <TrackedValue
+                      value={trackedValues.growthPerDay}
+                      className="text-emerald-400 font-mono text-sm"
+                    />
+                  </div>
+                  <div className="bg-slate-800/30 rounded-lg p-2.5">
+                    <p className="text-slate-500 text-[10px] mb-0.5">Per Year</p>
+                    <TrackedValue
+                      value={trackedValues.growthPerYear}
+                      className="text-emerald-400 font-mono text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Footer */}
-          <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+          <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-800">
             <p className="text-slate-500 text-xs">
-              Updated {getTimeSinceEntry(latestEntry.timestamp)} &middot; {primaryProjection.scenario.currentRate}% return
-              {includeSavings && ` + ${formatCurrency(primaryProjection.scenario.yearlyContribution, 0)}/yr`}
+              Updated {getTimeSinceEntry(latestEntry.timestamp)}
             </p>
             <p className="text-xs text-slate-600">Click any value for details</p>
           </div>
@@ -244,155 +308,12 @@ export function DashboardTab({ setActiveTab }: DashboardTabProps) {
         </div>
       )}
 
-      {/* Growth Rate Card */}
-      {latestEntry && primaryProjection && trackedValues && (
-        <div className="bg-[#0f1629] rounded-xl p-6 border border-slate-800">
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-3">
-              <IconBadge color="#10b981">
-                <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </IconBadge>
-              <h2 className="text-sm font-medium text-slate-300">
-                {includeSavings ? 'Growth Rate' : 'Appreciation Rate'}
-              </h2>
-            </div>
-            <div className="inline-flex rounded-lg bg-slate-800/80 p-0.5">
-              <button
-                onClick={() => setIncludeSavings(false)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                  !includeSavings
-                    ? 'bg-emerald-500/20 text-emerald-400'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                Interest
-              </button>
-              <button
-                onClick={() => setIncludeSavings(true)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                  includeSavings
-                    ? 'bg-emerald-500/20 text-emerald-400'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                + Savings
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-slate-800/30 rounded-lg p-3">
-              <p className="text-slate-500 text-xs mb-1">Per Second</p>
-              <TrackedValue
-                value={trackedValues.growthPerSecond}
-                decimals={6}
-                className="text-emerald-400 font-mono text-sm"
-              />
-            </div>
-            <div className="bg-slate-800/30 rounded-lg p-3">
-              <p className="text-slate-500 text-xs mb-1">Per Minute</p>
-              <TrackedValue
-                value={trackedValues.growthPerMinute}
-                decimals={4}
-                className="text-emerald-400 font-mono text-sm"
-              />
-            </div>
-            <div className="bg-slate-800/30 rounded-lg p-3">
-              <p className="text-slate-500 text-xs mb-1">Per Hour</p>
-              <TrackedValue
-                value={trackedValues.growthPerHour}
-                className="text-emerald-400 font-mono text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            <div className="bg-slate-800/30 rounded-lg p-3">
-              <p className="text-slate-500 text-xs mb-1">Per Day</p>
-              <TrackedValue
-                value={trackedValues.growthPerDay}
-                className="text-emerald-400 font-mono"
-              />
-            </div>
-            <div className="bg-slate-800/30 rounded-lg p-3">
-              <p className="text-slate-500 text-xs mb-1">Per Year</p>
-              <TrackedValue
-                value={trackedValues.growthPerYear}
-                className="text-emerald-400 font-mono text-lg"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Spending Card */}
-      {latestEntry && primaryProjection && trackedValues && (
-        <div className="bg-[#0f1629] rounded-xl p-6 border border-slate-800">
-          <div className="flex items-center gap-3 mb-5">
-            <IconBadge color="#f59e0b">
-              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </IconBadge>
-            <h2 className="text-sm font-medium text-slate-300">Spending</h2>
-          </div>
-
-          {/* SWR Row */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-slate-800/30 rounded-lg p-3">
-              <p className="text-slate-500 text-xs mb-1">SWR Annual ({primaryProjection.scenario.swr}%)</p>
-              <TrackedValue
-                value={trackedValues.annualSwr}
-                className="text-amber-400 font-mono text-lg"
-              />
-            </div>
-            <div className="bg-slate-800/30 rounded-lg p-3">
-              <p className="text-slate-500 text-xs mb-1">SWR Monthly</p>
-              <TrackedValue
-                value={trackedValues.monthlySwr}
-                className="text-amber-400 font-mono text-lg"
-              />
-            </div>
-          </div>
-
-          {/* Monthly Budget */}
-          <div className="bg-slate-800/30 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-slate-400 text-sm">Monthly Budget</p>
-              <TrackedValue
-                value={trackedValues.currentSpending}
-                className="text-white font-mono text-xl font-semibold"
-              />
-            </div>
-            <div className="text-xs space-y-1.5 pt-3 border-t border-slate-700/50">
-              <div className="flex justify-between text-slate-500">
-                <span>Base (inflation-adjusted)</span>
-                <span className="font-mono text-amber-400">{formatCurrency(primaryProjection.levelInfo.baseBudgetInflationAdjusted, 0)}</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>+ {primaryProjection.scenario.spendingGrowthRate}% NW / 12</span>
-                <span className="font-mono text-emerald-400">+{formatCurrency(primaryProjection.levelInfo.netWorthPortion, 0)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Milestone Progress Card - prominent next milestone tracker */}
+      {/* Three Futures — the eigensolution */}
       {latestEntry && primaryProjection && (
-        <MilestoneProgressCard primaryProjection={primaryProjection} />
-      )}
-
-      {/* Coast FI Section */}
-      {latestEntry && primaryProjection && (
-        <CoastFiSection primaryProjection={primaryProjection} latestEntry={latestEntry} />
-      )}
-
-      {/* FI Milestones Section */}
-      {latestEntry && primaryProjection && (
-        <FiMilestonesCard primaryProjection={primaryProjection} latestEntry={latestEntry} />
+        <ThreeFuturesCard
+          primaryProjection={primaryProjection}
+          latestEntry={latestEntry}
+        />
       )}
     </div>
   )
