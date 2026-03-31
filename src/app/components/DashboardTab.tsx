@@ -306,6 +306,29 @@ export function DashboardTab({ setActiveTab }: DashboardTabProps) {
         </div>
       )}
 
+      {/* Monthly Budget Card */}
+      {latestEntry && primaryProjection && trackedValues && (
+        <div className="bg-[#0f1629] rounded-xl p-4 sm:p-6 border border-slate-800">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-slate-300">Monthly Budget</p>
+            <TrackedValue
+              value={trackedValues.currentSpending}
+              className="text-white font-mono text-lg sm:text-xl font-semibold"
+            />
+          </div>
+          <div className="text-xs space-y-1.5 pt-3 border-t border-slate-700/50">
+            <div className="flex justify-between text-slate-500">
+              <span>Base (inflation-adjusted)</span>
+              <span className="font-mono text-amber-400">{formatCurrency(primaryProjection.levelInfo.baseBudgetInflationAdjusted, 0)}</span>
+            </div>
+            <div className="flex justify-between text-slate-500">
+              <span>+ {primaryProjection.scenario.spendingGrowthRate}% NW / 12</span>
+              <span className="font-mono text-emerald-400">+{formatCurrency(primaryProjection.levelInfo.netWorthPortion, 0)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Three Futures — the eigensolution */}
       {latestEntry && primaryProjection && (
         <ThreeFuturesCard
