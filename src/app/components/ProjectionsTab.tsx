@@ -9,6 +9,8 @@ import { ProjectionsTable } from './ProjectionsTable'
 import { ProjectionsChart } from './ProjectionsChart'
 import { ScenarioManagementPanel } from './ScenarioManagementPanel'
 import { ScenarioEditor } from './ScenarioEditor'
+import { MilestoneProgressCard } from './MilestoneProgressCard'
+import { FiMilestonesCard } from './FiMilestonesCard'
 import { Tab } from '../lib/helpers'
 
 interface ProjectionsTabProps {
@@ -234,6 +236,16 @@ export function ProjectionsTab({
           fiProgressChartData={fiProgressChartData}
           currentYear={currentYear}
         />
+      )}
+
+      {/* Milestones */}
+      {primaryProjection && (
+        <div className="mt-4 max-w-2xl mx-auto space-y-4">
+          <MilestoneProgressCard primaryProjection={primaryProjection} />
+          {latestEntry && (
+            <FiMilestonesCard primaryProjection={primaryProjection} latestEntry={latestEntry} />
+          )}
+        </div>
       )}
     </div>
   );
